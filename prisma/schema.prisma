@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LeagueRole {
+  COMMISSIONER
+  OWNER
+}
+
+enum SeasonStatus {
+  PLANNING
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum NFLConference {
+  AFC
+  NFC
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  displayName   String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  leagueMembers LeagueMember[]
+}
+
+model League {
+  id          String         @id @default(cuid())
+  name        String
+  slug        String         @unique
+  description String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  members     LeagueMember[]
+  seasons     Season[]
+}
+
+model LeagueMember {
+  id             String          @id @default(cuid())
+  leagueId       String
+  userId         String
+  role           LeagueRole      @default(OWNER)
+  joinedAt       DateTime        @default(now())
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  league         League          @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamOwnerships TeamOwnership[]
+
+  @@unique([leagueId, userId])
+  @@index([userId])
+}
+
+model Season {
+  id             String          @id @default(cuid())
+  leagueId       String
+  year           Int
+  name           String?
+  status         SeasonStatus    @default(PLANNING)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  league         League          @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  teamOwnerships TeamOwnership[]
+
+  @@unique([leagueId, year])
+  @@index([leagueId, status])
+}
+
+model TeamOwnership {
+  id             String       @id @default(cuid())
+  seasonId       String
+  leagueMemberId String
+  nflTeamId      String
+  slot           Int
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  season         Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  leagueMember   LeagueMember @relation(fields: [leagueMemberId], references: [id], onDelete: Cascade)
+  nflTeam        NFLTeam      @relation(fields: [nflTeamId], references: [id], onDelete: Restrict)
+
+  @@unique([seasonId, leagueMemberId, slot])
+  @@unique([seasonId, nflTeamId])
+  @@index([leagueMemberId])
+  @@index([nflTeamId])
+}
+
+model NFLTeam {
+  id             String          @id @default(cuid())
+  code           String          @unique
+  city           String
+  name           String
+  conference     NFLConference
+  division       String
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  teamOwnerships TeamOwnership[]
+}
