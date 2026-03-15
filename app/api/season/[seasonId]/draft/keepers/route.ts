@@ -1,0 +1,32 @@
+import { NextResponse } from "next/server";
+
+import { DraftServiceError, draftService } from "@/server/services/draft-service";
+import type { SaveKeepersInput, SaveKeepersResponse } from "@/types/draft";
+
+export const dynamic = "force-dynamic";
+
+interface RouteContext {
+  params: {
+    seasonId: string;
+  };
+}
+
+export async function POST(request: Request, { params }: RouteContext) {
+  try {
+    const body = (await request.json()) as Partial<SaveKeepersInput>;
+    const draft = await draftService.saveKeepers({
+      draftId: body.draftId ?? "",
+      leagueMemberId: body.leagueMemberId ?? "",
+      nflTeamIds: body.nflTeamIds ?? [],
+      actingUserId: body.actingUserId ?? ""
+    });
+
+    return NextResponse.json<SaveKeepersResponse>({ draft });
+  } catch (error) {
+    if (error instanceof DraftServiceError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+
+    return NextResponse.json({ error: `Unable to save keepers for season ${params.seasonId}.` }, { status: 500 });
+  }
+}

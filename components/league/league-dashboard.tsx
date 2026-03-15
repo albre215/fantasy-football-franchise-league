@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { OffseasonDraftPanel } from "@/components/league/offseason-draft-panel";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import type { DraftState, DraftStateResponse } from "@/types/draft";
 import type {
   AddLeagueMemberResponse,
   LeagueBootstrapStateResponse,
@@ -49,6 +51,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   const [bootstrapState, setBootstrapState] = useState<LeagueBootstrapStateResponse["bootstrapState"] | null>(null);
   const [seasons, setSeasons] = useState<SeasonListResponse["seasons"]>([]);
   const [seasonOwnership, setSeasonOwnership] = useState<SeasonOwnershipResponse["ownership"] | null>(null);
+  const [draftState, setDraftState] = useState<DraftState | null>(null);
   const [unassignedTeams, setUnassignedTeams] = useState<NFLTeamsResponse["teams"]>([]);
   const [seasonYear, setSeasonYear] = useState(new Date().getFullYear().toString());
   const [seasonName, setSeasonName] = useState("");
@@ -90,6 +93,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
 
       if (!bootstrapData.bootstrapState.activeSeason) {
         setSeasonOwnership(null);
+        setDraftState(null);
         setUnassignedTeams([]);
         setSelectedOwnerId("");
         setSelectedTeamId("");
@@ -97,17 +101,20 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       }
 
       const seasonId = bootstrapData.bootstrapState.activeSeason.id;
-      const [ownershipResponse, unassignedResponse] = await Promise.all([
+      const [ownershipResponse, unassignedResponse, draftResponse] = await Promise.all([
         fetch(`/api/season/${seasonId}/ownership`, { cache: "no-store" }),
-        fetch(`/api/season/${seasonId}/unassigned-teams`, { cache: "no-store" })
+        fetch(`/api/season/${seasonId}/unassigned-teams`, { cache: "no-store" }),
+        fetch(`/api/season/${seasonId}/draft`, { cache: "no-store" })
       ]);
 
-      const [ownershipData, unassignedData] = await Promise.all([
+      const [ownershipData, unassignedData, draftData] = await Promise.all([
         parseJsonResponse<SeasonOwnershipResponse>(ownershipResponse),
-        parseJsonResponse<NFLTeamsResponse>(unassignedResponse)
+        parseJsonResponse<NFLTeamsResponse>(unassignedResponse),
+        parseJsonResponse<DraftStateResponse>(draftResponse)
       ]);
 
       setSeasonOwnership(ownershipData.ownership);
+      setDraftState(draftData.draft);
       setUnassignedTeams(unassignedData.teams);
       setSelectedOwnerId((current) => {
         const validOwnerIds = bootstrapData.bootstrapState.members
@@ -584,6 +591,25 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                 </div>
               </CardContent>
             </Card>
+
+            <OffseasonDraftPanel
+              actingUserId={MOCK_COMMISSIONER_USER_ID}
+              activeSeason={activeSeason}
+              draftState={draftState}
+              isSubmitting={isSubmitting}
+              leagueId={leagueId}
+              members={members}
+              onEndSubmit={() => setIsSubmitting(false)}
+              onError={(message) => setErrorMessage(message || null)}
+              onRefresh={() => refreshLeagueDashboard(leagueId)}
+              onStartSubmit={() => {
+                setErrorMessage(null);
+                setSuccessMessage(null);
+                setIsSubmitting(true);
+              }}
+              onSuccess={(message) => setSuccessMessage(message || null)}
+              seasons={seasons}
+            />
 
             <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
               <Card>

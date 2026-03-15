@@ -24,6 +24,14 @@ enum NFLConference {
   NFC
 }
 
+enum DraftStatus {
+  PLANNING
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
 model User {
   id            String         @id @default(cuid())
   email         String         @unique
@@ -42,6 +50,7 @@ model League {
   updatedAt   DateTime       @updatedAt
   members     LeagueMember[]
   seasons     Season[]
+  drafts      Draft[]
 }
 
 model LeagueMember {
@@ -55,6 +64,8 @@ model LeagueMember {
   league         League          @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   teamOwnerships TeamOwnership[]
+  draftPicks     DraftPick[]
+  keeperSelections KeeperSelection[]
 
   @@unique([leagueId, userId])
   @@index([userId])
@@ -73,6 +84,9 @@ model Season {
   updatedAt      DateTime        @updatedAt
   league         League          @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   teamOwnerships TeamOwnership[]
+  targetDraft    Draft?          @relation("TargetSeasonDraft")
+  sourceDrafts   Draft[]         @relation("SourceSeasonDraft")
+  keeperSelections KeeperSelection[] @relation("KeeperSourceSeason")
 
   @@unique([leagueId, year])
   @@index([leagueId, status])
@@ -106,4 +120,65 @@ model NFLTeam {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   teamOwnerships TeamOwnership[]
+  draftPicks     DraftPick[]
+  keeperSelections KeeperSelection[]
+}
+
+model Draft {
+  id              String            @id @default(cuid())
+  leagueId        String
+  targetSeasonId  String            @unique
+  sourceSeasonId  String
+  status          DraftStatus       @default(PLANNING)
+  currentPick     Int               @default(1)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  completedAt     DateTime?
+  league          League            @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  targetSeason    Season            @relation("TargetSeasonDraft", fields: [targetSeasonId], references: [id], onDelete: Cascade)
+  sourceSeason    Season            @relation("SourceSeasonDraft", fields: [sourceSeasonId], references: [id], onDelete: Restrict)
+  picks           DraftPick[]
+  keeperSelections KeeperSelection[]
+
+  @@index([leagueId, status])
+}
+
+model DraftPick {
+  id                    String        @id @default(cuid())
+  draftId               String
+  overallPickNumber     Int
+  roundNumber           Int
+  roundPickNumber       Int
+  selectingLeagueMemberId String
+  selectedNflTeamId     String?
+  actingUserId          String?
+  pickedAt              DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  draft                 Draft         @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  selectingLeagueMember LeagueMember  @relation(fields: [selectingLeagueMemberId], references: [id], onDelete: Restrict)
+  selectedNflTeam       NFLTeam?      @relation(fields: [selectedNflTeamId], references: [id], onDelete: Restrict)
+
+  @@unique([draftId, overallPickNumber])
+  @@unique([draftId, selectedNflTeamId])
+  @@index([selectingLeagueMemberId])
+}
+
+model KeeperSelection {
+  id              String        @id @default(cuid())
+  draftId         String
+  leagueMemberId  String
+  nflTeamId       String
+  sourceSeasonId  String
+  actingUserId    String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  draft           Draft         @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  leagueMember    LeagueMember  @relation(fields: [leagueMemberId], references: [id], onDelete: Restrict)
+  nflTeam         NFLTeam       @relation(fields: [nflTeamId], references: [id], onDelete: Restrict)
+  sourceSeason    Season        @relation("KeeperSourceSeason", fields: [sourceSeasonId], references: [id], onDelete: Restrict)
+
+  @@unique([draftId, leagueMemberId, nflTeamId])
+  @@index([leagueMemberId])
+  @@index([nflTeamId])
 }
