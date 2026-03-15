@@ -1,3 +1,5 @@
+import type { SeasonSetupStatus, SeasonSummary } from "@/types/season";
+
 export interface LeagueListItem {
   id: string;
   name: string;
@@ -64,4 +66,74 @@ export interface ListLeaguesResponse {
 
 export interface LeagueDashboardResponse {
   league: LeagueDashboard;
+}
+
+export interface AddLeagueMemberInput {
+  leagueId: string;
+  displayName: string;
+  email: string;
+  mockUserKey?: string;
+}
+
+export interface RemoveLeagueMemberInput {
+  leagueId: string;
+  leagueMemberId: string;
+}
+
+export interface LeagueBootstrapMember {
+  id: string;
+  userId: string;
+  displayName: string;
+  email: string;
+  role: "COMMISSIONER" | "OWNER";
+  joinedAt: string;
+  assignmentCount: number;
+  canRemove: boolean;
+}
+
+export interface LeagueBootstrapState {
+  league: {
+    id: string;
+    name: string;
+    slug: string;
+    description: string | null;
+    commissioner: {
+      leagueMemberId: string;
+      userId: string;
+      displayName: string;
+      email: string;
+    } | null;
+  };
+  memberCount: number;
+  members: LeagueBootstrapMember[];
+  activeSeason: SeasonSummary | null;
+  assignedTeamCount: number;
+  unassignedTeamCount: number;
+  everyMemberHasExactlyThreeTeams: boolean;
+  validationStatus: SeasonSetupStatus | null;
+  lockReadiness: {
+    hasActiveSeason: boolean;
+    hasExactlyTenMembers: boolean;
+    hasThirtyAssignedTeams: boolean;
+    hasTwoUnassignedTeams: boolean;
+    everyMemberHasExactlyThreeTeams: boolean;
+    isReadyToLock: boolean;
+    state: "NOT_READY" | "READY_TO_LOCK" | "LOCKED";
+  };
+}
+
+export interface AddLeagueMemberResponse {
+  member: LeagueBootstrapMember;
+}
+
+export interface LeagueMembersListResponse {
+  members: LeagueBootstrapMember[];
+}
+
+export interface RemoveLeagueMemberResponse {
+  removedLeagueMemberId: string;
+}
+
+export interface LeagueBootstrapStateResponse {
+  bootstrapState: LeagueBootstrapState;
 }

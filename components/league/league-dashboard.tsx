@@ -6,13 +6,17 @@ import { useEffect, useMemo, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { LeagueDashboardResponse, LeagueListItem, ListLeaguesResponse } from "@/types/league";
 import type {
-  ActiveSeasonResponse,
+  AddLeagueMemberResponse,
+  LeagueBootstrapStateResponse,
+  LeagueListItem,
+  ListLeaguesResponse,
+  RemoveLeagueMemberResponse
+} from "@/types/league";
+import type {
   CreateSeasonResponse,
   LockSeasonResponse,
-  SeasonListResponse,
-  SeasonSetupStatusResponse
+  SeasonListResponse
 } from "@/types/season";
 import type {
   AssignTeamResponse,
@@ -39,84 +43,79 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
 export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [league, setLeague] = useState<LeagueDashboardResponse["league"] | null>(null);
   const [leagueOptions, setLeagueOptions] = useState<LeagueListItem[]>([]);
-  const [activeSeason, setActiveSeason] = useState<ActiveSeasonResponse["season"] | null>(null);
-  const [setupStatus, setSetupStatus] = useState<SeasonSetupStatusResponse["status"] | null>(null);
+  const [bootstrapState, setBootstrapState] = useState<LeagueBootstrapStateResponse["bootstrapState"] | null>(null);
+  const [seasons, setSeasons] = useState<SeasonListResponse["seasons"]>([]);
   const [seasonOwnership, setSeasonOwnership] = useState<SeasonOwnershipResponse["ownership"] | null>(null);
   const [unassignedTeams, setUnassignedTeams] = useState<NFLTeamsResponse["teams"]>([]);
   const [seasonYear, setSeasonYear] = useState(new Date().getFullYear().toString());
   const [seasonName, setSeasonName] = useState("");
-  const [selectedSeasonId, setSelectedSeasonId] = useState("");
+  const [memberDisplayName, setMemberDisplayName] = useState("");
+  const [memberEmail, setMemberEmail] = useState("");
+  const [memberMockUserKey, setMemberMockUserKey] = useState("");
   const [selectedOwnerId, setSelectedOwnerId] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const seasonOptions = league?.seasons ?? [];
+  const activeSeason = bootstrapState?.activeSeason ?? null;
+  const members = bootstrapState?.members ?? [];
 
-  const ownerOptions = useMemo(() => seasonOwnership?.owners ?? [], [seasonOwnership]);
+  const ownerSelectionOptions = useMemo(
+    () => members.filter((member) => member.assignmentCount < 3),
+    [members]
+  );
 
   async function refreshLeagueDashboard(currentLeagueId: string) {
     setIsLoading(true);
 
     try {
-      const [listResponse, dashboardResponse, activeSeasonResponse] = await Promise.all([
+      const [listResponse, bootstrapResponse, seasonsResponse] = await Promise.all([
         fetch("/api/league/list", { cache: "no-store" }),
-        fetch(`/api/league/${currentLeagueId}`, { cache: "no-store" }),
-        fetch(`/api/league/${currentLeagueId}/season/active`, { cache: "no-store" })
+        fetch(`/api/league/${currentLeagueId}/bootstrap-state`, { cache: "no-store" }),
+        fetch(`/api/league/${currentLeagueId}/season/list`, { cache: "no-store" })
       ]);
 
-      const [listData, dashboardData, activeSeasonData] = await Promise.all([
+      const [listData, bootstrapData, seasonsData] = await Promise.all([
         parseJsonResponse<ListLeaguesResponse>(listResponse),
-        parseJsonResponse<LeagueDashboardResponse>(dashboardResponse),
-        parseJsonResponse<ActiveSeasonResponse>(activeSeasonResponse)
+        parseJsonResponse<LeagueBootstrapStateResponse>(bootstrapResponse),
+        parseJsonResponse<SeasonListResponse>(seasonsResponse)
       ]);
 
       setLeagueOptions(listData.leagues);
-      setLeague(dashboardData.league);
-      setActiveSeason(activeSeasonData.season);
+      setBootstrapState(bootstrapData.bootstrapState);
+      setSeasons(seasonsData.seasons);
 
-      const nextSelectedSeasonId =
-        activeSeasonData.season?.id ??
-        dashboardData.league.seasons.find((season) => season.id === selectedSeasonId)?.id ??
-        dashboardData.league.seasons.find((season) => season.status === "ACTIVE")?.id ??
-        dashboardData.league.seasons[0]?.id ??
-        "";
-
-      setSelectedSeasonId(nextSelectedSeasonId);
-
-      const effectiveSeasonId = activeSeasonData.season?.id ?? nextSelectedSeasonId;
-
-      if (!effectiveSeasonId) {
-        setSetupStatus(null);
+      if (!bootstrapData.bootstrapState.activeSeason) {
         setSeasonOwnership(null);
         setUnassignedTeams([]);
+        setSelectedOwnerId("");
+        setSelectedTeamId("");
         return;
       }
 
-      const [ownershipResponse, statusResponse, unassignedResponse] = await Promise.all([
-        fetch(`/api/season/${effectiveSeasonId}/ownership`, { cache: "no-store" }),
-        fetch(`/api/season/${effectiveSeasonId}/setup-status`, { cache: "no-store" }),
-        fetch(`/api/season/${effectiveSeasonId}/unassigned-teams`, { cache: "no-store" })
+      const seasonId = bootstrapData.bootstrapState.activeSeason.id;
+      const [ownershipResponse, unassignedResponse] = await Promise.all([
+        fetch(`/api/season/${seasonId}/ownership`, { cache: "no-store" }),
+        fetch(`/api/season/${seasonId}/unassigned-teams`, { cache: "no-store" })
       ]);
 
-      const [ownershipData, statusData, unassignedData] = await Promise.all([
+      const [ownershipData, unassignedData] = await Promise.all([
         parseJsonResponse<SeasonOwnershipResponse>(ownershipResponse),
-        parseJsonResponse<SeasonSetupStatusResponse>(statusResponse),
         parseJsonResponse<NFLTeamsResponse>(unassignedResponse)
       ]);
 
       setSeasonOwnership(ownershipData.ownership);
-      setSetupStatus(statusData.status);
       setUnassignedTeams(unassignedData.teams);
-      setSelectedOwnerId((current) =>
-        ownershipData.ownership.owners.some((owner) => owner.userId === current)
-          ? current
-          : ownershipData.ownership.owners[0]?.userId || ""
-      );
+      setSelectedOwnerId((current) => {
+        const validOwnerIds = bootstrapData.bootstrapState.members
+          .filter((member) => member.assignmentCount < 3)
+          .map((member) => member.userId);
+
+        return validOwnerIds.includes(current) ? current : validOwnerIds[0] ?? "";
+      });
       setSelectedTeamId((current) =>
-        unassignedData.teams.some((team) => team.id === current) ? current : unassignedData.teams[0]?.id || ""
+        unassignedData.teams.some((team) => team.id === current) ? current : unassignedData.teams[0]?.id ?? ""
       );
     } finally {
       setIsLoading(false);
@@ -174,7 +173,6 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       const data = await parseJsonResponse<CreateSeasonResponse>(response);
 
       setSeasonName("");
-      setSelectedSeasonId(data.season.id);
       setSuccessMessage(`Created season ${data.season.name ?? data.season.year}.`);
       await refreshLeagueDashboard(leagueId);
     } catch (error) {
@@ -203,7 +201,6 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       });
 
       await parseJsonResponse(response);
-      setSelectedSeasonId(seasonId);
       setSuccessMessage("Active season updated.");
       await refreshLeagueDashboard(leagueId);
     } catch (error) {
@@ -213,11 +210,76 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
     }
   }
 
+  async function handleAddMember(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!leagueId) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch(`/api/league/${leagueId}/members/add`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          displayName: memberDisplayName,
+          email: memberEmail,
+          mockUserKey: memberMockUserKey || undefined
+        })
+      });
+      const data = await parseJsonResponse<AddLeagueMemberResponse>(response);
+
+      setMemberDisplayName("");
+      setMemberEmail("");
+      setMemberMockUserKey("");
+      setSuccessMessage(`Added ${data.member.displayName} to the league.`);
+      await refreshLeagueDashboard(leagueId);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to add member.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleRemoveMember(leagueMemberId: string) {
+    if (!leagueId) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch(`/api/league/${leagueId}/members/remove`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ leagueMemberId })
+      });
+      const data = await parseJsonResponse<RemoveLeagueMemberResponse>(response);
+
+      setSuccessMessage(`Removed member ${data.removedLeagueMemberId}.`);
+      await refreshLeagueDashboard(leagueId);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to remove member.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   async function handleAssignTeam(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!activeSeason || !selectedOwnerId || !selectedTeamId) {
-      setErrorMessage("Active season, owner, and team are required.");
+      setErrorMessage("Active season, member, and team are required.");
       return;
     }
 
@@ -262,7 +324,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       });
       const data = await parseJsonResponse<LockSeasonResponse>(response);
 
-      setSuccessMessage(`Locked ${data.season.name ?? data.season.year} for commissioner setup.`);
+      setSuccessMessage(`Locked ${data.season.name ?? data.season.year}.`);
       await refreshLeagueDashboard(leagueId!);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to lock season.");
@@ -276,14 +338,14 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       <main className="container py-12">
         <div className="max-w-3xl space-y-4">
           <h1 className="text-3xl font-semibold tracking-tight">League Dashboard</h1>
-          <p className="text-muted-foreground">Select a league to load its current members and season history.</p>
+          <p className="text-muted-foreground">Select a league to open the commissioner bootstrap console.</p>
         </div>
         <div className="mt-8 grid gap-4 md:grid-cols-2">
           {leagueOptions.length === 0 ? (
             <Card>
               <CardHeader>
                 <CardTitle>No leagues available</CardTitle>
-                <CardDescription>Create a league from the home page to populate this dashboard.</CardDescription>
+                <CardDescription>Create a league from the home page to get started.</CardDescription>
               </CardHeader>
             </Card>
           ) : (
@@ -306,16 +368,18 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
     );
   }
 
-  const selectedSeason = seasonOptions.find((season) => season.id === selectedSeasonId) ?? activeSeason ?? null;
+  const hasActiveSeason = Boolean(activeSeason);
+  const isLocked = Boolean(activeSeason?.isLocked);
+  const lockState = bootstrapState?.lockReadiness.state ?? "NOT_READY";
 
   return (
     <main className="container py-12">
       <div className="max-w-6xl space-y-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="space-y-2">
-            <h1 className="text-3xl font-semibold tracking-tight">League Dashboard</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">League Bootstrap Console</h1>
             <p className="text-muted-foreground">
-              Commissioner-focused setup tools for preparing the current league year from a completed offseason draft.
+              Set up the real current season from an already-completed offseason draft.
             </p>
           </div>
           <Link className={buttonVariants({ variant: "outline" })} href="/">
@@ -329,25 +393,49 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
           </Card>
         )}
 
-        {!league && !errorMessage && (
+        {!bootstrapState && !errorMessage && (
           <Card>
             <CardContent className="p-6 text-sm text-muted-foreground">
-              {isLoading ? "Loading league dashboard..." : "League not found."}
+              {isLoading ? "Loading bootstrap console..." : "League not found."}
             </CardContent>
           </Card>
         )}
 
-        {league && (
+        {bootstrapState && (
           <>
             <Card>
               <CardHeader>
-                <CardTitle>{league.name}</CardTitle>
-                <CardDescription>{league.description ?? "No description provided yet."}</CardDescription>
+                <CardTitle>League Details</CardTitle>
+                <CardDescription>Core league information for the current bootstrap session.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 text-sm text-muted-foreground md:grid-cols-4">
+                <p>League: {bootstrapState.league.name}</p>
+                <p>League ID: {bootstrapState.league.id}</p>
+                <p>
+                  Commissioner: {bootstrapState.league.commissioner?.displayName ?? MOCK_COMMISSIONER_USER_ID}
+                </p>
+                <p>Members: {bootstrapState.memberCount} / 10</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Bootstrap Summary</CardTitle>
+                <CardDescription>
+                  Current readiness for locking the active season after member and team entry.
+                </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 text-sm text-muted-foreground md:grid-cols-3">
-                <p>League ID: {league.id}</p>
-                <p>Members: {league.members.length} / 10</p>
-                <p>Mock commissioner: {MOCK_COMMISSIONER_USER_ID}</p>
+                <p>Active season: {activeSeason ? activeSeason.name ?? activeSeason.year : "None selected"}</p>
+                <p>Assigned teams: {bootstrapState.assignedTeamCount} / 30</p>
+                <p>Unassigned teams: {bootstrapState.unassignedTeamCount} / 2</p>
+                <p>Every member has 3 teams: {bootstrapState.everyMemberHasExactlyThreeTeams ? "Yes" : "No"}</p>
+                <p>
+                  Ready to lock: {bootstrapState.lockReadiness.isReadyToLock ? "Yes" : "No"}
+                </p>
+                <p>
+                  Status: {lockState === "LOCKED" ? "Locked" : lockState === "READY_TO_LOCK" ? "Ready to Lock" : "Not Ready"}
+                </p>
               </CardContent>
             </Card>
 
@@ -355,7 +443,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
               <CardHeader>
                 <CardTitle>Season Management</CardTitle>
                 <CardDescription>
-                  Create the current league year, activate it, assign legacy offseason results, then lock setup.
+                  Create seasons, pick the current active season, and keep bootstrap work focused on that season only.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
@@ -383,23 +471,20 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                     </Button>
                   </form>
 
-                  <div className="rounded-lg border border-border p-4">
-                    <p className="text-sm font-medium text-foreground">Active Season</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {activeSeason
-                        ? `${activeSeason.name ?? activeSeason.year} · ${activeSeason.isLocked ? "Locked" : "Open"}`
-                        : "No active season set."}
-                    </p>
+                  <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
+                    {hasActiveSeason
+                      ? `Active season: ${activeSeason?.name ?? activeSeason?.year} - ${isLocked ? "Locked" : "Open"}`
+                      : "Create or activate a season first. All bootstrap actions run against the active season only."}
                   </div>
                 </div>
 
                 <div className="space-y-3">
-                  {seasonOptions.length === 0 ? (
+                  {seasons.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                       No seasons exist yet.
                     </div>
                   ) : (
-                    seasonOptions.map((season) => (
+                    seasons.map((season) => (
                       <div
                         className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4"
                         key={season.id}
@@ -407,7 +492,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                         <div>
                           <p className="font-medium text-foreground">{season.name ?? `${season.year} Season`}</p>
                           <p className="text-sm text-muted-foreground">
-                            {season.status} · {season.isLocked ? "Locked" : "Open"}
+                            {season.status} - {season.isLocked ? "Locked" : "Open"}
                           </p>
                         </div>
                         <Button
@@ -425,18 +510,88 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
               </CardContent>
             </Card>
 
-            <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+            <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
               <Card>
                 <CardHeader>
-                  <CardTitle>Ownership Table</CardTitle>
+                  <CardTitle>Members Management</CardTitle>
                   <CardDescription>
-                    Manual assignment workspace for the current active season.
+                    Add league members manually, review their assignment counts, and remove only when safe.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {!activeSeason ? (
+                  <form className="grid gap-3 md:grid-cols-4" onSubmit={handleAddMember}>
+                    <Input
+                      onChange={(event) => setMemberDisplayName(event.target.value)}
+                      placeholder="Display name"
+                      value={memberDisplayName}
+                    />
+                    <Input
+                      onChange={(event) => setMemberEmail(event.target.value)}
+                      placeholder="Email"
+                      type="email"
+                      value={memberEmail}
+                    />
+                    <Input
+                      onChange={(event) => setMemberMockUserKey(event.target.value)}
+                      placeholder="Optional mock user key"
+                      value={memberMockUserKey}
+                    />
+                    <Button
+                      disabled={isSubmitting || !hasActiveSeason || isLocked || !memberDisplayName || !memberEmail}
+                      type="submit"
+                    >
+                      Add Member
+                    </Button>
+                  </form>
+
+                  {!hasActiveSeason && (
                     <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                      Set an active season before assigning NFL teams.
+                      Create or activate a season first. Member bootstrap is tied to the current active season.
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    {members.map((member) => (
+                      <div
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4"
+                        key={member.id}
+                      >
+                        <div>
+                          <p className="font-medium text-foreground">{member.displayName}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {member.email} - {member.role}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground">
+                            {member.assignmentCount}/3
+                          </span>
+                          <Button
+                            disabled={isSubmitting || !member.canRemove}
+                            onClick={() => void handleRemoveMember(member.id)}
+                            type="button"
+                            variant="outline"
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Team Assignment Workspace</CardTitle>
+                  <CardDescription>
+                    Assign available NFL teams to members for the active season.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {!hasActiveSeason ? (
+                    <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                      Create or activate a season first to assign NFL teams.
                     </div>
                   ) : (
                     <>
@@ -446,10 +601,10 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                           onChange={(event) => setSelectedOwnerId(event.target.value)}
                           value={selectedOwnerId}
                         >
-                          <option value="">Select owner</option>
-                          {ownerOptions.map((owner) => (
-                            <option key={owner.leagueMemberId} value={owner.userId}>
-                              {owner.displayName}
+                          <option value="">Select member</option>
+                          {ownerSelectionOptions.map((member) => (
+                            <option key={member.id} value={member.userId}>
+                              {member.displayName} ({member.assignmentCount}/3)
                             </option>
                           ))}
                         </select>
@@ -458,7 +613,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                           onChange={(event) => setSelectedTeamId(event.target.value)}
                           value={selectedTeamId}
                         >
-                          <option value="">Select NFL team</option>
+                          <option value="">Select available NFL team</option>
                           {unassignedTeams.map((team) => (
                             <option key={team.id} value={team.id}>
                               {team.abbreviation} - {team.name}
@@ -466,29 +621,51 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                           ))}
                         </select>
                         <Button
-                          disabled={isSubmitting || activeSeason.isLocked || !selectedOwnerId || !selectedTeamId}
+                          disabled={isSubmitting || isLocked || !selectedOwnerId || !selectedTeamId}
                           type="submit"
                         >
                           Assign Team
                         </Button>
                       </form>
 
-                      {seasonOwnership?.owners.map((owner) => (
-                        <div className="rounded-lg border border-border p-4" key={owner.leagueMemberId}>
+                      {isLocked && (
+                        <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                          This season is locked. Member and team setup actions are now read only.
+                        </div>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Ownership Table</CardTitle>
+                  <CardDescription>Member-to-team ownership for the active season.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {!hasActiveSeason ? (
+                    <p className="text-sm text-muted-foreground">No active season selected.</p>
+                  ) : (
+                    members.map((member) => {
+                      const ownerRecord = seasonOwnership?.owners.find((owner) => owner.userId === member.userId);
+
+                      return (
+                        <div className="rounded-lg border border-border p-4" key={member.id}>
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                              <p className="font-medium text-foreground">{owner.displayName}</p>
+                              <p className="font-medium text-foreground">{member.displayName}</p>
                               <p className="text-sm text-muted-foreground">
-                                {owner.role} - {owner.teamCount}/3 teams assigned
+                                {member.role} - {member.assignmentCount}/3 teams assigned
                               </p>
                             </div>
-                            <p className="text-sm text-muted-foreground">{owner.email}</p>
+                            <p className="text-sm text-muted-foreground">{member.email}</p>
                           </div>
                           <div className="mt-3 flex flex-wrap gap-2">
-                            {owner.teams.length === 0 ? (
-                              <span className="text-sm text-muted-foreground">No NFL teams assigned.</span>
-                            ) : (
-                              owner.teams.map((entry) => (
+                            {ownerRecord?.teams.length ? (
+                              ownerRecord.teams.map((entry) => (
                                 <span
                                   className="rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground"
                                   key={entry.ownershipId}
@@ -496,11 +673,13 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                                   {entry.team.abbreviation} - {entry.team.name}
                                 </span>
                               ))
+                            ) : (
+                              <span className="text-sm text-muted-foreground">No NFL teams assigned.</span>
                             )}
                           </div>
                         </div>
-                      ))}
-                    </>
+                      );
+                    })
                   )}
                 </CardContent>
               </Card>
@@ -510,14 +689,14 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                   <CardHeader>
                     <CardTitle>Unassigned Teams</CardTitle>
                     <CardDescription>
-                      Exactly two NFL teams should remain unassigned when setup is complete.
+                      These are the two teams that should remain unused when setup is complete.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    {!selectedSeason ? (
-                      <p className="text-sm text-muted-foreground">No season selected.</p>
+                    {!hasActiveSeason ? (
+                      <p className="text-sm text-muted-foreground">No active season selected.</p>
                     ) : unassignedTeams.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No unassigned teams available.</p>
+                      <p className="text-sm text-muted-foreground">No unassigned teams remain.</p>
                     ) : (
                       unassignedTeams.map((team) => (
                         <div className="rounded-lg border border-border p-3 text-sm" key={team.id}>
@@ -530,42 +709,35 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Setup Validation Status</CardTitle>
+                    <CardTitle>Setup Validation Card</CardTitle>
                     <CardDescription>
-                      The season can only be locked after all legacy ownership data passes validation.
+                      Follow this checklist until the season is ready to lock.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3 text-sm">
-                    {!setupStatus ? (
-                      <p className="text-muted-foreground">No active season available for validation.</p>
-                    ) : (
-                      <>
-                        <p>League members: {setupStatus.memberCount} / 10</p>
-                        <p>Assigned teams: {setupStatus.assignedTeamCount} / 30</p>
-                        <p>Unassigned teams: {setupStatus.unassignedTeamCount} / 2</p>
-                        <p>Exactly 10 members: {setupStatus.hasExactlyTenMembers ? "Pass" : "Fail"}</p>
-                        <p>Each member has 3 teams: {setupStatus.eachMemberHasThreeTeams ? "Pass" : "Fail"}</p>
-                        <p>Exactly 30 teams assigned: {setupStatus.hasThirtyAssignedTeams ? "Pass" : "Fail"}</p>
-                        <p>Exactly 2 teams unassigned: {setupStatus.hasTwoUnassignedTeams ? "Pass" : "Fail"}</p>
-                        <div className="rounded-lg border border-border p-3">
-                          {setupStatus.ownerStatuses.map((owner) => (
-                            <p key={owner.leagueMemberId}>
-                              {owner.displayName}: {owner.assignedTeamCount}/3 {owner.isValid ? "Pass" : "Fail"}
-                            </p>
-                          ))}
-                        </div>
-                        <Button
-                          disabled={
-                            isSubmitting || !activeSeason || activeSeason.isLocked || !setupStatus.isValid
-                          }
-                          onClick={() => void handleLockSeason()}
-                          type="button"
-                          variant="secondary"
-                        >
-                          {activeSeason?.isLocked ? "Season Locked" : "Lock Season"}
-                        </Button>
-                      </>
-                    )}
+                    <p>Overall status: {lockState === "LOCKED" ? "Locked" : lockState === "READY_TO_LOCK" ? "Ready to Lock" : "Not Ready"}</p>
+                    <p>Active season exists: {bootstrapState.lockReadiness.hasActiveSeason ? "Pass" : "Fail"}</p>
+                    <p>10 members required: {bootstrapState.lockReadiness.hasExactlyTenMembers ? "Pass" : "Fail"}</p>
+                    <p>30 assigned teams required: {bootstrapState.lockReadiness.hasThirtyAssignedTeams ? "Pass" : "Fail"}</p>
+                    <p>2 unassigned teams required: {bootstrapState.lockReadiness.hasTwoUnassignedTeams ? "Pass" : "Fail"}</p>
+                    <p>
+                      Every member has exactly 3 teams: {bootstrapState.lockReadiness.everyMemberHasExactlyThreeTeams ? "Pass" : "Fail"}
+                    </p>
+                    <div className="rounded-lg border border-border p-3">
+                      {members.map((member) => (
+                        <p key={member.id}>
+                          {member.displayName}: {member.assignmentCount}/3 {member.assignmentCount === 3 ? "Pass" : "Fail"}
+                        </p>
+                      ))}
+                    </div>
+                    <Button
+                      disabled={isSubmitting || !bootstrapState.lockReadiness.isReadyToLock || isLocked}
+                      onClick={() => void handleLockSeason()}
+                      type="button"
+                      variant="secondary"
+                    >
+                      {isLocked ? "Season Locked" : "Lock Season"}
+                    </Button>
                   </CardContent>
                 </Card>
               </div>

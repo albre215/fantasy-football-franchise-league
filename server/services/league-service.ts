@@ -1,13 +1,18 @@
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { seasonService } from "@/server/services/season-service";
 import type {
+  AddLeagueMemberInput,
   CreateLeagueInput,
   JoinLeagueInput,
+  LeagueBootstrapMember,
+  LeagueBootstrapState,
   LeagueDashboard,
   LeagueListItem,
   LeagueMemberSummary,
-  LeagueSeasonSummary
+  LeagueSeasonSummary,
+  RemoveLeagueMemberInput
 } from "@/types/league";
 
 const MAX_LEAGUE_MEMBERS = 10;
@@ -85,6 +90,56 @@ async function ensureMockUser(userId: string) {
         .join(" ")
     }
   });
+}
+
+function createMockUserIdSeed(input: string) {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 40);
+}
+
+async function generateMockUserId(displayName: string, email: string, mockUserKey?: string) {
+  const baseId =
+    createMockUserIdSeed(mockUserKey ?? "") ||
+    createMockUserIdSeed(email.split("@")[0] ?? "") ||
+    createMockUserIdSeed(displayName) ||
+    "league-member";
+
+  let candidate = baseId;
+  let suffix = 2;
+
+  while (await prisma.user.findUnique({ where: { id: candidate }, select: { id: true } })) {
+    candidate = `${baseId}-${suffix}`;
+    suffix += 1;
+  }
+
+  return candidate;
+}
+
+function mapBootstrapMember(member: {
+  id: string;
+  role: "COMMISSIONER" | "OWNER";
+  joinedAt: Date;
+  userId: string;
+  user: {
+    displayName: string;
+    email: string;
+  };
+  teamOwnerships?: Array<{ id: string }>;
+}, canRemove: boolean): LeagueBootstrapMember {
+  return {
+    id: member.id,
+    userId: member.userId,
+    displayName: member.user.displayName,
+    email: member.user.email,
+    role: member.role,
+    joinedAt: member.joinedAt.toISOString(),
+    assignmentCount: member.teamOwnerships?.length ?? 0,
+    canRemove
+  };
 }
 
 function mapLeagueMember(member: {
@@ -345,6 +400,261 @@ export const leagueService = {
     });
 
     return members.map(mapLeagueMember);
+  },
+
+  async addLeagueMember(input: AddLeagueMemberInput) {
+    const leagueId = input.leagueId.trim();
+    const displayName = input.displayName.trim();
+    const email = input.email.trim().toLowerCase();
+
+    if (!leagueId || !displayName || !email) {
+      throw new LeagueServiceError("leagueId, displayName, and email are required.", 400);
+    }
+
+    const activeSeason = await seasonService.getActiveSeason(leagueId);
+
+    if (!activeSeason) {
+      throw new LeagueServiceError("Create or activate a season before bootstrapping league members.", 409);
+    }
+
+    if (activeSeason.isLocked) {
+      throw new LeagueServiceError("The active season is locked and league members can no longer be changed.", 409);
+    }
+
+    const league = await prisma.league.findUnique({
+      where: {
+        id: leagueId
+      },
+      include: {
+        members: {
+          include: {
+            user: true
+          }
+        }
+      }
+    });
+
+    if (!league) {
+      throw new LeagueServiceError("League not found.", 404);
+    }
+
+    if (league.members.length >= MAX_LEAGUE_MEMBERS) {
+      throw new LeagueServiceError("League already has the maximum number of members.", 409);
+    }
+
+    if (league.members.some((member) => member.user.email.toLowerCase() === email)) {
+      throw new LeagueServiceError("A league member with that email already exists.", 409);
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: {
+        email
+      }
+    });
+
+    const user =
+      existingUser ??
+      (await prisma.user.create({
+        data: {
+          id: await generateMockUserId(displayName, email, input.mockUserKey),
+          displayName,
+          email
+        }
+      }));
+
+    try {
+      const member = await prisma.leagueMember.create({
+        data: {
+          leagueId,
+          userId: user.id,
+          role: "OWNER"
+        },
+        include: {
+          user: true,
+          teamOwnerships: {
+            where: {
+              seasonId: activeSeason.id
+            }
+          }
+        }
+      });
+
+      return mapBootstrapMember(member, true);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new LeagueServiceError("That member is already part of the league.", 409);
+      }
+
+      throw error;
+    }
+  },
+
+  async getBootstrapMembers(leagueId: string) {
+    const normalizedLeagueId = leagueId.trim();
+
+    if (!normalizedLeagueId) {
+      throw new LeagueServiceError("leagueId is required.", 400);
+    }
+
+    const activeSeason = await seasonService.getActiveSeason(normalizedLeagueId);
+
+    const members = await prisma.leagueMember.findMany({
+      where: {
+        leagueId: normalizedLeagueId
+      },
+      include: {
+        user: true,
+        teamOwnerships: activeSeason
+          ? {
+              where: {
+                seasonId: activeSeason.id
+              }
+            }
+          : {
+              where: {
+                id: {
+                  in: []
+                }
+              }
+            }
+      },
+      orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
+    });
+
+    return members.map((member) =>
+      mapBootstrapMember(
+        member,
+        member.role !== "COMMISSIONER" &&
+          !activeSeason?.isLocked &&
+          (member.teamOwnerships?.length ?? 0) === 0 &&
+          Boolean(activeSeason)
+      )
+    );
+  },
+
+  async removeLeagueMember(input: RemoveLeagueMemberInput) {
+    const leagueId = input.leagueId.trim();
+    const leagueMemberId = input.leagueMemberId.trim();
+
+    if (!leagueId || !leagueMemberId) {
+      throw new LeagueServiceError("leagueId and leagueMemberId are required.", 400);
+    }
+
+    const activeSeason = await seasonService.getActiveSeason(leagueId);
+
+    if (!activeSeason) {
+      throw new LeagueServiceError("Create or activate a season before modifying league members.", 409);
+    }
+
+    if (activeSeason.isLocked) {
+      throw new LeagueServiceError("The active season is locked and members can no longer be removed.", 409);
+    }
+
+    const member = await prisma.leagueMember.findUnique({
+      where: {
+        id: leagueMemberId
+      },
+      include: {
+        teamOwnerships: {
+          where: {
+            seasonId: activeSeason.id
+          }
+        }
+      }
+    });
+
+    if (!member || member.leagueId !== leagueId) {
+      throw new LeagueServiceError("League member not found.", 404);
+    }
+
+    if (member.role === "COMMISSIONER") {
+      throw new LeagueServiceError("The commissioner cannot be removed from the league.", 409);
+    }
+
+    if (member.teamOwnerships.length > 0) {
+      throw new LeagueServiceError("Remove this member's assigned NFL teams before removing them.", 409);
+    }
+
+    await prisma.leagueMember.delete({
+      where: {
+        id: leagueMemberId
+      }
+    });
+
+    return {
+      removedLeagueMemberId: leagueMemberId
+    };
+  },
+
+  async getBootstrapState(leagueId: string): Promise<LeagueBootstrapState> {
+    const normalizedLeagueId = leagueId.trim();
+
+    if (!normalizedLeagueId) {
+      throw new LeagueServiceError("leagueId is required.", 400);
+    }
+
+    const [league, activeSeason, members] = await Promise.all([
+      prisma.league.findUnique({
+        where: {
+          id: normalizedLeagueId
+        },
+        include: {
+          members: {
+            include: {
+              user: true
+            },
+            orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
+          }
+        }
+      }),
+      seasonService.getActiveSeason(normalizedLeagueId),
+      this.getBootstrapMembers(normalizedLeagueId)
+    ]);
+
+    if (!league) {
+      throw new LeagueServiceError("League not found.", 404);
+    }
+
+    const commissionerRecord = league.members.find((member) => member.role === "COMMISSIONER") ?? null;
+    const validationStatus = activeSeason ? await seasonService.getSeasonSetupStatus(activeSeason.id) : null;
+    const assignedTeamCount = validationStatus?.assignedTeamCount ?? 0;
+    const unassignedTeamCount = validationStatus?.unassignedTeamCount ?? 0;
+    const everyMemberHasExactlyThreeTeams = validationStatus?.eachMemberHasThreeTeams ?? false;
+    const hasActiveSeason = Boolean(activeSeason);
+    const isReadyToLock = Boolean(activeSeason && validationStatus?.isValid && !activeSeason.isLocked);
+
+    return {
+      league: {
+        id: league.id,
+        name: league.name,
+        slug: league.slug,
+        description: league.description,
+        commissioner: commissionerRecord
+          ? {
+              leagueMemberId: commissionerRecord.id,
+              userId: commissionerRecord.userId,
+              displayName: commissionerRecord.user.displayName,
+              email: commissionerRecord.user.email
+            }
+          : null
+      },
+      memberCount: members.length,
+      members,
+      activeSeason,
+      assignedTeamCount,
+      unassignedTeamCount,
+      everyMemberHasExactlyThreeTeams,
+      validationStatus,
+      lockReadiness: {
+        hasActiveSeason,
+        hasExactlyTenMembers: validationStatus?.hasExactlyTenMembers ?? false,
+        hasThirtyAssignedTeams: validationStatus?.hasThirtyAssignedTeams ?? false,
+        hasTwoUnassignedTeams: validationStatus?.hasTwoUnassignedTeams ?? false,
+        everyMemberHasExactlyThreeTeams,
+        isReadyToLock,
+        state: activeSeason?.isLocked ? "LOCKED" : isReadyToLock ? "READY_TO_LOCK" : "NOT_READY"
+      }
+    };
   },
 
   async getLeagueSeasons(leagueId: string) {
