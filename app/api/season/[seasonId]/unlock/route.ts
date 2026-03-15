@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { SeasonServiceError, seasonService } from "@/server/services/season-service";
-import type { LockSeasonResponse, SeasonActorInput } from "@/types/season";
+import type { SeasonActorInput, UnlockSeasonResponse } from "@/types/season";
 
 export const dynamic = "force-dynamic";
 
@@ -14,17 +14,17 @@ interface RouteContext {
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const body = (await request.json()) as Partial<SeasonActorInput>;
-    const result = await seasonService.lockSeasonWithActor({
+    const season = await seasonService.unlockSeason({
       seasonId: params.seasonId,
       actingUserId: body.actingUserId ?? ""
     });
 
-    return NextResponse.json<LockSeasonResponse>(result);
+    return NextResponse.json<UnlockSeasonResponse>({ season });
   } catch (error) {
     if (error instanceof SeasonServiceError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
     }
 
-    return NextResponse.json({ error: "Unable to lock season." }, { status: 500 });
+    return NextResponse.json({ error: "Unable to unlock season." }, { status: 500 });
   }
 }

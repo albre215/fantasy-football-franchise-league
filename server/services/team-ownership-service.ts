@@ -1,10 +1,12 @@
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { seasonService } from "@/server/services/season-service";
 import type {
   AssignTeamInput,
   NFLTeamSummary,
   OwnerTeamGroup,
+  RemoveTeamOwnershipInput,
   SeasonOwnershipSummary,
   TeamOwnershipEntry
 } from "@/types/team-ownership";
@@ -406,6 +408,90 @@ export const teamOwnershipService = {
 
         throw error;
       }
+    });
+  },
+
+  async removeTeamOwnership(input: RemoveTeamOwnershipInput) {
+    const seasonId = input.seasonId.trim();
+    const teamOwnershipId = input.teamOwnershipId.trim();
+    const actingUserId = input.actingUserId.trim();
+
+    if (!seasonId || !teamOwnershipId || !actingUserId) {
+      throw new TeamOwnershipServiceError("seasonId, teamOwnershipId, and actingUserId are required.", 400);
+    }
+
+    await seasonService.assertCommissionerAccess(seasonId, actingUserId);
+
+    return prisma.$transaction(async (tx) => {
+      const ownership = await tx.teamOwnership.findUnique({
+        where: {
+          id: teamOwnershipId
+        },
+        select: {
+          id: true,
+          seasonId: true,
+          leagueMemberId: true,
+          slot: true
+        }
+      });
+
+      if (!ownership || ownership.seasonId !== seasonId) {
+        throw new TeamOwnershipServiceError("Team ownership record not found for this season.", 404);
+      }
+
+      const season = await tx.season.findUnique({
+        where: {
+          id: seasonId
+        },
+        select: {
+          isLocked: true
+        }
+      });
+
+      if (!season) {
+        throw new TeamOwnershipServiceError("Season not found.", 404);
+      }
+
+      if (season.isLocked) {
+        throw new TeamOwnershipServiceError("Season is locked and no longer accepts manual assignments.", 409);
+      }
+
+      await tx.teamOwnership.delete({
+        where: {
+          id: ownership.id
+        }
+      });
+
+      const remainingOwnerships = await tx.teamOwnership.findMany({
+        where: {
+          seasonId,
+          leagueMemberId: ownership.leagueMemberId
+        },
+        orderBy: {
+          slot: "asc"
+        },
+        select: {
+          id: true
+        }
+      });
+
+      await Promise.all(
+        remainingOwnerships.map((remainingOwnership, index) =>
+          tx.teamOwnership.update({
+            where: {
+              id: remainingOwnership.id
+            },
+            data: {
+              slot: index + 1
+            }
+          })
+        )
+      );
+
+      return {
+        removedTeamOwnershipId: ownership.id,
+        seasonOwnership: await buildSeasonOwnershipSummary(tx, seasonId)
+      };
     });
   }
 };

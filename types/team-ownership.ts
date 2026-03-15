@@ -43,10 +43,22 @@ export interface AssignTeamInput {
   seasonId: string;
   userId: string;
   nflTeamId: string;
+  actingUserId?: string;
 }
 
 export interface AssignTeamResponse {
   ownership: TeamOwnershipEntry;
+  seasonOwnership: SeasonOwnershipSummary;
+}
+
+export interface RemoveTeamOwnershipInput {
+  seasonId: string;
+  teamOwnershipId: string;
+  actingUserId: string;
+}
+
+export interface RemoveTeamOwnershipResponse {
+  removedTeamOwnershipId: string;
   seasonOwnership: SeasonOwnershipSummary;
 }
 

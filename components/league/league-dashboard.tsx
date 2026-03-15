@@ -16,11 +16,13 @@ import type {
 import type {
   CreateSeasonResponse,
   LockSeasonResponse,
-  SeasonListResponse
+  SeasonListResponse,
+  UnlockSeasonResponse
 } from "@/types/season";
 import type {
   AssignTeamResponse,
   NFLTeamsResponse,
+  RemoveTeamOwnershipResponse,
   SeasonOwnershipResponse
 } from "@/types/team-ownership";
 
@@ -320,7 +322,13 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
 
     try {
       const response = await fetch(`/api/season/${activeSeason.id}/lock`, {
-        method: "POST"
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          actingUserId: MOCK_COMMISSIONER_USER_ID
+        })
       });
       const data = await parseJsonResponse<LockSeasonResponse>(response);
 
@@ -328,6 +336,67 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       await refreshLeagueDashboard(leagueId!);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to lock season.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleUnlockSeason() {
+    if (!activeSeason) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch(`/api/season/${activeSeason.id}/unlock`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          actingUserId: MOCK_COMMISSIONER_USER_ID
+        })
+      });
+      const data = await parseJsonResponse<UnlockSeasonResponse>(response);
+
+      setSuccessMessage(`Unlocked ${data.season.name ?? data.season.year}. Fix setup issues, then relock the season.`);
+      await refreshLeagueDashboard(leagueId!);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to unlock season.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleRemoveTeam(teamOwnershipId: string, teamName: string) {
+    if (!activeSeason) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch(`/api/season/${activeSeason.id}/remove-team`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          teamOwnershipId,
+          actingUserId: MOCK_COMMISSIONER_USER_ID
+        })
+      });
+      await parseJsonResponse<RemoveTeamOwnershipResponse>(response);
+
+      setSuccessMessage(`Removed ${teamName} from its owner.`);
+      await refreshLeagueDashboard(leagueId!);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to remove team.");
     } finally {
       setIsSubmitting(false);
     }
@@ -436,6 +505,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                 <p>
                   Status: {lockState === "LOCKED" ? "Locked" : lockState === "READY_TO_LOCK" ? "Ready to Lock" : "Not Ready"}
                 </p>
+                <p>Commissioner actions use mock identity: {MOCK_COMMISSIONER_USER_ID}</p>
               </CardContent>
             </Card>
 
@@ -476,6 +546,11 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                       ? `Active season: ${activeSeason?.name ?? activeSeason?.year} - ${isLocked ? "Locked" : "Open"}`
                       : "Create or activate a season first. All bootstrap actions run against the active season only."}
                   </div>
+                  {hasActiveSeason && (
+                    <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                      Only the commissioner can lock or unlock the season in the current mock identity flow.
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-3">
@@ -630,7 +705,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
 
                       {isLocked && (
                         <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                          This season is locked. Member and team setup actions are now read only.
+                          Season Locked. Unlock the season to fix setup mistakes, then relock it.
                         </div>
                       )}
                     </>
@@ -666,12 +741,21 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                           <div className="mt-3 flex flex-wrap gap-2">
                             {ownerRecord?.teams.length ? (
                               ownerRecord.teams.map((entry) => (
-                                <span
-                                  className="rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground"
+                                <div
+                                  className="flex items-center gap-2 rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground"
                                   key={entry.ownershipId}
                                 >
-                                  {entry.team.abbreviation} - {entry.team.name}
-                                </span>
+                                  <span>{entry.team.abbreviation} - {entry.team.name}</span>
+                                  <Button
+                                    className="h-7 px-2"
+                                    disabled={isSubmitting || isLocked}
+                                    onClick={() => void handleRemoveTeam(entry.ownershipId, entry.team.name)}
+                                    type="button"
+                                    variant="ghost"
+                                  >
+                                    Remove Team
+                                  </Button>
+                                </div>
                               ))
                             ) : (
                               <span className="text-sm text-muted-foreground">No NFL teams assigned.</span>
@@ -738,6 +822,21 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                     >
                       {isLocked ? "Season Locked" : "Lock Season"}
                     </Button>
+                    {isLocked && (
+                      <Button
+                        disabled={isSubmitting}
+                        onClick={() => void handleUnlockSeason()}
+                        type="button"
+                        variant="outline"
+                      >
+                        Unlock Season
+                      </Button>
+                    )}
+                    {!isLocked && (
+                      <p className="text-muted-foreground">
+                        This action is only available to the commissioner.
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               </div>

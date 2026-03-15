@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import type {
   CreateSeasonInput,
   SeasonSetupStatus,
+  SeasonActorInput,
   SeasonSummary,
   SetActiveSeasonInput
 } from "@/types/season";
@@ -68,6 +69,55 @@ async function getSeasonOrThrow(tx: Prisma.TransactionClient | typeof prisma, se
   }
 
   return season;
+}
+
+async function assertActingCommissionerForSeason(
+  tx: Prisma.TransactionClient | typeof prisma,
+  seasonId: string,
+  actingUserId: string
+) {
+  const normalizedActingUserId = actingUserId.trim();
+
+  if (!normalizedActingUserId) {
+    throw new SeasonServiceError("actingUserId is required.", 400);
+  }
+
+  const season = await tx.season.findUnique({
+    where: {
+      id: seasonId
+    },
+    select: {
+      id: true,
+      leagueId: true,
+      isLocked: true
+    }
+  });
+
+  if (!season) {
+    throw new SeasonServiceError("Season not found.", 404);
+  }
+
+  const commissioner = await tx.leagueMember.findUnique({
+    where: {
+      leagueId_userId: {
+        leagueId: season.leagueId,
+        userId: normalizedActingUserId
+      }
+    },
+    select: {
+      id: true,
+      role: true
+    }
+  });
+
+  if (!commissioner || commissioner.role !== "COMMISSIONER") {
+    throw new SeasonServiceError("Only the commissioner can perform this action.", 403);
+  }
+
+  return {
+    season,
+    commissioner
+  };
 }
 
 async function getSeasonSetupStatusInternal(
@@ -271,15 +321,25 @@ export const seasonService = {
     return getSeasonSetupStatusInternal(prisma, normalizedSeasonId);
   },
 
-  async lockSeason(seasonId: string) {
+  async assertCommissionerAccess(seasonId: string, actingUserId: string) {
     const normalizedSeasonId = seasonId.trim();
 
     if (!normalizedSeasonId) {
       throw new SeasonServiceError("seasonId is required.", 400);
     }
 
+    return assertActingCommissionerForSeason(prisma, normalizedSeasonId, actingUserId);
+  },
+
+  async lockSeasonWithActor(input: SeasonActorInput) {
+    const normalizedSeasonId = input.seasonId.trim();
+
+    if (!normalizedSeasonId) {
+      throw new SeasonServiceError("seasonId is required.", 400);
+    }
+
     return prisma.$transaction(async (tx) => {
-      const season = await getSeasonOrThrow(tx, normalizedSeasonId);
+      const { season } = await assertActingCommissionerForSeason(tx, normalizedSeasonId, input.actingUserId);
       const status = await getSeasonSetupStatusInternal(tx, normalizedSeasonId);
 
       if (!status.isValid) {
@@ -299,6 +359,33 @@ export const seasonService = {
         season: mapSeason(lockedSeason),
         status
       };
+    });
+  },
+
+  async unlockSeason(input: SeasonActorInput) {
+    const normalizedSeasonId = input.seasonId.trim();
+
+    if (!normalizedSeasonId) {
+      throw new SeasonServiceError("seasonId is required.", 400);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const { season } = await assertActingCommissionerForSeason(tx, normalizedSeasonId, input.actingUserId);
+
+      if (!season.isLocked) {
+        throw new SeasonServiceError("Season is already unlocked.", 409);
+      }
+
+      const unlockedSeason = await tx.season.update({
+        where: {
+          id: season.id
+        },
+        data: {
+          isLocked: false
+        }
+      });
+
+      return mapSeason(unlockedSeason);
     });
   }
 };

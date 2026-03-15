@@ -66,3 +66,12 @@ export interface LockSeasonResponse {
   season: SeasonSummary;
   status: SeasonSetupStatus;
 }
+
+export interface SeasonActorInput {
+  seasonId: string;
+  actingUserId: string;
+}
+
+export interface UnlockSeasonResponse {
+  season: SeasonSummary;
+}
