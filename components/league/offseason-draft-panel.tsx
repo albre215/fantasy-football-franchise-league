@@ -62,19 +62,41 @@ export function OffseasonDraftPanel({
 }: OffseasonDraftPanelProps) {
   const [selectedSourceSeasonId, setSelectedSourceSeasonId] = useState("");
   const [draftOrderLeagueMemberIds, setDraftOrderLeagueMemberIds] = useState<string[]>([]);
-  const [keeperSelections, setKeeperSelections] = useState<Record<string, string[]>>({});
+  const [keeperSelectionsByOwner, setKeeperSelectionsByOwner] = useState<Record<string, string[]>>({});
+  const [dirtyKeeperOwners, setDirtyKeeperOwners] = useState<Record<string, boolean>>({});
+  const [savingKeeperOwners, setSavingKeeperOwners] = useState<Record<string, boolean>>({});
+  const [keeperFeedbackByOwner, setKeeperFeedbackByOwner] = useState<
+    Record<string, { type: "success" | "error"; message: string } | undefined>
+  >({});
+  const [pendingSavedKeeperSelectionsByOwner, setPendingSavedKeeperSelectionsByOwner] = useState<
+    Record<string, string[] | undefined>
+  >({});
   const [currentPickTeamId, setCurrentPickTeamId] = useState("");
 
   const sourceSeasonOptions = useMemo(
     () => seasons.filter((season) => season.id !== activeSeason?.id),
     [activeSeason?.id, seasons]
   );
+  const savedKeeperSelectionsByOwner = useMemo(
+    () =>
+      Object.fromEntries(
+        (draftState?.members ?? []).map((member) => [
+          member.leagueMemberId,
+          member.keepers.map((keeper) => keeper.nflTeam.id)
+        ])
+      ),
+    [draftState]
+  );
 
   useEffect(() => {
     if (!activeSeason) {
       setSelectedSourceSeasonId("");
       setDraftOrderLeagueMemberIds([]);
-      setKeeperSelections({});
+      setKeeperSelectionsByOwner({});
+      setDirtyKeeperOwners({});
+      setSavingKeeperOwners({});
+      setKeeperFeedbackByOwner({});
+      setPendingSavedKeeperSelectionsByOwner({});
       setCurrentPickTeamId("");
       return;
     }
@@ -82,12 +104,34 @@ export function OffseasonDraftPanel({
     if (draftState) {
       setSelectedSourceSeasonId(draftState.draft.sourceSeasonId);
       setDraftOrderLeagueMemberIds(draftState.picks.map((pick) => pick.selectingLeagueMemberId));
-      setKeeperSelections(
+      setKeeperSelectionsByOwner((current) =>
         Object.fromEntries(
           draftState.members.map((member) => [
             member.leagueMemberId,
-            member.keepers.map((keeper) => keeper.nflTeam.id)
+            pendingSavedKeeperSelectionsByOwner[member.leagueMemberId] &&
+            member.keepers.map((keeper) => keeper.nflTeam.id).join("|") !==
+              pendingSavedKeeperSelectionsByOwner[member.leagueMemberId]?.join("|")
+              ? current[member.leagueMemberId] ??
+                pendingSavedKeeperSelectionsByOwner[member.leagueMemberId] ??
+                member.keepers.map((keeper) => keeper.nflTeam.id)
+              : dirtyKeeperOwners[member.leagueMemberId]
+              ? current[member.leagueMemberId] ?? member.keepers.map((keeper) => keeper.nflTeam.id)
+              : pendingSavedKeeperSelectionsByOwner[member.leagueMemberId] ??
+                member.keepers.map((keeper) => keeper.nflTeam.id)
           ])
+        )
+      );
+      setPendingSavedKeeperSelectionsByOwner((current) =>
+        Object.fromEntries(
+          draftState.members.map((member) => {
+            const savedKeepers = member.keepers.map((keeper) => keeper.nflTeam.id);
+            const pendingKeepers = current[member.leagueMemberId];
+
+            return [
+              member.leagueMemberId,
+              pendingKeepers && pendingKeepers.join("|") !== savedKeepers.join("|") ? pendingKeepers : undefined
+            ];
+          })
         )
       );
       setCurrentPickTeamId((current) =>
@@ -100,30 +144,58 @@ export function OffseasonDraftPanel({
       sourceSeasonOptions.some((season) => season.id === current) ? current : sourceSeasonOptions[0]?.id ?? ""
     );
     setDraftOrderLeagueMemberIds([...members].reverse().map((member) => member.id));
-    setKeeperSelections({});
+    setKeeperSelectionsByOwner({});
+    setDirtyKeeperOwners({});
+    setSavingKeeperOwners({});
+    setKeeperFeedbackByOwner({});
+    setPendingSavedKeeperSelectionsByOwner({});
     setCurrentPickTeamId("");
-  }, [activeSeason, draftState, members, sourceSeasonOptions]);
+  }, [activeSeason, dirtyKeeperOwners, draftState, members, pendingSavedKeeperSelectionsByOwner, sourceSeasonOptions]);
 
   function toggleKeeperSelection(leagueMemberId: string, nflTeamId: string) {
-    setKeeperSelections((current) => {
+    setKeeperSelectionsByOwner((current) => {
       const existing = current[leagueMemberId] ?? [];
+      let nextSelection: string[];
 
       if (existing.includes(nflTeamId)) {
-        return {
-          ...current,
-          [leagueMemberId]: existing.filter((id) => id !== nflTeamId)
-        };
+        nextSelection = existing.filter((id) => id !== nflTeamId);
+      } else if (existing.length >= 2) {
+        nextSelection = existing;
+      } else {
+        nextSelection = [...existing, nflTeamId];
       }
 
-      if (existing.length >= 2) {
-        return current;
-      }
+      setDirtyKeeperOwners((dirty) => ({
+        ...dirty,
+        [leagueMemberId]: true
+      }));
 
       return {
         ...current,
-        [leagueMemberId]: [...existing, nflTeamId]
+        [leagueMemberId]: nextSelection
       };
     });
+  }
+
+  function resetKeeperSelection(leagueMemberId: string) {
+    const hasSavedSelection = (savedKeeperSelectionsByOwner[leagueMemberId] ?? []).length > 0;
+
+    setKeeperSelectionsByOwner((current) => ({
+      ...current,
+      [leagueMemberId]: []
+    }));
+    setDirtyKeeperOwners((current) => ({
+      ...current,
+      [leagueMemberId]: hasSavedSelection
+    }));
+    setKeeperFeedbackByOwner((current) => ({
+      ...current,
+      [leagueMemberId]: undefined
+    }));
+    setPendingSavedKeeperSelectionsByOwner((current) => ({
+      ...current,
+      [leagueMemberId]: undefined
+    }));
   }
 
   async function withMutation<T>(run: () => Promise<T>, successMessage: string) {
@@ -172,25 +244,57 @@ export function OffseasonDraftPanel({
       return;
     }
 
-    await withMutation(
-      async () => {
-        const response = await fetch(`/api/season/${activeSeason.id}/draft/keepers`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            draftId: draftState.draft.id,
-            leagueMemberId,
-            nflTeamIds: keeperSelections[leagueMemberId] ?? [],
-            actingUserId
-          })
-        });
+    setKeeperFeedbackByOwner((current) => ({
+      ...current,
+      [leagueMemberId]: undefined
+    }));
+    setPendingSavedKeeperSelectionsByOwner((current) => ({
+      ...current,
+      [leagueMemberId]: keeperSelectionsByOwner[leagueMemberId] ?? []
+    }));
+    setSavingKeeperOwners((current) => ({
+      ...current,
+      [leagueMemberId]: true
+    }));
 
-        await parseJsonResponse<SaveKeepersResponse>(response);
-      },
-      "Keepers saved."
-    );
+    try {
+      const response = await fetch(`/api/season/${activeSeason.id}/draft/keepers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          draftId: draftState.draft.id,
+          leagueMemberId,
+          nflTeamIds: keeperSelectionsByOwner[leagueMemberId] ?? [],
+          actingUserId
+        })
+      });
+
+      await parseJsonResponse<SaveKeepersResponse>(response);
+      setDirtyKeeperOwners((current) => ({
+        ...current,
+        [leagueMemberId]: false
+      }));
+      setKeeperFeedbackByOwner((current) => ({
+        ...current,
+        [leagueMemberId]: undefined
+      }));
+      await onRefresh();
+    } catch (error) {
+      setKeeperFeedbackByOwner((current) => ({
+        ...current,
+        [leagueMemberId]: {
+          type: "error",
+          message: error instanceof Error ? error.message : "Request failed."
+        }
+      }));
+    } finally {
+      setSavingKeeperOwners((current) => ({
+        ...current,
+        [leagueMemberId]: false
+      }));
+    }
   }
 
   async function handleDraftAction(
@@ -390,33 +494,77 @@ export function OffseasonDraftPanel({
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {draftState.members.map((member) => {
-                      const selectedKeepers = keeperSelections[member.leagueMemberId] ?? [];
+                      const selectedKeepers = keeperSelectionsByOwner[member.leagueMemberId] ?? [];
+                      const savedKeepers =
+                        pendingSavedKeeperSelectionsByOwner[member.leagueMemberId] ??
+                        savedKeeperSelectionsByOwner[member.leagueMemberId] ??
+                        [];
+                      const hasUnsavedChanges = Boolean(dirtyKeeperOwners[member.leagueMemberId]);
+                      const isOwnerSaving = Boolean(savingKeeperOwners[member.leagueMemberId]);
+                      const feedback = keeperFeedbackByOwner[member.leagueMemberId];
                       const canEdit = draftState.draft.status === "PLANNING" && !draftState.draft.isTargetSeasonLocked;
+                      const canSaveKeepers = canEdit && !isOwnerSaving && selectedKeepers.length === 2 && hasUnsavedChanges;
+                      const selectedCountLabel = `${selectedKeepers.length}/2 selected`;
+
+                      let statusLabel = "Choose 2 keepers";
+
+                      if (isOwnerSaving) {
+                        statusLabel = "Saving...";
+                      } else if (hasUnsavedChanges) {
+                        statusLabel = "Unsaved changes";
+                      } else if (savedKeepers.length === 2) {
+                        statusLabel = "Saved and up to date";
+                      }
 
                       return (
                         <div className="rounded-lg border border-border p-4" key={member.leagueMemberId}>
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                               <p className="font-medium text-foreground">{member.displayName}</p>
-                              <p className="text-sm text-muted-foreground">Keepers {member.keeperCount}/2</p>
+                              <p className="text-sm text-muted-foreground">{selectedCountLabel}</p>
+                              <p className="text-sm text-muted-foreground">{statusLabel}</p>
                             </div>
-                            <Button
-                              disabled={isSubmitting || !canEdit || selectedKeepers.length !== 2}
-                              onClick={() => void handleSaveKeepers(member.leagueMemberId)}
-                              type="button"
-                              variant="outline"
-                            >
-                              Save Keepers
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button
+                                disabled={!canSaveKeepers}
+                                onClick={() => void handleSaveKeepers(member.leagueMemberId)}
+                                type="button"
+                                variant={canSaveKeepers ? "default" : "secondary"}
+                              >
+                                Save Keepers
+                              </Button>
+                              <Button
+                                disabled={isOwnerSaving || !canEdit || selectedKeepers.length === 0}
+                                onClick={() => resetKeeperSelection(member.leagueMemberId)}
+                                type="button"
+                                variant="ghost"
+                              >
+                                Reset
+                              </Button>
+                            </div>
                           </div>
+                          {feedback ? (
+                            <p
+                              className={`mt-3 text-sm ${
+                                feedback.type === "success" ? "text-emerald-700" : "text-destructive"
+                              }`}
+                            >
+                              {feedback.message}
+                            </p>
+                          ) : null}
                           <div className="mt-3 flex flex-wrap gap-2">
                             {member.previousSeasonTeams.map((team) => {
                               const isSelected = selectedKeepers.includes(team.id);
+                              const isSaved = savedKeepers.includes(team.id);
+                              const isSavedSelection = isSelected && isSaved && !hasUnsavedChanges;
+                              const isWorkingSelection = isSelected && !isSavedSelection;
 
                               return (
                                 <button
                                   className={`rounded-full border px-3 py-2 text-sm ${
-                                    isSelected
+                                    isSavedSelection
+                                      ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+                                      : isWorkingSelection
                                       ? "border-foreground bg-secondary text-secondary-foreground"
                                       : "border-border text-muted-foreground"
                                   }`}
@@ -425,7 +573,7 @@ export function OffseasonDraftPanel({
                                   onClick={() => toggleKeeperSelection(member.leagueMemberId, team.id)}
                                   type="button"
                                 >
-                                  {team.abbreviation} - {team.name} {isSelected ? "(Keeper)" : ""}
+                                  {team.abbreviation} - {team.name}
                                 </button>
                               );
                             })}
