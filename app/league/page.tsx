@@ -1,5 +1,11 @@
-import { LeagueShell } from "@/components/league/league-shell";
+import { LeagueDashboard } from "@/components/league/league-dashboard";
 
-export default function LeaguePage() {
-  return <LeagueShell />;
+interface LeaguePageProps {
+  searchParams?: {
+    leagueId?: string;
+  };
+}
+
+export default function LeaguePage({ searchParams }: LeaguePageProps) {
+  return <LeagueDashboard leagueId={searchParams?.leagueId} />;
 }

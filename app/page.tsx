@@ -1,20 +1,7 @@
 import Link from "next/link";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { LeagueControlPanel } from "@/components/home/league-control-panel";
 import { buttonVariants } from "@/components/ui/button";
-
-const sections = [
-  {
-    href: "/dashboard",
-    title: "Dashboard",
-    description: "Owner-facing workspace for league status, roster context, standings, and operational workflows."
-  },
-  {
-    href: "/league",
-    title: "League Hub",
-    description: "League-wide views for seasons, members, team ownership, and long-term historical reporting."
-  }
-];
 
 export default function HomePage() {
   return (
@@ -41,21 +28,7 @@ export default function HomePage() {
             </Link>
           </div>
         </div>
-        <section className="mt-14 grid gap-6 md:grid-cols-2">
-          {sections.map((section) => (
-            <Card key={section.href} className="border-border/70 bg-card/80 backdrop-blur">
-              <CardHeader>
-                <CardTitle>{section.title}</CardTitle>
-                <CardDescription>{section.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Link className={buttonVariants({ variant: "secondary" })} href={section.href}>
-                  View section
-                </Link>
-              </CardContent>
-            </Card>
-          ))}
-        </section>
+        <LeagueControlPanel />
       </div>
     </main>
   );
