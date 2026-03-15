@@ -20,6 +20,7 @@ import type { SeasonSummary } from "@/types/season";
 interface OffseasonDraftPanelProps {
   leagueId: string;
   activeSeason: SeasonSummary | null;
+  activeSeasonAssignedTeamCount: number;
   seasons: SeasonSummary[];
   members: LeagueBootstrapMember[];
   draftState: DraftState | null;
@@ -46,9 +47,85 @@ function formatSeasonLabel(season: { year: number; name: string | null }) {
   return season.name ?? `${season.year} Season`;
 }
 
+function buildDefaultDraftOrder(memberIds: string[]) {
+  return [...memberIds].reverse();
+}
+
+function updateDraftOrderSlot(order: string[], index: number, leagueMemberId: string) {
+  const nextOrder = [...order];
+  nextOrder[index] = leagueMemberId;
+  return nextOrder;
+}
+
+function getDraftOrderSelectOptions(
+  members: LeagueBootstrapMember[],
+  draftOrder: string[],
+  slotIndex: number
+) {
+  return members.filter((member) => {
+    const selectedInOtherSlot = draftOrder.some(
+      (selectedOwnerId, selectedIndex) => selectedIndex !== slotIndex && selectedOwnerId === member.id
+    );
+
+    return !selectedInOtherSlot || draftOrder[slotIndex] === member.id;
+  });
+}
+
+function getDraftOrderReadiness(memberIds: string[], sourceSeasonId: string, draftOrder: string[]) {
+  const filledSlots = draftOrder.filter(Boolean).length;
+  const uniqueSelectedOwnerCount = new Set(draftOrder.filter(Boolean)).size;
+  const hasSourceSeason = Boolean(sourceSeasonId);
+  const hasAllSlotsFilled = filledSlots === memberIds.length;
+  const hasAllUniqueOwners = filledSlots === uniqueSelectedOwnerCount;
+  const includesAllOwners = memberIds.every((memberId) => draftOrder.includes(memberId));
+  const isReady = hasSourceSeason && hasAllSlotsFilled && hasAllUniqueOwners && includesAllOwners;
+
+  return {
+    hasSourceSeason,
+    filledSlots,
+    hasAllSlotsFilled,
+    uniqueSelectedOwnerCount,
+    hasAllUniqueOwners,
+    includesAllOwners,
+    isReady
+  };
+}
+
+function getDraftOrderValidationMessage(
+  memberIds: string[],
+  sourceSeasonId: string,
+  draftOrder: string[],
+  activeSeasonAssignedTeamCount: number
+) {
+  if (activeSeasonAssignedTeamCount > 0) {
+    return "Cannot initialize offseason draft because the target season already has assigned teams.";
+  }
+
+  const readiness = getDraftOrderReadiness(memberIds, sourceSeasonId, draftOrder);
+
+  if (!readiness.hasSourceSeason) {
+    return "Select a previous season to initialize the offseason draft.";
+  }
+
+  if (!readiness.hasAllSlotsFilled) {
+    return "Draft order must contain all 10 owners exactly once.";
+  }
+
+  if (!readiness.hasAllUniqueOwners) {
+    return "Duplicate owners are not allowed.";
+  }
+
+  if (!readiness.includesAllOwners) {
+    return "Each owner must appear exactly once in the draft order.";
+  }
+
+  return null;
+}
+
 export function OffseasonDraftPanel({
   leagueId,
   activeSeason,
+  activeSeasonAssignedTeamCount,
   seasons,
   members,
   draftState,
@@ -68,6 +145,25 @@ export function OffseasonDraftPanel({
   const sourceSeasonOptions = useMemo(
     () => seasons.filter((season) => season.id !== activeSeason?.id),
     [activeSeason?.id, seasons]
+  );
+  const orderedMemberIds = useMemo(() => members.map((member) => member.id), [members]);
+  const draftOrderReadiness = useMemo(
+    () => getDraftOrderReadiness(orderedMemberIds, selectedSourceSeasonId, draftOrderLeagueMemberIds),
+    [draftOrderLeagueMemberIds, orderedMemberIds, selectedSourceSeasonId]
+  );
+  const draftOrderValidationMessage = useMemo(
+    () =>
+      getDraftOrderValidationMessage(
+        orderedMemberIds,
+        selectedSourceSeasonId,
+        draftOrderLeagueMemberIds,
+        activeSeasonAssignedTeamCount
+      ),
+    [activeSeasonAssignedTeamCount, draftOrderLeagueMemberIds, orderedMemberIds, selectedSourceSeasonId]
+  );
+  const remainingOwners = useMemo(
+    () => members.filter((member) => !draftOrderLeagueMemberIds.includes(member.id)),
+    [draftOrderLeagueMemberIds, members]
   );
 
   useEffect(() => {
@@ -99,10 +195,10 @@ export function OffseasonDraftPanel({
     setSelectedSourceSeasonId((current) =>
       sourceSeasonOptions.some((season) => season.id === current) ? current : sourceSeasonOptions[0]?.id ?? ""
     );
-    setDraftOrderLeagueMemberIds([...members].reverse().map((member) => member.id));
+    setDraftOrderLeagueMemberIds(buildDefaultDraftOrder(orderedMemberIds));
     setKeeperSelections({});
     setCurrentPickTeamId("");
-  }, [activeSeason, draftState, members, sourceSeasonOptions]);
+  }, [activeSeason, draftState, orderedMemberIds, sourceSeasonOptions]);
 
   function toggleKeeperSelection(leagueMemberId: string, nflTeamId: string) {
     setKeeperSelections((current) => {
@@ -296,16 +392,12 @@ export function OffseasonDraftPanel({
                       <select
                         className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                         onChange={(event) =>
-                          setDraftOrderLeagueMemberIds((current) => {
-                            const next = [...current];
-                            next[index] = event.target.value;
-                            return next;
-                          })
+                          setDraftOrderLeagueMemberIds((current) => updateDraftOrderSlot(current, index, event.target.value))
                         }
                         value={draftOrderLeagueMemberIds[index] ?? ""}
                       >
                         <option value="">Select owner</option>
-                        {members.map((option) => (
+                        {getDraftOrderSelectOptions(members, draftOrderLeagueMemberIds, index).map((option) => (
                           <option key={option.id} value={option.id}>
                             {option.displayName}
                           </option>
@@ -314,6 +406,14 @@ export function OffseasonDraftPanel({
                     </label>
                   ))}
                 </div>
+                {draftOrderValidationMessage && (
+                  <p className="text-sm text-red-600">{draftOrderValidationMessage}</p>
+                )}
+                <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+                  {remainingOwners.length === 0
+                    ? "All owners are assigned to a draft slot."
+                    : `Remaining owners: ${remainingOwners.map((member) => member.displayName).join(", ")}`}
+                </div>
               </div>
             </div>
 
@@ -321,17 +421,31 @@ export function OffseasonDraftPanel({
               <p>League ID: {leagueId}</p>
               <p>Target season: {formatSeasonLabel(activeSeason)}</p>
               <p>Owners in draft: {members.length} / 10</p>
+              <p>Target season assigned teams: {activeSeasonAssignedTeamCount} / 0 required</p>
               <p>Expected keepers: 20 total</p>
               <p>Expected draft pool: 12 teams</p>
               <p>Expected draft picks: 10</p>
+              <div className="space-y-1 rounded-lg border border-border p-3">
+                <p>Target season has no ownership assignments: {activeSeasonAssignedTeamCount === 0 ? "Pass" : "Fail"}</p>
+                <p>Source season selected: {draftOrderReadiness.hasSourceSeason ? "Pass" : "Fail"}</p>
+                <p>
+                  10 draft slots filled: {draftOrderReadiness.hasAllSlotsFilled ? "Pass" : "Fail"} (
+                  {draftOrderReadiness.filledSlots}/{members.length})
+                </p>
+                <p>
+                  All owners unique: {draftOrderReadiness.hasAllUniqueOwners ? "Pass" : "Fail"} (
+                  {draftOrderReadiness.uniqueSelectedOwnerCount}/{members.length})
+                </p>
+                <p>All eligible owners included: {draftOrderReadiness.includesAllOwners ? "Pass" : "Fail"}</p>
+                <p>Draft order ready: {draftOrderReadiness.isReady ? "Yes" : "No"}</p>
+              </div>
               <Button
                 className="w-full"
                 disabled={
                   isSubmitting ||
                   activeSeason.isLocked ||
-                  !selectedSourceSeasonId ||
-                  draftOrderLeagueMemberIds.length !== members.length ||
-                  draftOrderLeagueMemberIds.some((leagueMemberId) => !leagueMemberId)
+                  activeSeasonAssignedTeamCount > 0 ||
+                  !draftOrderReadiness.isReady
                 }
                 onClick={() => void handleInitializeDraft()}
                 type="button"

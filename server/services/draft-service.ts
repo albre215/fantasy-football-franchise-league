@@ -469,7 +469,10 @@ async function validateDraftInitialization(
   assertSeasonIsEditable(targetSeason.isLocked);
 
   if (targetSeason.teamOwnerships.length > 0) {
-    throw new DraftServiceError("Target season already has team ownership records. Use a fresh season for the draft.", 409);
+    throw new DraftServiceError(
+      "Cannot initialize offseason draft because the target season already has assigned teams. Initialize the offseason draft only for a season that does not yet have ownership assignments.",
+      409
+    );
   }
 
   const validLeagueMemberIds = new Set(targetSeason.league.members.map((member) => member.id));

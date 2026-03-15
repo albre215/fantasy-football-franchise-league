@@ -614,6 +614,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
             <OffseasonDraftPanel
               actingUserId={MOCK_COMMISSIONER_USER_ID}
               activeSeason={activeSeason}
+              activeSeasonAssignedTeamCount={bootstrapState.assignedTeamCount}
               draftState={draftState}
               isSubmitting={isSubmitting}
               leagueId={leagueId}
