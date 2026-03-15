@@ -97,9 +97,8 @@ model TeamOwnership {
 
 model NFLTeam {
   id             String          @id @default(cuid())
-  code           String          @unique
-  city           String
   name           String
+  abbreviation   String          @unique
   conference     NFLConference
   division       String
   isActive       Boolean         @default(true)

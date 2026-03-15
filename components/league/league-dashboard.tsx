@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { LeagueDashboardResponse, LeagueListItem, ListLeaguesResponse } from "@/types/league";
+import type { SeasonOwnershipResponse } from "@/types/team-ownership";
 
 interface LeagueDashboardProps {
   leagueId?: string;
@@ -25,11 +26,13 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [league, setLeague] = useState<LeagueDashboardResponse["league"] | null>(null);
   const [leagueOptions, setLeagueOptions] = useState<LeagueListItem[]>([]);
+  const [seasonOwnership, setSeasonOwnership] = useState<SeasonOwnershipResponse["ownership"] | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let isActive = true;
     setIsLoading(true);
+    setSeasonOwnership(null);
 
     void (async () => {
       try {
@@ -59,6 +62,25 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
         if (isActive) {
           setLeague(dashboardData.league);
           setErrorMessage(null);
+        }
+
+        const selectedSeason = dashboardData.league.seasons[0];
+
+        if (!selectedSeason) {
+          if (isActive) {
+            setSeasonOwnership(null);
+          }
+
+          return;
+        }
+
+        const ownershipResponse = await fetch(`/api/season/${selectedSeason.id}/ownership`, {
+          cache: "no-store"
+        });
+        const ownershipData = await parseJsonResponse<SeasonOwnershipResponse>(ownershipResponse);
+
+        if (isActive) {
+          setSeasonOwnership(ownershipData.ownership);
         }
       } catch (error) {
         if (isActive) {
@@ -197,6 +219,51 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                 </CardContent>
               </Card>
             </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Season Team Ownership</CardTitle>
+                <CardDescription>
+                  Owner to NFL team assignments for the current season context.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {!seasonOwnership ? (
+                  <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                    {league.seasons.length === 0
+                      ? "Create a season to begin assigning NFL teams."
+                      : "No team ownership records exist for the latest season yet."}
+                  </div>
+                ) : (
+                  seasonOwnership.owners.map((owner) => (
+                    <div className="rounded-lg border border-border p-4" key={owner.leagueMemberId}>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-foreground">{owner.displayName}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {owner.role} - {owner.teamCount}/3 teams assigned
+                          </p>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{owner.email}</p>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {owner.teams.length === 0 ? (
+                          <span className="text-sm text-muted-foreground">No NFL teams assigned.</span>
+                        ) : (
+                          owner.teams.map((entry) => (
+                            <span
+                              className="rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground"
+                              key={entry.ownershipId}
+                            >
+                              {entry.team.abbreviation} - {entry.team.name}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
           </>
         )}
       </div>
