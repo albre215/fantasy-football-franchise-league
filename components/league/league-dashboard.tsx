@@ -23,7 +23,6 @@ import type {
 } from "@/types/season";
 import type {
   AssignTeamResponse,
-  NFLTeamsResponse,
   RemoveTeamOwnershipResponse,
   SeasonOwnershipResponse
 } from "@/types/team-ownership";
@@ -52,7 +51,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   const [seasons, setSeasons] = useState<SeasonListResponse["seasons"]>([]);
   const [seasonOwnership, setSeasonOwnership] = useState<SeasonOwnershipResponse["ownership"] | null>(null);
   const [draftState, setDraftState] = useState<DraftState | null>(null);
-  const [unassignedTeams, setUnassignedTeams] = useState<NFLTeamsResponse["teams"]>([]);
+  const [ownershipError, setOwnershipError] = useState<string | null>(null);
   const [seasonYear, setSeasonYear] = useState(new Date().getFullYear().toString());
   const [seasonName, setSeasonName] = useState("");
   const [memberDisplayName, setMemberDisplayName] = useState("");
@@ -65,10 +64,12 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
 
   const activeSeason = bootstrapState?.activeSeason ?? null;
   const members = bootstrapState?.members ?? [];
+  const ownershipOwners = seasonOwnership?.owners ?? [];
+  const availableTeams = seasonOwnership?.availableTeams ?? [];
 
   const ownerSelectionOptions = useMemo(
-    () => members.filter((member) => member.assignmentCount < 3),
-    [members]
+    () => ownershipOwners.filter((owner) => owner.teamCount < 3),
+    [ownershipOwners]
   );
 
   async function refreshLeagueDashboard(currentLeagueId: string) {
@@ -90,42 +91,60 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       setLeagueOptions(listData.leagues);
       setBootstrapState(bootstrapData.bootstrapState);
       setSeasons(seasonsData.seasons);
+      setOwnershipError(null);
 
       if (!bootstrapData.bootstrapState.activeSeason) {
         setSeasonOwnership(null);
         setDraftState(null);
-        setUnassignedTeams([]);
+        setOwnershipError(null);
         setSelectedOwnerId("");
         setSelectedTeamId("");
         return;
       }
 
       const seasonId = bootstrapData.bootstrapState.activeSeason.id;
-      const [ownershipResponse, unassignedResponse, draftResponse] = await Promise.all([
-        fetch(`/api/season/${seasonId}/ownership`, { cache: "no-store" }),
-        fetch(`/api/season/${seasonId}/unassigned-teams`, { cache: "no-store" }),
-        fetch(`/api/season/${seasonId}/draft`, { cache: "no-store" })
-      ]);
+      try {
+        const ownershipResponse = await fetch(`/api/season/${seasonId}/ownership`, { cache: "no-store" });
+        const ownershipData = await parseJsonResponse<SeasonOwnershipResponse>(ownershipResponse);
 
-      const [ownershipData, unassignedData, draftData] = await Promise.all([
-        parseJsonResponse<SeasonOwnershipResponse>(ownershipResponse),
-        parseJsonResponse<NFLTeamsResponse>(unassignedResponse),
-        parseJsonResponse<DraftStateResponse>(draftResponse)
-      ]);
+        setSeasonOwnership(ownershipData.ownership);
+        setSelectedOwnerId((current) => {
+          const validOwnerIds = ownershipData.ownership.owners
+            .filter((owner) => owner.teamCount < 3)
+            .map((owner) => owner.userId);
 
-      setSeasonOwnership(ownershipData.ownership);
-      setDraftState(draftData.draft);
-      setUnassignedTeams(unassignedData.teams);
-      setSelectedOwnerId((current) => {
-        const validOwnerIds = bootstrapData.bootstrapState.members
-          .filter((member) => member.assignmentCount < 3)
-          .map((member) => member.userId);
+          return validOwnerIds.includes(current) ? current : validOwnerIds[0] ?? "";
+        });
+        setSelectedTeamId((current) =>
+          ownershipData.ownership.availableTeams.some((team) => team.id === current)
+            ? current
+            : ownershipData.ownership.availableTeams[0]?.id ?? ""
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unable to load active-season ownership.";
 
-        return validOwnerIds.includes(current) ? current : validOwnerIds[0] ?? "";
-      });
-      setSelectedTeamId((current) =>
-        unassignedData.teams.some((team) => team.id === current) ? current : unassignedData.teams[0]?.id ?? ""
-      );
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Active-season ownership load failed:", message);
+        }
+
+        setSeasonOwnership(null);
+        setOwnershipError(message);
+        setSelectedOwnerId("");
+        setSelectedTeamId("");
+      }
+
+      try {
+        const draftResponse = await fetch(`/api/season/${seasonId}/draft`, { cache: "no-store" });
+        const draftData = await parseJsonResponse<DraftStateResponse>(draftResponse);
+        setDraftState(draftData.draft);
+      } catch (error) {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Draft state load failed:", error);
+        }
+
+        setDraftState(null);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -703,9 +722,9 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                           value={selectedOwnerId}
                         >
                           <option value="">Select member</option>
-                          {ownerSelectionOptions.map((member) => (
-                            <option key={member.id} value={member.userId}>
-                              {member.displayName} ({member.assignmentCount}/3)
+                          {ownerSelectionOptions.map((owner) => (
+                            <option key={owner.leagueMemberId} value={owner.userId}>
+                              {owner.displayName} ({owner.teamCount}/3)
                             </option>
                           ))}
                         </select>
@@ -715,7 +734,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                           value={selectedTeamId}
                         >
                           <option value="">Select available NFL team</option>
-                          {unassignedTeams.map((team) => (
+                          {availableTeams.map((team) => (
                             <option key={team.id} value={team.id}>
                               {team.abbreviation} - {team.name}
                             </option>
@@ -749,24 +768,25 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                 <CardContent className="space-y-4">
                   {!hasActiveSeason ? (
                     <p className="text-sm text-muted-foreground">No active season selected.</p>
+                  ) : ownershipError ? (
+                    <p className="text-sm text-red-600">{ownershipError}</p>
+                  ) : !seasonOwnership ? (
+                    <p className="text-sm text-muted-foreground">Unable to load active-season ownership.</p>
                   ) : (
-                    members.map((member) => {
-                      const ownerRecord = seasonOwnership?.owners.find((owner) => owner.userId === member.userId);
-
-                      return (
-                        <div className="rounded-lg border border-border p-4" key={member.id}>
+                    ownershipOwners.map((owner) => (
+                        <div className="rounded-lg border border-border p-4" key={owner.leagueMemberId}>
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                              <p className="font-medium text-foreground">{member.displayName}</p>
+                              <p className="font-medium text-foreground">{owner.displayName}</p>
                               <p className="text-sm text-muted-foreground">
-                                {member.role} - {member.assignmentCount}/3 teams assigned
+                                {owner.role} - {owner.teamCount}/3 teams assigned
                               </p>
                             </div>
-                            <p className="text-sm text-muted-foreground">{member.email}</p>
+                            <p className="text-sm text-muted-foreground">{owner.email}</p>
                           </div>
                           <div className="mt-3 flex flex-wrap gap-2">
-                            {ownerRecord?.teams.length ? (
-                              ownerRecord.teams.map((entry) => (
+                            {owner.teams.length > 0 ? (
+                              owner.teams.map((entry) => (
                                 <div
                                   className="flex items-center gap-2 rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground"
                                   key={entry.ownershipId}
@@ -788,8 +808,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                             )}
                           </div>
                         </div>
-                      );
-                    })
+                      ))
                   )}
                 </CardContent>
               </Card>
@@ -805,10 +824,14 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                   <CardContent className="space-y-2">
                     {!hasActiveSeason ? (
                       <p className="text-sm text-muted-foreground">No active season selected.</p>
-                    ) : unassignedTeams.length === 0 ? (
+                    ) : ownershipError ? (
+                      <p className="text-sm text-red-600">{ownershipError}</p>
+                    ) : !seasonOwnership ? (
+                      <p className="text-sm text-muted-foreground">Unable to load active-season ownership.</p>
+                    ) : availableTeams.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No unassigned teams remain.</p>
                     ) : (
-                      unassignedTeams.map((team) => (
+                      availableTeams.map((team) => (
                         <div className="rounded-lg border border-border p-3 text-sm" key={team.id}>
                           {team.abbreviation} - {team.name}
                         </div>

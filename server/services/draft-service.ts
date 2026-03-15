@@ -319,12 +319,12 @@ async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<D
     }
   }
 
-  const previousSeasonTeamsByMemberId = new Map<string, DraftTeamSummary[]>();
+  const previousSeasonTeamsByUserId = new Map<string, DraftTeamSummary[]>();
 
   for (const ownership of draft.sourceSeason.teamOwnerships) {
-    const bucket = previousSeasonTeamsByMemberId.get(ownership.leagueMemberId) ?? [];
+    const bucket = previousSeasonTeamsByUserId.get(ownership.leagueMember.userId) ?? [];
     bucket.push(mapDraftTeam(ownership.nflTeam));
-    previousSeasonTeamsByMemberId.set(ownership.leagueMemberId, bucket);
+    previousSeasonTeamsByUserId.set(ownership.leagueMember.userId, bucket);
   }
 
   const members: DraftMemberSummary[] = draft.targetSeason.league.members.map((member) => {
@@ -336,7 +336,7 @@ async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<D
       displayName: member.user.displayName,
       email: member.user.email,
       role: member.role,
-      previousSeasonTeams: previousSeasonTeamsByMemberId.get(member.id) ?? [],
+      previousSeasonTeams: previousSeasonTeamsByUserId.get(member.userId) ?? [],
       keepers,
       draftedTeam: draftedTeamsByMemberId.get(member.id) ?? null,
       keeperCount: keepers.length,
@@ -430,7 +430,12 @@ async function validateDraftInitialization(
       include: {
         teamOwnerships: {
           include: {
-            nflTeam: true
+            nflTeam: true,
+            leagueMember: {
+              include: {
+                user: true
+              }
+            }
           }
         }
       }
@@ -483,12 +488,13 @@ async function validateDraftInitialization(
 
   const sourceOwnershipCounts = new Map<string, number>();
   for (const ownership of sourceSeason.teamOwnerships) {
-    sourceOwnershipCounts.set(ownership.leagueMemberId, (sourceOwnershipCounts.get(ownership.leagueMemberId) ?? 0) + 1);
+    sourceOwnershipCounts.set(
+      ownership.leagueMember.userId,
+      (sourceOwnershipCounts.get(ownership.leagueMember.userId) ?? 0) + 1
+    );
   }
 
-  if (
-    targetSeason.league.members.some((member) => (sourceOwnershipCounts.get(member.id) ?? 0) !== 3)
-  ) {
+  if (targetSeason.league.members.some((member) => (sourceOwnershipCounts.get(member.userId) ?? 0) !== 3)) {
     throw new DraftServiceError(
       "Each current league member must have exactly 3 teams in the source season before starting the offseason draft.",
       409
@@ -537,12 +543,15 @@ async function validateKeeperSave(
   }
 
   const sourceTeams = draft.sourceSeason.teamOwnerships.filter((ownership) => ownership.leagueMemberId === leagueMemberId);
+  const memberSourceTeams = draft.sourceSeason.teamOwnerships.filter(
+    (ownership) => ownership.leagueMember.userId === member.userId
+  );
 
-  if (sourceTeams.length !== 3) {
+  if (memberSourceTeams.length !== 3) {
     throw new DraftServiceError("That owner does not have exactly 3 teams in the source season.", 409);
   }
 
-  const validSourceTeamIds = new Set(sourceTeams.map((ownership) => ownership.nflTeamId));
+  const validSourceTeamIds = new Set(memberSourceTeams.map((ownership) => ownership.nflTeamId));
 
   if (nflTeamIds.some((nflTeamId) => !validSourceTeamIds.has(nflTeamId))) {
     throw new DraftServiceError("Keepers must come from that owner's previous-season teams.", 400);
@@ -878,7 +887,7 @@ export const draftService = {
 
       for (const member of draft.targetSeason.league.members) {
         const previousOwnerships = draft.sourceSeason.teamOwnerships
-          .filter((ownership) => ownership.leagueMemberId === member.id)
+          .filter((ownership) => ownership.leagueMember.userId === member.userId)
           .sort((left, right) => left.slot - right.slot);
         const keeperIds = draft.keeperSelections
           .filter((keeper) => keeper.leagueMemberId === member.id)

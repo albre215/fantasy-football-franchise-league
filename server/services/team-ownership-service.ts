@@ -141,6 +141,9 @@ function buildOwnerGroups(
     id: string;
     slot: number;
     leagueMemberId: string;
+    leagueMember: {
+      userId: string;
+    };
     nflTeam: {
       id: string;
       name: string;
@@ -152,7 +155,7 @@ function buildOwnerGroups(
 ): OwnerTeamGroup[] {
   return members.map((member) => {
     const memberOwnerships = ownerships
-      .filter((ownership) => ownership.leagueMemberId === member.id)
+      .filter((ownership) => ownership.leagueMember.userId === member.userId)
       .sort((left, right) => left.slot - right.slot);
 
     return {
