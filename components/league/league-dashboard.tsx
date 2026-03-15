@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { LeagueHistoryPanel } from "@/components/league/league-history-panel";
 import { OffseasonDraftPanel } from "@/components/league/offseason-draft-panel";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -890,6 +891,8 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                 </Card>
               </div>
             </div>
+
+            <LeagueHistoryPanel leagueId={leagueId} />
           </>
         )}
       </div>
