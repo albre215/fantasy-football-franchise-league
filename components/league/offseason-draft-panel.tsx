@@ -46,6 +46,30 @@ function formatSeasonLabel(season: { year: number; name: string | null }) {
   return season.name ?? `${season.year} Season`;
 }
 
+function getDraftOrderValidationMessage(
+  memberIds: string[],
+  selectedSourceSeasonId: string,
+  draftOrderLeagueMemberIds: string[]
+) {
+  if (!selectedSourceSeasonId) {
+    return "Select a previous season to initialize the offseason draft.";
+  }
+
+  if (draftOrderLeagueMemberIds.length !== memberIds.length || draftOrderLeagueMemberIds.some((leagueMemberId) => !leagueMemberId)) {
+    return "Draft order must contain all 10 owners exactly once.";
+  }
+
+  if (new Set(draftOrderLeagueMemberIds).size !== memberIds.length) {
+    return "Duplicate owners are not allowed.";
+  }
+
+  if (memberIds.some((memberId) => !draftOrderLeagueMemberIds.includes(memberId))) {
+    return "Each owner must appear exactly once in the draft order.";
+  }
+
+  return null;
+}
+
 export function OffseasonDraftPanel({
   leagueId,
   activeSeason,
@@ -68,6 +92,11 @@ export function OffseasonDraftPanel({
   const sourceSeasonOptions = useMemo(
     () => seasons.filter((season) => season.id !== activeSeason?.id),
     [activeSeason?.id, seasons]
+  );
+  const memberIds = useMemo(() => members.map((member) => member.id), [members]);
+  const draftOrderValidationMessage = useMemo(
+    () => getDraftOrderValidationMessage(memberIds, selectedSourceSeasonId, draftOrderLeagueMemberIds),
+    [draftOrderLeagueMemberIds, memberIds, selectedSourceSeasonId]
   );
 
   useEffect(() => {
@@ -305,15 +334,26 @@ export function OffseasonDraftPanel({
                         value={draftOrderLeagueMemberIds[index] ?? ""}
                       >
                         <option value="">Select owner</option>
-                        {members.map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {option.displayName}
-                          </option>
-                        ))}
+                        {members
+                          .filter((option) => {
+                            const selectedInOtherSlot = draftOrderLeagueMemberIds.some(
+                              (selectedOwnerId, selectedIndex) => selectedIndex !== index && selectedOwnerId === option.id
+                            );
+
+                            return !selectedInOtherSlot || draftOrderLeagueMemberIds[index] === option.id;
+                          })
+                          .map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.displayName}
+                            </option>
+                          ))}
                       </select>
                     </label>
                   ))}
                 </div>
+                {draftOrderValidationMessage && (
+                  <p className="text-sm text-red-600">{draftOrderValidationMessage}</p>
+                )}
               </div>
             </div>
 
@@ -329,9 +369,7 @@ export function OffseasonDraftPanel({
                 disabled={
                   isSubmitting ||
                   activeSeason.isLocked ||
-                  !selectedSourceSeasonId ||
-                  draftOrderLeagueMemberIds.length !== members.length ||
-                  draftOrderLeagueMemberIds.some((leagueMemberId) => !leagueMemberId)
+                  draftOrderValidationMessage !== null
                 }
                 onClick={() => void handleInitializeDraft()}
                 type="button"
