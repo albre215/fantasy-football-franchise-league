@@ -199,7 +199,8 @@ async function resolveLeagueMemberForSeason(
     },
     select: {
       id: true,
-      leagueId: true
+      leagueId: true,
+      isLocked: true
     }
   });
 
@@ -265,6 +266,19 @@ async function validateTeamAssignmentInternal(
 
   if (!team || !team.isActive) {
     throw new TeamOwnershipServiceError("NFL team not found.", 404);
+  }
+
+  const season = await tx.season.findUnique({
+    where: {
+      id: seasonId
+    },
+    select: {
+      isLocked: true
+    }
+  });
+
+  if (season?.isLocked) {
+    throw new TeamOwnershipServiceError("Season is locked and no longer accepts manual assignments.", 409);
   }
 
   if (existingOwnershipByTeam) {

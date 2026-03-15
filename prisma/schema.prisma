@@ -66,6 +66,7 @@ model Season {
   year           Int
   name           String?
   status         SeasonStatus    @default(PLANNING)
+  isLocked       Boolean         @default(false)
   startsAt       DateTime?
   endsAt         DateTime?
   createdAt      DateTime        @default(now())

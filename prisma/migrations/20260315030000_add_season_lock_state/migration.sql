@@ -1,0 +1,2 @@
+ALTER TABLE "Season"
+ADD COLUMN "isLocked" BOOLEAN NOT NULL DEFAULT false;

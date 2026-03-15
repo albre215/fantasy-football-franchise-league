@@ -24,6 +24,7 @@ export interface LeagueSeasonSummary {
   year: number;
   name: string | null;
   status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
+  isLocked: boolean;
   startsAt: string | null;
   endsAt: string | null;
 }

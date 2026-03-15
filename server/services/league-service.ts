@@ -110,6 +110,7 @@ function mapSeason(season: {
   year: number;
   name: string | null;
   status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
+  isLocked: boolean;
   startsAt: Date | null;
   endsAt: Date | null;
 }): LeagueSeasonSummary {
@@ -141,6 +142,7 @@ function mapLeagueDashboard(league: {
     year: number;
     name: string | null;
     status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
+    isLocked: boolean;
     startsAt: Date | null;
     endsAt: Date | null;
   }>;
