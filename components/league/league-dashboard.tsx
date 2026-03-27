@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { LeagueHistoryPanel } from "@/components/league/league-history-panel";
 import { OffseasonDraftPanel } from "@/components/league/offseason-draft-panel";
+import { SeasonResultsPanel } from "@/components/league/season-results-panel";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -893,6 +894,11 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
             </div>
 
             <LeagueHistoryPanel leagueId={leagueId} />
+            <SeasonResultsPanel
+              actingUserId={MOCK_COMMISSIONER_USER_ID}
+              activeSeason={activeSeason}
+              members={members}
+            />
           </>
         )}
       </div>

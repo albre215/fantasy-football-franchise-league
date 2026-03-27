@@ -32,6 +32,23 @@ enum DraftStatus {
   CANCELLED
 }
 
+enum IngestionProvider {
+  ESPN
+  SLEEPER
+  CSV
+}
+
+enum IngestionImportType {
+  SEASON_STANDINGS
+  WEEKLY_STANDINGS
+}
+
+enum IngestionRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 model User {
   id            String         @id @default(cuid())
   email         String         @unique
@@ -66,6 +83,9 @@ model LeagueMember {
   teamOwnerships TeamOwnership[]
   draftPicks     DraftPick[]
   keeperSelections KeeperSelection[]
+  seasonStandings SeasonStanding[]
+  weeklyStandings WeeklyStanding[]
+  sourceMappings SeasonMemberSourceMapping[]
 
   @@unique([leagueId, userId])
   @@index([userId])
@@ -87,6 +107,10 @@ model Season {
   targetDraft    Draft?          @relation("TargetSeasonDraft")
   sourceDrafts   Draft[]         @relation("SourceSeasonDraft")
   keeperSelections KeeperSelection[] @relation("KeeperSourceSeason")
+  sourceConfigs  SeasonSourceConfig[]
+  ingestionRuns  IngestionRun[]
+  seasonStandings SeasonStanding[]
+  weeklyStandings WeeklyStanding[]
 
   @@unique([leagueId, year])
   @@index([leagueId, status])
@@ -181,4 +205,121 @@ model KeeperSelection {
   @@unique([draftId, leagueMemberId, nflTeamId])
   @@index([leagueMemberId])
   @@index([nflTeamId])
+}
+
+model SeasonSourceConfig {
+  id                String                      @id @default(cuid())
+  seasonId          String
+  provider          IngestionProvider
+  externalLeagueId  String?
+  externalSeasonKey String?
+  config            Json
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+  season            Season                      @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  mappings          SeasonMemberSourceMapping[]
+  ingestionRuns     IngestionRun[]
+  seasonStandings   SeasonStanding[]
+  weeklyStandings   WeeklyStanding[]
+
+  @@unique([seasonId, provider])
+  @@index([seasonId])
+}
+
+model SeasonMemberSourceMapping {
+  id                   String             @id @default(cuid())
+  seasonSourceConfigId String
+  leagueMemberId       String
+  externalEntityId     String
+  externalDisplayName  String
+  confidence           Int?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  seasonSourceConfig   SeasonSourceConfig @relation(fields: [seasonSourceConfigId], references: [id], onDelete: Cascade)
+  leagueMember         LeagueMember       @relation(fields: [leagueMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([seasonSourceConfigId, leagueMemberId])
+  @@unique([seasonSourceConfigId, externalEntityId])
+  @@index([leagueMemberId])
+}
+
+model IngestionRun {
+  id                   String               @id @default(cuid())
+  seasonId             String
+  seasonSourceConfigId String?
+  provider             IngestionProvider
+  importType           IngestionImportType
+  status               IngestionRunStatus   @default(RUNNING)
+  weekNumber           Int?
+  actingUserId         String?
+  startedAt            DateTime             @default(now())
+  completedAt          DateTime?
+  sourceSummary        Json?
+  warnings             Json?
+  errorMessage         String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  season               Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  seasonSourceConfig   SeasonSourceConfig?  @relation(fields: [seasonSourceConfigId], references: [id], onDelete: SetNull)
+  seasonStandings      SeasonStanding[]
+  weeklyStandings      WeeklyStanding[]
+
+  @@index([seasonId, provider, importType])
+}
+
+model SeasonStanding {
+  id                   String               @id @default(cuid())
+  seasonId             String
+  leagueMemberId       String
+  provider             IngestionProvider
+  seasonSourceConfigId String?
+  ingestionRunId       String?
+  externalEntityId     String?
+  externalDisplayName  String?
+  rank                 Int?
+  wins                 Int?
+  losses               Int?
+  ties                 Int?
+  pointsFor            Float?
+  pointsAgainst        Float?
+  playoffFinish        String?
+  isChampion           Boolean?
+  metadata             Json?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  season               Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  leagueMember         LeagueMember         @relation(fields: [leagueMemberId], references: [id], onDelete: Cascade)
+  seasonSourceConfig   SeasonSourceConfig?  @relation(fields: [seasonSourceConfigId], references: [id], onDelete: SetNull)
+  ingestionRun         IngestionRun?        @relation(fields: [ingestionRunId], references: [id], onDelete: SetNull)
+
+  @@unique([seasonId, leagueMemberId])
+  @@index([seasonId, rank])
+}
+
+model WeeklyStanding {
+  id                   String               @id @default(cuid())
+  seasonId             String
+  weekNumber           Int
+  leagueMemberId       String
+  provider             IngestionProvider
+  seasonSourceConfigId String?
+  ingestionRunId       String?
+  externalEntityId     String?
+  externalDisplayName  String?
+  rank                 Int?
+  pointsFor            Float?
+  pointsAgainst        Float?
+  result               String?
+  opponentExternalEntityId String?
+  opponentDisplayName  String?
+  metadata             Json?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  season               Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  leagueMember         LeagueMember         @relation(fields: [leagueMemberId], references: [id], onDelete: Cascade)
+  seasonSourceConfig   SeasonSourceConfig?  @relation(fields: [seasonSourceConfigId], references: [id], onDelete: SetNull)
+  ingestionRun         IngestionRun?        @relation(fields: [ingestionRunId], references: [id], onDelete: SetNull)
+
+  @@unique([seasonId, weekNumber, leagueMemberId])
+  @@index([seasonId, weekNumber, rank])
 }

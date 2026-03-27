@@ -1,1 +1,9 @@
-export type ServiceModule = "league" | "season" | "scoring" | "ownership" | "draft" | "history";
+export type ServiceModule =
+  | "league"
+  | "season"
+  | "scoring"
+  | "ownership"
+  | "draft"
+  | "history"
+  | "ingestion"
+  | "results";

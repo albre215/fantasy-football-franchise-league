@@ -187,11 +187,11 @@ export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
             <Card>
               <CardHeader>
                 <CardTitle>Results-Based Metrics</CardTitle>
-                <CardDescription>Ready for standings/results ingestion later.</CardDescription>
+                <CardDescription>These expand as season standings and results are imported.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-muted-foreground">
                 {overview.deferredMetrics.slice(0, 3).map((metric) => (
-                  <p key={metric.id}>{metric.label}: Available in Prompt 8</p>
+                  <p key={metric.id}>{metric.label}: Import season results to populate this later.</p>
                 ))}
               </CardContent>
             </Card>
@@ -419,7 +419,7 @@ export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
             <Card>
               <CardHeader>
                 <CardTitle>Standings & Results Placeholders</CardTitle>
-                <CardDescription>These analytics will populate after Prompt 8 adds results ingestion.</CardDescription>
+                <CardDescription>These analytics fill in as standings/results coverage improves.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {analytics.deferredMetrics.map((metric) => (
