@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,6 +49,7 @@ export function SeasonResultsPanel({ activeSeason, members, actingUserId }: Seas
   const [externalSeasonKey, setExternalSeasonKey] = useState("");
   const [weekNumber, setWeekNumber] = useState("");
   const [csvContent, setCsvContent] = useState("");
+  const [csvFile, setCsvFile] = useState<File | null>(null);
   const [espnS2, setEspnS2] = useState("");
   const [swid, setSwid] = useState("");
   const [preview, setPreview] = useState<PreviewIngestionResponse["preview"] | null>(null);
@@ -61,8 +62,19 @@ export function SeasonResultsPanel({ activeSeason, members, actingUserId }: Seas
   const [isRunningImport, setIsRunningImport] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const selectedConfig = configs.find((config) => config.provider === provider) ?? null;
+  const trimmedCsvContent = csvContent.trim();
+  const hasCsvInput = provider !== "CSV" || Boolean(csvFile) || Boolean(trimmedCsvContent);
+  const csvSourceLabel =
+    provider !== "CSV"
+      ? null
+      : csvFile
+      ? `Using uploaded file: ${csvFile.name}`
+      : trimmedCsvContent
+      ? "Using pasted CSV text."
+      : "No CSV source selected yet.";
   const mappingMemberOptions = useMemo(
     () =>
       members.map((member) => ({
@@ -153,6 +165,44 @@ export function SeasonResultsPanel({ activeSeason, members, actingUserId }: Seas
     };
   }
 
+  async function resolveCsvContent() {
+    if (provider !== "CSV") {
+      return undefined;
+    }
+
+    if (csvFile) {
+      try {
+        const fileText = await csvFile.text();
+
+        if (!fileText.trim()) {
+          throw new Error("The selected CSV file is empty.");
+        }
+
+        return fileText;
+      } catch (error) {
+        throw new Error(
+          error instanceof Error
+            ? `Unable to read the selected CSV file. ${error.message}`
+            : "Unable to read the selected CSV file."
+        );
+      }
+    }
+
+    if (trimmedCsvContent) {
+      return csvContent;
+    }
+
+    throw new Error("Please upload a CSV file or paste CSV text before previewing.");
+  }
+
+  function clearCsvFile() {
+    setCsvFile(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
   async function handleSaveConfig() {
     if (!activeSeason) {
       return;
@@ -197,6 +247,7 @@ export function SeasonResultsPanel({ activeSeason, members, actingUserId }: Seas
     setIsLoading(true);
 
     try {
+      const resolvedCsvContent = await resolveCsvContent();
       const response = await fetch(`/api/season/${activeSeason.id}/ingestion/preview`, {
         method: "POST",
         headers: {
@@ -206,7 +257,7 @@ export function SeasonResultsPanel({ activeSeason, members, actingUserId }: Seas
           provider,
           importType,
           weekNumber: importType === "WEEKLY_STANDINGS" && weekNumber ? Number(weekNumber) : undefined,
-          csvContent,
+          csvContent: resolvedCsvContent,
           externalLeagueId,
           externalSeasonKey,
           config: buildConfigPayload()
@@ -240,6 +291,7 @@ export function SeasonResultsPanel({ activeSeason, members, actingUserId }: Seas
     setIsRunningImport(true);
 
     try {
+      const resolvedCsvContent = await resolveCsvContent();
       const response = await fetch(`/api/season/${activeSeason.id}/ingestion/run`, {
         method: "POST",
         headers: {
@@ -249,7 +301,7 @@ export function SeasonResultsPanel({ activeSeason, members, actingUserId }: Seas
           provider,
           importType,
           weekNumber: importType === "WEEKLY_STANDINGS" && weekNumber ? Number(weekNumber) : undefined,
-          csvContent,
+          csvContent: resolvedCsvContent,
           externalLeagueId,
           externalSeasonKey,
           config: buildConfigPayload(),
@@ -347,23 +399,55 @@ export function SeasonResultsPanel({ activeSeason, members, actingUserId }: Seas
                 )}
 
                 {provider === "CSV" && (
-                  <textarea
-                    className="min-h-40 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    onChange={(event) => setCsvContent(event.target.value)}
-                    placeholder="Paste CSV standings or weekly results here."
-                    value={csvContent}
-                  />
+                  <div className="space-y-4 rounded-lg border border-dashed border-border p-4">
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-foreground">Upload CSV file</p>
+                      <p className="text-sm text-muted-foreground">
+                        Choose a CSV file from your machine. This is the primary import path.
+                      </p>
+                      <Input
+                        accept=".csv,text/csv"
+                        className="cursor-pointer"
+                        onChange={(event) => setCsvFile(event.target.files?.[0] ?? null)}
+                        ref={fileInputRef}
+                        type="file"
+                      />
+                      <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                        <span>{csvFile ? `Selected file: ${csvFile.name}` : "No CSV file selected."}</span>
+                        {csvFile ? (
+                          <Button onClick={clearCsvFile} type="button" variant="ghost">
+                            Clear File
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-foreground">Or paste CSV manually</p>
+                      <p className="text-sm text-muted-foreground">
+                        Use this fallback if you do not want to upload a file.
+                      </p>
+                      <textarea
+                        className="min-h-40 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        onChange={(event) => setCsvContent(event.target.value)}
+                        placeholder="Paste CSV standings or weekly results here."
+                        value={csvContent}
+                      />
+                    </div>
+
+                    <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">{csvSourceLabel}</div>
+                  </div>
                 )}
 
                 <div className="flex flex-wrap gap-3">
                   <Button disabled={isSavingConfig} onClick={() => void handleSaveConfig()} type="button" variant="outline">
                     Save Source Config
                   </Button>
-                  <Button disabled={isLoading} onClick={() => void handlePreviewImport()} type="button">
+                  <Button disabled={isLoading || !hasCsvInput} onClick={() => void handlePreviewImport()} type="button">
                     Preview Import
                   </Button>
                   <Button
-                    disabled={isRunningImport || !preview}
+                    disabled={isRunningImport || !preview || !hasCsvInput}
                     onClick={() => void handleRunImport()}
                     type="button"
                     variant="secondary"
