@@ -5,6 +5,37 @@ import { compare } from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
 
+const MAX_EMAIL_LENGTH = 320;
+const MAX_PASSWORD_BYTES = 72;
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function isValidSignInInput(email: string, password: string) {
+  if (!email || !password) {
+    return false;
+  }
+
+  if (email.length > MAX_EMAIL_LENGTH || Buffer.byteLength(password, "utf8") > MAX_PASSWORD_BYTES) {
+    return false;
+  }
+
+  return true;
+}
+
+function getSessionDisplayName(tokenDisplayName: unknown, fallbackName: string | null | undefined) {
+  if (typeof tokenDisplayName === "string" && tokenDisplayName.trim()) {
+    return tokenDisplayName;
+  }
+
+  if (fallbackName?.trim()) {
+    return fallbackName;
+  }
+
+  return "";
+}
+
 export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt"
@@ -26,12 +57,10 @@ export const authOptions: NextAuthOptions = {
         }
       },
       async authorize(credentials) {
-        const email = String(credentials?.email ?? "")
-          .trim()
-          .toLowerCase();
+        const email = normalizeEmail(String(credentials?.email ?? ""));
         const password = String(credentials?.password ?? "");
 
-        if (!email || !password) {
+        if (!isValidSignInInput(email, password)) {
           return null;
         }
 
@@ -54,7 +83,8 @@ export const authOptions: NextAuthOptions = {
         return {
           id: user.id,
           email: user.email,
-          name: user.displayName
+          name: user.displayName,
+          displayName: user.displayName
         };
       }
     })
@@ -63,7 +93,7 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, trigger, session }) {
       if (user) {
         token.sub = user.id;
-        token.displayName = user.name ?? undefined;
+        token.displayName = user.name ?? "";
       }
 
       if (trigger === "update" && session?.user?.displayName) {
@@ -75,7 +105,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user && token.sub) {
         session.user.id = token.sub;
-        session.user.displayName = (token.displayName as string | undefined) ?? session.user.name ?? "";
+        session.user.displayName = getSessionDisplayName(token.displayName, session.user.name);
       }
 
       return session;

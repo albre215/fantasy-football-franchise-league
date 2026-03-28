@@ -127,6 +127,12 @@ Current auth setup:
    npm run dev
    ```
 
+7. Run the auth/authorization regression tests when you make auth-sensitive changes:
+
+   ```bash
+   npm test
+   ```
+
 Open `http://localhost:3000`.
 
 ## Developer Notes
