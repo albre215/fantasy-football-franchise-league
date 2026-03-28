@@ -24,6 +24,9 @@ export default function HomePage() {
             <Link className={buttonVariants()} href="/dashboard">
               Open Dashboard
             </Link>
+            <Link className={buttonVariants({ variant: "secondary" })} href="/me">
+              My Dashboard
+            </Link>
             <Link className={buttonVariants({ variant: "outline" })} href="/league">
               Open League Hub
             </Link>

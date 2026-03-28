@@ -347,7 +347,10 @@ export function LeagueControlPanel() {
                 <p>{session.user.displayName}</p>
                 <p>{session.user.email}</p>
               </CardContent>
-              <CardFooter>
+              <CardFooter className="flex flex-wrap gap-3">
+                <Link className={buttonVariants({ variant: "secondary" })} href="/me">
+                  My Dashboard
+                </Link>
                 <Button onClick={() => void handleSignOut()} type="button" variant="outline">
                   Sign Out
                 </Button>

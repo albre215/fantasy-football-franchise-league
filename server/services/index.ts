@@ -4,6 +4,7 @@ export type ServiceModule =
   | "scoring"
   | "ownership"
   | "draft"
+  | "owner"
   | "history"
   | "ingestion"
   | "results";
