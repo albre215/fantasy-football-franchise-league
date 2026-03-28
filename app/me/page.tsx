@@ -5,6 +5,7 @@ import { OwnerDashboard } from "@/components/owner/owner-dashboard";
 import { ownerService } from "@/server/services/owner-service";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function MePage() {
   try {

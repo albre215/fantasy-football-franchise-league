@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { OwnerDashboardSummary } from "@/types/owner";
 
@@ -58,13 +58,13 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
               <CardHeader>
                 <CardTitle>Current Season</CardTitle>
                 <CardDescription>
-                  Your active-season NFL franchises across every league you currently belong to.
+                  Your active-season NFL franchises, grouped by league so active-season context stays explicit.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {dashboard.currentTeams.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
-                    You do not currently own any teams in an active season.
+                    None of your leagues has an active season with teams assigned to your account yet.
                   </div>
                 ) : (
                   dashboard.currentTeams.map((entry) => (
@@ -72,13 +72,13 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
                       <CardHeader>
                         <CardTitle className="text-xl">{entry.leagueName}</CardTitle>
                         <CardDescription>
-                          {seasonLabel(entry.season.name, entry.season.year)} • {entry.season.status}
+                          {seasonLabel(entry.season.name, entry.season.year)} | {entry.season.status}
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-3">
                         {entry.teams.length === 0 ? (
                           <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                            No teams are assigned to your account in this active season yet.
+                            You belong to this league, but no teams are assigned to your account for the active season yet.
                           </div>
                         ) : (
                           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -91,7 +91,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
                                   {team.abbreviation} - {team.name}
                                 </div>
                                 <div className="text-muted-foreground">
-                                  {team.conference} • {team.division}
+                                  {team.conference} | {team.division}
                                 </div>
                               </div>
                             ))}
@@ -112,25 +112,25 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
               <CardContent className="space-y-4">
                 {dashboard.history.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
-                    No historical ownership records are available for your account yet.
+                    Your account does not have any recorded season ownership history yet.
                   </div>
                 ) : (
                   dashboard.history.map((entry) => (
                     <Card key={entry.seasonId} className="border-border/70 shadow-none">
                       <CardHeader>
                         <CardTitle className="text-lg">
-                          {entry.leagueName} • {seasonLabel(entry.seasonName, entry.seasonYear)}
+                          {entry.leagueName} | {seasonLabel(entry.seasonName, entry.seasonYear)}
                         </CardTitle>
                         <CardDescription>
                           {entry.finalPlacement
-                            ? `${ordinal(entry.finalPlacement)} place${entry.isChampion ? " • Champion" : ""}`
-                            : "Final placement not recorded"}
+                            ? `${ordinal(entry.finalPlacement)} place${entry.isChampion ? " | Champion" : ""}`
+                            : "Final placement has not been recorded for this season."}
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
                         {entry.teams.length === 0 ? (
                           <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                            No teams recorded for this season.
+                            No teams were recorded for your account in this season.
                           </div>
                         ) : (
                           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -143,7 +143,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
                                   {team.abbreviation} - {team.name}
                                 </div>
                                 <div className="text-muted-foreground">
-                                  {team.conference} • {team.division}
+                                  {team.conference} | {team.division}
                                 </div>
                               </div>
                             ))}
@@ -161,19 +161,21 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
             <Card className="border-border/70 bg-card/90">
               <CardHeader>
                 <CardTitle>Offseason Context</CardTitle>
-                <CardDescription>Your keeper and draft context for any active offseason draft workflows.</CardDescription>
+                <CardDescription>
+                  Your keeper and draft context for any active offseason workflows in your leagues.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {dashboard.offseasonContext.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
-                    No active offseason draft context is available for your account right now.
+                    Your leagues do not have an offseason draft context for your account right now.
                   </div>
                 ) : (
                   dashboard.offseasonContext.map((entry) => (
                     <Card key={entry.targetSeasonId} className="border-border/70 shadow-none">
                       <CardHeader>
                         <CardTitle className="text-lg">
-                          {entry.leagueName} • {seasonLabel(entry.targetSeasonName, entry.targetSeasonYear)}
+                          {entry.leagueName} | {seasonLabel(entry.targetSeasonName, entry.targetSeasonYear)}
                         </CardTitle>
                         <CardDescription>
                           Source season: {seasonLabel(entry.sourceSeasonName, entry.sourceSeasonYear)}
@@ -188,7 +190,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
                           <div className="rounded-lg border border-border bg-background px-4 py-3">
                             <div className="text-muted-foreground">Draft Position</div>
                             <div className="font-medium">
-                              {entry.draftPosition ? `Pick ${entry.draftPosition}` : "Not assigned yet"}
+                              {entry.draftPosition ? `Pick ${entry.draftPosition}` : "Draft slot is not assigned yet."}
                             </div>
                           </div>
                           <div className="rounded-lg border border-border bg-background px-4 py-3">
@@ -200,7 +202,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
                           <div className="rounded-lg border border-border bg-background px-4 py-3">
                             <div className="text-muted-foreground">Current Pick</div>
                             <div className="font-medium">
-                              {entry.currentPickNumber ? `Pick ${entry.currentPickNumber}` : "Not started"}
+                              {entry.currentPickNumber ? `Pick ${entry.currentPickNumber}` : "The draft has not started."}
                             </div>
                           </div>
                         </div>
@@ -213,23 +215,29 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
 
                         <div className="space-y-2">
                           <div className="text-sm font-medium">Previous Season Teams</div>
-                          <div className="flex flex-wrap gap-2">
-                            {entry.previousSeasonTeams.map((team) => (
-                              <span
-                                key={`${entry.targetSeasonId}-previous-${team.id}`}
-                                className="rounded-full border border-border bg-background px-3 py-1 text-sm"
-                              >
-                                {team.abbreviation} - {team.name}
-                              </span>
-                            ))}
-                          </div>
+                          {entry.previousSeasonTeams.length === 0 ? (
+                            <div className="rounded-lg border border-dashed border-border p-3 text-muted-foreground">
+                              No previous-season teams were found for your account in this draft context.
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {entry.previousSeasonTeams.map((team) => (
+                                <span
+                                  key={`${entry.targetSeasonId}-previous-${team.id}`}
+                                  className="rounded-full border border-border bg-background px-3 py-1 text-sm"
+                                >
+                                  {team.abbreviation} - {team.name}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
 
                         <div className="space-y-2">
                           <div className="text-sm font-medium">Saved Keepers</div>
                           {entry.keepers.length === 0 ? (
                             <div className="rounded-lg border border-dashed border-border p-3 text-muted-foreground">
-                              No keepers saved yet.
+                              No keepers are saved for your account yet.
                             </div>
                           ) : (
                             <div className="flex flex-wrap gap-2">
@@ -253,7 +261,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
                             </div>
                           ) : (
                             <div className="rounded-lg border border-dashed border-border p-3 text-muted-foreground">
-                              No draft pick has been recorded for you yet.
+                              No drafted team has been recorded for your account yet.
                             </div>
                           )}
                         </div>
@@ -272,7 +280,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
               <CardContent className="space-y-3">
                 {dashboard.leagues.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
-                    Your account is not a member of any leagues yet.
+                    You are not a member of any leagues yet. Join a league or create one from the home page.
                   </div>
                 ) : (
                   dashboard.leagues.map((membership) => (

@@ -63,7 +63,7 @@ export interface OwnerDashboardSummary {
     email: string;
   };
   leagues: OwnerLeagueMembershipSummary[];
-  activeSeason: OwnerActiveSeasonSummary | null;
+  activeSeasons: OwnerActiveSeasonSummary[];
   currentTeams: OwnerCurrentSeasonTeamsSummary[];
   history: OwnerHistoryEntry[];
   offseasonContext: OwnerOffseasonContextSummary[];

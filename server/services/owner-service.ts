@@ -1,10 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { draftService } from "@/server/services/draft-service";
-import { teamOwnershipService } from "@/server/services/team-ownership-service";
 import type { DraftTeamSummary } from "@/types/draft";
 import type {
   OwnerActiveSeasonSummary,
-  OwnerCurrentSeasonTeamsSummary,
   OwnerDashboardSummary,
   OwnerHistoryEntry,
   OwnerLeagueMembershipSummary,
@@ -117,7 +114,7 @@ export const ownerService = {
       return {
         user,
         leagues: [],
-        activeSeason: null,
+        activeSeasons: [],
         currentTeams: [],
         history: [],
         offseasonContext: []
@@ -133,7 +130,20 @@ export const ownerService = {
           status: "ACTIVE"
         },
         include: {
-          league: true
+          league: true,
+          teamOwnerships: {
+            where: {
+              leagueMember: {
+                userId: normalizedUserId
+              }
+            },
+            include: {
+              nflTeam: true
+            },
+            orderBy: {
+              slot: "asc"
+            }
+          }
         },
         orderBy: [{ year: "desc" }, { createdAt: "desc" }]
       }),
@@ -194,14 +204,14 @@ export const ownerService = {
       })
     ]);
 
-    const currentTeams: OwnerCurrentSeasonTeamsSummary[] = await Promise.all(
-      activeSeasons.map(async (season) => ({
+    const activeSeasonSummaries = activeSeasons.map(mapActiveSeason);
+
+    const currentTeams = activeSeasons.map((season) => ({
         leagueId: season.leagueId,
         leagueName: season.league.name,
         season: mapActiveSeason(season),
-        teams: (await teamOwnershipService.getUserTeamsForSeason(season.id, normalizedUserId)).map((entry) => entry.team)
-      }))
-    );
+        teams: season.teamOwnerships.map((ownership) => mapDraftTeam(ownership.nflTeam))
+      }));
 
     const history: OwnerHistoryEntry[] = historySeasons.map((season) => ({
       leagueId: season.leagueId,
@@ -214,56 +224,98 @@ export const ownerService = {
       isChampion: season.seasonStandings[0]?.isChampion ?? null
     }));
 
-    const offseasonContextResults = await Promise.all(
-      activeSeasons.map(async (season) => {
-        const draftState = await draftService.getDraftStateByTargetSeason(season.id);
+    const drafts = activeSeasons.length
+      ? await prisma.draft.findMany({
+          where: {
+            targetSeasonId: {
+              in: activeSeasons.map((season) => season.id)
+            }
+          },
+          include: {
+            targetSeason: {
+              include: {
+                league: true
+              }
+            },
+            sourceSeason: {
+              include: {
+                teamOwnerships: {
+                  where: {
+                    leagueMember: {
+                      userId: normalizedUserId
+                    }
+                  },
+                  include: {
+                    nflTeam: true
+                  },
+                  orderBy: {
+                    slot: "asc"
+                  }
+                }
+              }
+            },
+            keeperSelections: {
+              where: {
+                leagueMember: {
+                  userId: normalizedUserId
+                }
+              },
+              include: {
+                nflTeam: true
+              },
+              orderBy: {
+                createdAt: "asc"
+              }
+            },
+            picks: {
+              include: {
+                selectedNflTeam: true,
+                selectingLeagueMember: {
+                  select: {
+                    userId: true
+                  }
+                }
+              },
+              orderBy: {
+                overallPickNumber: "asc"
+              }
+            }
+          },
+          orderBy: [{ targetSeason: { year: "desc" } }, { createdAt: "desc" }]
+        })
+      : [];
 
-        if (!draftState) {
-          return null;
-        }
+    const offseasonContext: OwnerOffseasonContextSummary[] = drafts.map((draft) => {
+      const userPicks = draft.picks.filter((pick) => pick.selectingLeagueMember.userId === normalizedUserId);
+      const draftPosition = userPicks[0]?.overallPickNumber ?? null;
+      const draftedTeam = userPicks.find((pick) => pick.selectedNflTeam !== null)?.selectedNflTeam ?? null;
+      const currentPick = draft.picks.find((pick) => pick.overallPickNumber === draft.currentPick) ?? null;
 
-        const member = draftState.members.find((entry) => entry.userId === normalizedUserId);
-
-        if (!member) {
-          return null;
-        }
-
-        const draftPosition =
-          draftState.picks.find((pick) => pick.selectingLeagueMemberId === member.leagueMemberId)?.overallPickNumber ??
-          null;
-
-        const context: OwnerOffseasonContextSummary = {
-          leagueId: season.leagueId,
-          leagueName: season.league.name,
-          targetSeasonId: draftState.draft.targetSeasonId,
-          targetSeasonYear: draftState.draft.targetSeasonYear,
-          targetSeasonName: draftState.draft.targetSeasonName,
-          sourceSeasonId: draftState.draft.sourceSeasonId,
-          sourceSeasonYear: draftState.draft.sourceSeasonYear,
-          sourceSeasonName: draftState.draft.sourceSeasonName,
-          draftStatus: draftState.draft.status,
-          previousSeasonTeams: member.previousSeasonTeams,
-          keepers: member.keepers.map((keeper) => keeper.nflTeam),
-          draftedTeam: member.draftedTeam,
-          keeperCount: member.keeperCount,
-          keeperEligibleCount: 2,
-          draftPosition,
-          currentPickNumber: draftState.currentPick?.overallPickNumber ?? null,
-          isOnClock: draftState.currentPick?.selectingLeagueMemberId === member.leagueMemberId
-        };
-
-        return context;
-      })
-    );
-
-    const offseasonContext = offseasonContextResults.filter(
-      (context): context is OwnerOffseasonContextSummary => context !== null
-    );
+      return {
+        leagueId: draft.leagueId,
+        leagueName: draft.targetSeason.league.name,
+        targetSeasonId: draft.targetSeasonId,
+        targetSeasonYear: draft.targetSeason.year,
+        targetSeasonName: draft.targetSeason.name,
+        sourceSeasonId: draft.sourceSeasonId,
+        sourceSeasonYear: draft.sourceSeason.year,
+        sourceSeasonName: draft.sourceSeason.name,
+        draftStatus: draft.status,
+        previousSeasonTeams: draft.sourceSeason.teamOwnerships.map((ownership) => mapDraftTeam(ownership.nflTeam)),
+        keepers: draft.keeperSelections.map((keeper) => mapDraftTeam(keeper.nflTeam)),
+        draftedTeam: draftedTeam ? mapDraftTeam(draftedTeam) : null,
+        keeperCount: draft.keeperSelections.length,
+        keeperEligibleCount: 2,
+        draftPosition,
+        currentPickNumber: currentPick?.overallPickNumber ?? null,
+        isOnClock: currentPick?.selectingLeagueMember.userId === normalizedUserId
+      };
+    });
 
     return {
       user,
       leagues,
-      activeSeason: currentTeams[0]?.season ?? null,
+      activeSeasons: activeSeasonSummaries,
       currentTeams,
       history,
       offseasonContext

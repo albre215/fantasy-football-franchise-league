@@ -5,6 +5,7 @@ import { OwnerServiceError, ownerService } from "@/server/services/owner-service
 import type { OwnerDashboardResponse } from "@/types/owner";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET() {
   try {
