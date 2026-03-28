@@ -158,7 +158,7 @@ export function OffseasonDraftPanel({
     setKeeperFeedbackByOwner({});
     setPendingSavedKeeperSelectionsByOwner({});
     setCurrentPickTeamId("");
-  }, [activeSeason, dirtyKeeperOwners, draftState, members, pendingSavedKeeperSelectionsByOwner, sourceSeasonOptions]);
+  }, [activeSeason, draftState, members, sourceSeasonOptions]);
 
   useEffect(() => {
     if (!activeSeason || draftState || !selectedSourceSeasonId) {
@@ -514,7 +514,7 @@ export function OffseasonDraftPanel({
                         .
                       </p>
                       <p>
-                        Champion: {recommendedOrder.champion?.displayName ?? "Not available"} · Last place:{" "}
+                        Champion: {recommendedOrder.champion?.displayName ?? "Not available"} - Last place:{" "}
                         {recommendedOrder.lastPlace?.displayName ?? "Not available"}
                       </p>
                       <p>
