@@ -75,6 +75,8 @@ export function OffseasonDraftPanel({
   const [recommendedOrder, setRecommendedOrder] = useState<DraftOrderRecommendationResponse["recommendation"] | null>(null);
   const [isLoadingRecommendedOrder, setIsLoadingRecommendedOrder] = useState(false);
   const [recommendedOrderError, setRecommendedOrderError] = useState<string | null>(null);
+  const [isPreparingDraftWorkspace, setIsPreparingDraftWorkspace] = useState(false);
+  const [hasAttemptedWorkspacePreparation, setHasAttemptedWorkspacePreparation] = useState(false);
 
   const previousSeason = useMemo(() => {
     if (!activeSeason) {
@@ -106,6 +108,8 @@ export function OffseasonDraftPanel({
       setKeeperFeedbackByOwner({});
       setPendingSavedKeeperSelectionsByOwner({});
       setCurrentPickTeamId("");
+      setIsPreparingDraftWorkspace(false);
+      setHasAttemptedWorkspacePreparation(false);
       return;
     }
 
@@ -144,6 +148,8 @@ export function OffseasonDraftPanel({
       setCurrentPickTeamId((current) =>
         draftState.draftPool.some((team) => team.id === current) ? current : draftState.draftPool[0]?.id ?? ""
       );
+      setIsPreparingDraftWorkspace(false);
+      setHasAttemptedWorkspacePreparation(true);
       return;
     }
 
@@ -156,6 +162,8 @@ export function OffseasonDraftPanel({
     setKeeperFeedbackByOwner({});
     setPendingSavedKeeperSelectionsByOwner({});
     setCurrentPickTeamId("");
+    setIsPreparingDraftWorkspace(false);
+    setHasAttemptedWorkspacePreparation(false);
   }, [activeSeason, draftState, members, previousSeason]);
 
   useEffect(() => {
@@ -205,6 +213,61 @@ export function OffseasonDraftPanel({
     })();
   }, [activeSeason, draftState, members.length, setupSourceSeasonId]);
 
+  useEffect(() => {
+    if (
+      !activeSeason ||
+      draftState ||
+      !setupSourceSeasonId ||
+      !recommendedOrder ||
+      isLoadingRecommendedOrder ||
+      isPreparingDraftWorkspace ||
+      hasAttemptedWorkspacePreparation
+    ) {
+      return;
+    }
+
+    void (async () => {
+      setIsPreparingDraftWorkspace(true);
+      setHasAttemptedWorkspacePreparation(true);
+      onError("");
+      onSuccess("");
+
+      try {
+        const response = await fetch(`/api/season/${activeSeason.id}/draft`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            sourceSeasonId: setupSourceSeasonId,
+            actingUserId,
+            orderLeagueMemberIds: recommendedOrder.entries.map((entry) => entry.leagueMemberId)
+          })
+        });
+
+        await parseJsonResponse<InitializeDraftResponse>(response);
+        onSuccess("Offseason draft workspace prepared. Save two keepers for each owner before starting the draft.");
+        await onRefresh();
+      } catch (error) {
+        onError(error instanceof Error ? error.message : "Unable to prepare the offseason draft workspace.");
+      } finally {
+        setIsPreparingDraftWorkspace(false);
+      }
+    })();
+  }, [
+    activeSeason,
+    actingUserId,
+    draftState,
+    hasAttemptedWorkspacePreparation,
+    isLoadingRecommendedOrder,
+    isPreparingDraftWorkspace,
+    onError,
+    onRefresh,
+    onSuccess,
+    recommendedOrder,
+    setupSourceSeasonId
+  ]);
+
   const filledDraftSlots = draftOrderLeagueMemberIds.filter(Boolean).length;
   const uniqueDraftOwners = new Set(draftOrderLeagueMemberIds.filter(Boolean)).size;
   const includesEveryEligibleOwner =
@@ -223,6 +286,9 @@ export function OffseasonDraftPanel({
   const isAnyKeeperSaveInFlight = Object.values(savingKeeperOwners).some(Boolean);
   const canStartDraftFromUi =
     Boolean(draftState?.canStart) && !hasUnsavedKeeperChanges && !isAnyKeeperSaveInFlight;
+  const showPlanningDraftOrder = Boolean(
+    draftState && (draftState.draft.status !== "PLANNING" || draftState.keeperProgress.isComplete)
+  );
 
   function toggleKeeperSelection(leagueMemberId: string, nflTeamId: string) {
     setKeeperSelectionsByOwner((current) => {
@@ -284,31 +350,6 @@ export function OffseasonDraftPanel({
     } finally {
       onEndSubmit();
     }
-  }
-
-  async function handleInitializeDraft() {
-    if (!activeSeason) {
-      return;
-    }
-
-    await withMutation(
-      async () => {
-        const response = await fetch(`/api/season/${activeSeason.id}/draft`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            sourceSeasonId: setupSourceSeasonId,
-            actingUserId,
-            orderLeagueMemberIds: draftOrderLeagueMemberIds
-          })
-        });
-
-        await parseJsonResponse<InitializeDraftResponse>(response);
-      },
-      "Offseason draft initialized. Save two keepers for each owner before starting the draft."
-    );
   }
 
   async function handleSaveKeepers(leagueMemberId: string) {
@@ -457,33 +498,24 @@ export function OffseasonDraftPanel({
                 </div>
               </div>
               <div className="space-y-3">
-                <p className="text-sm font-medium">Draft Order</p>
+                <p className="text-sm font-medium">Keeper Selection</p>
                 <p className="text-sm text-muted-foreground">
-                  Reverse standings order for the 10 owners. This draft is automatically generated from the previous
-                  season's saved final standings.
+                  Keeper selection is the first offseason step. Once the previous season is valid, the draft workspace
+                  is prepared automatically and owners can start locking in their two keepers.
                 </p>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {Array.from({ length: members.length }).map((_, index) => {
-                    const selectedMember = members.find((member) => member.id === draftOrderLeagueMemberIds[index]);
-
-                    return (
-                      <div className="space-y-1 text-sm" key={`draft-order-${index + 1}`}>
-                        <span>Pick {index + 1}</span>
-                        <div className="flex h-10 items-center rounded-md border border-input bg-background px-3 text-sm">
-                          {selectedMember?.displayName ?? "Waiting for saved final standings"}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
                 <div className="space-y-2 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                  {isLoadingRecommendedOrder ? (
-                    <p>Generating recommended reverse-standings order...</p>
+                  {isPreparingDraftWorkspace ? (
+                    <>
+                      <p className="font-medium text-foreground">Preparing keeper workspace</p>
+                      <p>Creating the offseason planning draft from the previous season's saved standings.</p>
+                    </>
+                  ) : isLoadingRecommendedOrder ? (
+                    <p>Checking previous-season standings before preparing the keeper workspace...</p>
                   ) : recommendedOrder ? (
                     <>
-                      <p className="font-medium text-foreground">Generated from final standings</p>
+                      <p className="font-medium text-foreground">Keeper workspace is ready to prepare</p>
                       <p>
-                        Reverse of saved standings for{" "}
+                        Saved final standings were found for{" "}
                         {formatSeasonLabel({
                           year: recommendedOrder.sourceSeasonYear,
                           name: recommendedOrder.sourceSeasonName
@@ -494,11 +526,7 @@ export function OffseasonDraftPanel({
                         Champion: {recommendedOrder.champion?.displayName ?? "Not available"} - Last place:{" "}
                         {recommendedOrder.lastPlace?.displayName ?? "Not available"}
                       </p>
-                      <p>
-                        {matchesRecommendedOrder
-                          ? "Using recommended reverse-standings order."
-                          : "Draft order has drifted from the recommended reverse-standings order."}
-                      </p>
+                      <p>The planning draft will be prepared automatically so keeper selection can begin first.</p>
                     </>
                   ) : (
                     <p>
@@ -517,28 +545,14 @@ export function OffseasonDraftPanel({
               <p>Expected keepers: 20 total</p>
               <p>Expected draft pool: 12 teams</p>
               <p>Expected draft picks: 10</p>
-              <p>10 draft slots filled: {filledDraftSlots === members.length ? `Pass (${filledDraftSlots}/10)` : `Fail (${filledDraftSlots}/10)`}</p>
-              <p>All owners unique: {allDraftOwnersUnique ? `Pass (${uniqueDraftOwners}/10)` : "Fail"}</p>
-              <p>All eligible owners included: {includesEveryEligibleOwner ? "Pass" : "Fail"}</p>
-              <p>Draft order ready: {draftOrderReady ? "Yes" : "No"}</p>
-              <Button
-                className="w-full"
-                disabled={
-                  isSubmitting ||
-                  activeSeason.isLocked ||
-                  !previousSeason ||
-                  !draftOrderReady
-                }
-                onClick={() => void handleInitializeDraft()}
-                type="button"
-              >
-                Initialize Offseason Draft
-              </Button>
+              <p>Previous season found: {previousSeason ? "Pass" : "Fail"}</p>
+              <p>Saved final standings found: {recommendedOrder ? "Pass" : "Fail"}</p>
+              <p>Keeper workspace prepared: {draftState ? "Yes" : isPreparingDraftWorkspace ? "In progress" : "No"}</p>
               {!recommendedOrder && (
                 <div className="rounded-lg border border-dashed border-border p-3">
                   {previousSeason
-                    ? "Enter final standings for the immediately previous season before auto-generating draft order."
-                    : "Create the immediately previous season before initializing the offseason draft."}
+                    ? "Enter final standings for the immediately previous season before preparing keeper selections."
+                    : "Create the immediately previous season before preparing the offseason draft workspace."}
                 </div>
               )}
             </div>
@@ -704,31 +718,51 @@ export function OffseasonDraftPanel({
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Draft Board</CardTitle>
-                    <CardDescription>Follow the full order and current pick.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {draftState.picks.map((pick) => (
-                      <div
-                        className={`rounded-lg border p-3 text-sm ${
-                          draftState.currentPick?.id === pick.id ? "border-foreground bg-secondary/40" : "border-border"
-                        }`}
-                        key={pick.id}
-                      >
-                        <p className="font-medium text-foreground">
-                          Pick {pick.overallPickNumber}: {pick.selectingDisplayName}
-                        </p>
-                        <p className="text-muted-foreground">
-                          {pick.selectedNflTeam
-                            ? `${pick.selectedNflTeam.abbreviation} - ${pick.selectedNflTeam.name}`
-                            : "Waiting for selection"}
-                        </p>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
+                {showPlanningDraftOrder ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>{draftState.draft.status === "PLANNING" ? "Generated Draft Order" : "Draft Board"}</CardTitle>
+                      <CardDescription>
+                        {draftState.draft.status === "PLANNING"
+                          ? "Reverse standings order for the upcoming offseason draft."
+                          : "Follow the full order and current pick."}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {draftState.picks.map((pick) => (
+                        <div
+                          className={`rounded-lg border p-3 text-sm ${
+                            draftState.currentPick?.id === pick.id ? "border-foreground bg-secondary/40" : "border-border"
+                          }`}
+                          key={pick.id}
+                        >
+                          <p className="font-medium text-foreground">
+                            Pick {pick.overallPickNumber}: {pick.selectingDisplayName}
+                          </p>
+                          <p className="text-muted-foreground">
+                            {pick.selectedNflTeam
+                              ? `${pick.selectedNflTeam.abbreviation} - ${pick.selectedNflTeam.name}`
+                              : draftState.draft.status === "PLANNING"
+                              ? "Waiting for draft start"
+                              : "Waiting for selection"}
+                          </p>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Draft Order</CardTitle>
+                      <CardDescription>
+                        Finish saving keeper selections for all 10 owners before the generated draft order is shown.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="text-sm text-muted-foreground">
+                      The draft order will appear automatically once every owner has exactly two saved keepers.
+                    </CardContent>
+                  </Card>
+                )}
               </div>
 
               <div className="space-y-6">
