@@ -1,0 +1,1 @@
+ALTER TYPE "IngestionProvider" ADD VALUE IF NOT EXISTS 'MANUAL';

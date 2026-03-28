@@ -48,37 +48,37 @@ function buildDeferredMetrics() {
     {
       id: "championships" as const,
       label: "Championship Tracking",
-      description: "Available after standings/results ingestion is added in Prompt 8.",
+      description: "Available after richer season-results analytics are layered onto the saved final standings.",
       availability: "PROMPT_8" as const
     },
     {
       id: "win_loss_history" as const,
       label: "Win/Loss History",
-      description: "Available after standings/results ingestion is added in Prompt 8.",
+      description: "Available after detailed win/loss data is intentionally added beyond final standings entry.",
       availability: "PROMPT_8" as const
     },
     {
       id: "playoff_results" as const,
       label: "Playoff Results",
-      description: "Available after standings/results ingestion is added in Prompt 8.",
+      description: "Available after playoff-specific results are recorded in addition to final standings.",
       availability: "PROMPT_8" as const
     },
     {
       id: "dynasty_metrics" as const,
       label: "Dynasty Metrics",
-      description: "Result-based dynasty detection will populate in Prompt 8.",
+      description: "Result-based dynasty detection will populate after richer standings and postseason analytics are added.",
       availability: "PROMPT_8" as const
     },
     {
       id: "team_success_by_decade" as const,
       label: "Franchise Success By Decade",
-      description: "Requires standings/results ingestion before true success metrics can be calculated.",
+      description: "Requires richer historical season results before true success metrics can be calculated.",
       availability: "PROMPT_8" as const
     },
     {
       id: "owner_win_percentage" as const,
       label: "Owner Win Percentage",
-      description: "Available after win/loss data is ingested in Prompt 8.",
+      description: "Available after detailed win/loss data is stored alongside final standings.",
       availability: "PROMPT_8" as const
     }
   ];

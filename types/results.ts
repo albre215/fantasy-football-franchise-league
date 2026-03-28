@@ -1,4 +1,4 @@
-import type { IngestionProvider, IngestionRunSummary, SeasonSourceConfigSummary } from "@/types/ingestion";
+import type { IngestionProvider } from "@/types/ingestion";
 
 export interface SeasonResultStanding {
   leagueMemberId: string;
@@ -19,18 +19,12 @@ export interface SeasonResultStanding {
   externalDisplayName: string | null;
 }
 
-export interface WeeklyResultStanding {
-  weekNumber: number;
+export interface SeasonResultsMemberOption {
   leagueMemberId: string;
   userId: string;
   displayName: string;
-  provider: IngestionProvider;
-  rank: number | null;
-  pointsFor: number | null;
-  pointsAgainst: number | null;
-  result: string | null;
-  opponentDisplayName: string | null;
-  sourceRunId: string | null;
+  email: string;
+  role: "COMMISSIONER" | "OWNER";
 }
 
 export interface SeasonResultsSummary {
@@ -42,18 +36,25 @@ export interface SeasonResultsSummary {
     status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
   };
   availability: {
-    hasSeasonStandings: boolean;
-    hasWeeklyStandings: boolean;
+    hasFinalStandings: boolean;
     hasChampionData: boolean;
-    hasPlayoffData: boolean;
     isReadyForDraftOrderAutomation: boolean;
   };
-  sourceConfigs: SeasonSourceConfigSummary[];
+  eligibleMembers: SeasonResultsMemberOption[];
   seasonStandings: SeasonResultStanding[];
-  weeklyStandings: WeeklyResultStanding[];
-  importRuns: IngestionRunSummary[];
+  recommendedReverseDraftOrder: SeasonResultsMemberOption[];
+}
+
+export interface SaveManualSeasonStandingsInput {
+  seasonId: string;
+  actingUserId: string;
+  orderedLeagueMemberIds: string[];
 }
 
 export interface SeasonResultsResponse {
+  results: SeasonResultsSummary;
+}
+
+export interface SaveManualSeasonStandingsResponse {
   results: SeasonResultsSummary;
 }

@@ -33,6 +33,7 @@ enum DraftStatus {
 }
 
 enum IngestionProvider {
+  MANUAL
   ESPN
   SLEEPER
   CSV

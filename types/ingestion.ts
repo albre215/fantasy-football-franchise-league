@@ -1,4 +1,4 @@
-export type IngestionProvider = "ESPN" | "SLEEPER" | "CSV";
+export type IngestionProvider = "MANUAL" | "ESPN" | "SLEEPER" | "CSV";
 export type IngestionImportType = "SEASON_STANDINGS" | "WEEKLY_STANDINGS";
 export type IngestionRunStatus = "RUNNING" | "COMPLETED" | "FAILED";
 export type MappingStatus = "MATCHED" | "REQUIRES_REVIEW" | "UNMATCHED";

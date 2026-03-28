@@ -897,7 +897,6 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
             <SeasonResultsPanel
               actingUserId={MOCK_COMMISSIONER_USER_ID}
               activeSeason={activeSeason}
-              members={members}
             />
           </>
         )}

@@ -6,6 +6,7 @@ import { normalizePreviewInput } from "@/server/services/ingestion/providers/typ
 import type {
   ImportedRecordMappingCandidate,
   IngestionRunSummary,
+  IngestionProvider as IngestionProviderType,
   PreviewIngestionInput,
   RunIngestionInput,
   SaveSeasonSourceConfigInput,
@@ -128,7 +129,7 @@ async function assertCommissionerAccess(tx: PrismaClientLike, seasonId: string, 
 function buildMappingCandidates(
   preview: Omit<NormalizedImportPreview, "mappings">,
   season: Awaited<ReturnType<typeof getSeasonContext>>,
-  provider: IngestionProvider
+  provider: IngestionProviderType
 ): ImportedRecordMappingCandidate[] {
   const sourceConfig = season.sourceConfigs.find((config) => config.provider === provider);
   const existingMappings = new Map(
@@ -183,19 +184,27 @@ function buildMappingCandidates(
   });
 }
 
+function assertImportProvider(provider: IngestionProviderType): Exclude<IngestionProviderType, "MANUAL"> {
+  if (provider === "MANUAL") {
+    throw new IngestionServiceError(
+      "Manual standings are entered through the final standings workflow, not the ingestion pipeline.",
+      400
+    );
+  }
+
+  return provider;
+}
+
 async function buildPreview(tx: PrismaClientLike, input: PreviewIngestionInput) {
   const season = await getSeasonContext(tx, input.seasonId.trim());
-  const savedConfig = season.sourceConfigs.find((config) => config.provider === input.provider);
+  const provider = assertImportProvider(input.provider);
+  const savedConfig = season.sourceConfigs.find((config) => config.provider === provider);
   const mergedConfig = {
     ...((savedConfig?.config as Record<string, string | number | boolean | null>) ?? {}),
     ...(input.config ?? {})
   };
 
-  const adapter = ingestionProviderAdapters[input.provider];
-
-  if (!adapter) {
-    throw new IngestionServiceError("Unsupported ingestion provider.", 400);
-  }
+  const adapter = ingestionProviderAdapters[provider];
 
   const preview = await adapter.preview(
     normalizePreviewInput(
@@ -213,7 +222,7 @@ async function buildPreview(tx: PrismaClientLike, input: PreviewIngestionInput) 
     season,
     preview: {
       ...preview,
-      mappings: buildMappingCandidates(preview, season, input.provider)
+      mappings: buildMappingCandidates(preview, season, provider)
     }
   };
 }
@@ -257,6 +266,7 @@ export const ingestionService = {
   async saveSeasonSourceConfig(input: SaveSeasonSourceConfigInput) {
     const seasonId = input.seasonId.trim();
     const actingUserId = input.actingUserId.trim();
+    const provider = assertImportProvider(input.provider);
 
     if (!seasonId || !actingUserId) {
       throw new IngestionServiceError("seasonId and actingUserId are required.", 400);
@@ -269,12 +279,12 @@ export const ingestionService = {
         where: {
           seasonId_provider: {
             seasonId,
-            provider: input.provider
+            provider
           }
         },
         create: {
           seasonId,
-          provider: input.provider,
+          provider,
           externalLeagueId: input.externalLeagueId?.trim() || null,
           externalSeasonKey: input.externalSeasonKey?.trim() || null,
           config: input.config ?? {}
@@ -304,6 +314,7 @@ export const ingestionService = {
   async runImport(input: RunIngestionInput) {
     const seasonId = input.seasonId.trim();
     const actingUserId = input.actingUserId.trim();
+    const provider = assertImportProvider(input.provider);
 
     if (!seasonId || !actingUserId) {
       throw new IngestionServiceError("seasonId and actingUserId are required.", 400);
@@ -315,12 +326,12 @@ export const ingestionService = {
         where: {
           seasonId_provider: {
             seasonId,
-            provider: input.provider
+            provider
           }
         },
         create: {
           seasonId,
-          provider: input.provider,
+          provider,
           externalLeagueId: input.externalLeagueId?.trim() || null,
           externalSeasonKey: input.externalSeasonKey?.trim() || null,
           config: input.config ?? {}
@@ -329,7 +340,7 @@ export const ingestionService = {
           externalLeagueId: input.externalLeagueId?.trim() || null,
           externalSeasonKey: input.externalSeasonKey?.trim() || null,
           config: {
-            ...((season.sourceConfigs.find((config) => config.provider === input.provider)?.config as Record<
+            ...((season.sourceConfigs.find((config) => config.provider === provider)?.config as Record<
               string,
               string | number | boolean | null
             >) ?? {}),
@@ -345,7 +356,7 @@ export const ingestionService = {
         data: {
           seasonId,
           seasonSourceConfigId: sourceConfig.id,
-          provider: input.provider,
+          provider,
           importType: input.importType,
           status: "RUNNING",
           weekNumber: input.weekNumber ?? null,
@@ -407,7 +418,7 @@ export const ingestionService = {
             create: {
               seasonId,
               leagueMemberId,
-              provider: input.provider,
+              provider,
               seasonSourceConfigId: sourceConfig.id,
               ingestionRunId: run.id,
               externalEntityId: record.externalEntityId,
@@ -423,7 +434,7 @@ export const ingestionService = {
               metadata: record.metadata
             },
             update: {
-              provider: input.provider,
+              provider,
               seasonSourceConfigId: sourceConfig.id,
               ingestionRunId: run.id,
               externalEntityId: record.externalEntityId,
@@ -463,7 +474,7 @@ export const ingestionService = {
               seasonId,
               weekNumber: record.weekNumber,
               leagueMemberId,
-              provider: input.provider,
+              provider,
               seasonSourceConfigId: sourceConfig.id,
               ingestionRunId: run.id,
               externalEntityId: record.externalEntityId,
@@ -477,7 +488,7 @@ export const ingestionService = {
               metadata: record.metadata
             },
             update: {
-              provider: input.provider,
+              provider,
               seasonSourceConfigId: sourceConfig.id,
               ingestionRunId: run.id,
               externalEntityId: record.externalEntityId,
