@@ -1,6 +1,7 @@
 import { DraftStatus, Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { resultsService } from "@/server/services/results-service";
 import type {
   DraftKeeperSelection,
   DraftMemberSummary,
@@ -501,10 +502,21 @@ async function validateDraftInitialization(
     );
   }
 
+  const recommendedOrder = await resultsService.getRecommendedReverseDraftOrder(sourceSeasonId, targetSeasonId);
+  const recommendedLeagueMemberIds = recommendedOrder.entries.map((entry) => entry.leagueMemberId);
+
+  if (recommendedLeagueMemberIds.length !== DRAFT_OWNER_COUNT) {
+    throw new DraftServiceError(
+      "Source season final standings must include all 10 owners before initializing the offseason draft.",
+      409
+    );
+  }
+
   return {
     targetSeason,
     sourceSeason,
-    orderLeagueMemberIds: normalizedOrderLeagueMemberIds
+    orderLeagueMemberIds: normalizedOrderLeagueMemberIds,
+    recommendedOrderLeagueMemberIds: recommendedLeagueMemberIds
   };
 }
 

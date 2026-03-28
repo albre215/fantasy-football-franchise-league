@@ -73,6 +73,33 @@ export interface DraftState {
   };
 }
 
+export interface DraftOrderRecommendationEntry {
+  leagueMemberId: string;
+  userId: string;
+  displayName: string;
+  email: string;
+  role: "COMMISSIONER" | "OWNER";
+  sourceSeasonRank: number;
+  draftSlot: number;
+}
+
+export interface DraftOrderRecommendation {
+  sourceSeasonId: string;
+  sourceSeasonName: string | null;
+  sourceSeasonYear: number;
+  champion: {
+    leagueMemberId: string;
+    userId: string;
+    displayName: string;
+  } | null;
+  lastPlace: {
+    leagueMemberId: string;
+    userId: string;
+    displayName: string;
+  } | null;
+  entries: DraftOrderRecommendationEntry[];
+}
+
 export interface InitializeDraftInput {
   targetSeasonId: string;
   sourceSeasonId: string;
@@ -109,6 +136,10 @@ export interface InitializeDraftResponse {
 
 export interface DraftStateResponse {
   draft: DraftState | null;
+}
+
+export interface DraftOrderRecommendationResponse {
+  recommendation: DraftOrderRecommendation;
 }
 
 export interface SaveKeepersResponse {

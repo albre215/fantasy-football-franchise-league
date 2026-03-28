@@ -27,6 +27,11 @@ export interface SeasonResultsMemberOption {
   role: "COMMISSIONER" | "OWNER";
 }
 
+export interface RecommendedDraftOrderEntry extends SeasonResultsMemberOption {
+  sourceSeasonRank: number;
+  draftSlot: number;
+}
+
 export interface SeasonResultsSummary {
   season: {
     id: string;
@@ -42,7 +47,7 @@ export interface SeasonResultsSummary {
   };
   eligibleMembers: SeasonResultsMemberOption[];
   seasonStandings: SeasonResultStanding[];
-  recommendedReverseDraftOrder: SeasonResultsMemberOption[];
+  recommendedReverseDraftOrder: RecommendedDraftOrderEntry[];
 }
 
 export interface SaveManualSeasonStandingsInput {

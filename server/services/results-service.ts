@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { seasonService } from "@/server/services/season-service";
 import type {
+  RecommendedDraftOrderEntry,
   SaveManualSeasonStandingsInput,
   SeasonResultsSummary,
   SeasonResultStanding
@@ -114,12 +115,15 @@ function buildResultsSummary(
   const recommendedReverseDraftOrder = [...seasonStandings]
     .filter((standing) => standing.rank !== null)
     .sort((left, right) => (right.rank ?? 0) - (left.rank ?? 0))
-    .map((standing) => ({
+    .map((standing, index) => ({
       leagueMemberId: standing.leagueMemberId,
       userId: standing.userId,
       displayName: standing.displayName,
       email: standing.email,
       role: standing.role
+,
+      sourceSeasonRank: standing.rank ?? index + 1,
+      draftSlot: index + 1
     }));
 
   return {
@@ -140,6 +144,105 @@ function buildResultsSummary(
     eligibleMembers,
     seasonStandings,
     recommendedReverseDraftOrder
+  };
+}
+
+async function getReverseDraftOrderContext(sourceSeasonId: string, targetSeasonId: string) {
+  const [sourceSeason, targetSeason] = await Promise.all([
+    prisma.season.findUnique({
+      where: {
+        id: sourceSeasonId
+      },
+      include: {
+        seasonStandings: {
+          include: {
+            leagueMember: {
+              include: {
+                user: true
+              }
+            }
+          },
+          orderBy: [{ rank: "asc" }, { leagueMember: { joinedAt: "asc" } }]
+        }
+      }
+    }),
+    prisma.season.findUnique({
+      where: {
+        id: targetSeasonId
+      },
+      include: {
+        league: {
+          include: {
+            members: {
+              include: {
+                user: true
+              },
+              orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
+            }
+          }
+        }
+      }
+    })
+  ]);
+
+  if (!sourceSeason || !targetSeason) {
+    throw new ResultsServiceError("Source and target seasons must both exist.", 404);
+  }
+
+  if (sourceSeason.leagueId !== targetSeason.leagueId) {
+    throw new ResultsServiceError("Source and target seasons must belong to the same league.", 400);
+  }
+
+  if (sourceSeason.seasonStandings.length !== targetSeason.league.members.length) {
+    throw new ResultsServiceError(
+      "Enter complete final standings for the source season before auto-generating draft order.",
+      409
+    );
+  }
+
+  if (sourceSeason.seasonStandings.some((standing) => standing.rank === null)) {
+    throw new ResultsServiceError(
+      "Source season final standings must have a rank for every owner before auto-generating draft order.",
+      409
+    );
+  }
+
+  const targetMembersByUserId = new Map(
+    targetSeason.league.members.map((member) => [member.userId, member] as const)
+  );
+  const recommended = [...sourceSeason.seasonStandings]
+    .sort((left, right) => (right.rank ?? 0) - (left.rank ?? 0))
+    .map((standing, index) => {
+      const targetMember = targetMembersByUserId.get(standing.leagueMember.userId);
+
+      if (!targetMember) {
+        throw new ResultsServiceError(
+          "Every owner in the source season standings must still belong to the target season league.",
+          409
+        );
+      }
+
+      const entry: RecommendedDraftOrderEntry = {
+        leagueMemberId: targetMember.id,
+        userId: targetMember.userId,
+        displayName: targetMember.user.displayName,
+        email: targetMember.user.email,
+        role: targetMember.role,
+        sourceSeasonRank: standing.rank ?? index + 1,
+        draftSlot: index + 1
+      };
+
+      return entry;
+    });
+
+  if (new Set(recommended.map((entry) => entry.leagueMemberId)).size !== targetSeason.league.members.length) {
+    throw new ResultsServiceError("Auto-generated draft order must contain all 10 owners exactly once.", 409);
+  }
+
+  return {
+    sourceSeason,
+    targetSeason,
+    recommended
   };
 }
 
@@ -180,6 +283,37 @@ export const resultsService = {
   async getSeasonResults(seasonId: string): Promise<SeasonResultsSummary> {
     const season = await getSeasonResultsContext(seasonId);
     return buildResultsSummary(season);
+  },
+
+  async getRecommendedReverseDraftOrder(sourceSeasonId: string, targetSeasonId: string) {
+    const normalizedSourceSeasonId = sourceSeasonId.trim();
+    const normalizedTargetSeasonId = targetSeasonId.trim();
+
+    if (!normalizedSourceSeasonId || !normalizedTargetSeasonId) {
+      throw new ResultsServiceError("sourceSeasonId and targetSeasonId are required.", 400);
+    }
+
+    const { sourceSeason, recommended } = await getReverseDraftOrderContext(
+      normalizedSourceSeasonId,
+      normalizedTargetSeasonId
+    );
+
+    return {
+      sourceSeasonId: sourceSeason.id,
+      sourceSeasonName: sourceSeason.name,
+      sourceSeasonYear: sourceSeason.year,
+      champion: recommended.length > 0 ? {
+        leagueMemberId: recommended[recommended.length - 1].leagueMemberId,
+        userId: recommended[recommended.length - 1].userId,
+        displayName: recommended[recommended.length - 1].displayName
+      } : null,
+      lastPlace: recommended.length > 0 ? {
+        leagueMemberId: recommended[0].leagueMemberId,
+        userId: recommended[0].userId,
+        displayName: recommended[0].displayName
+      } : null,
+      entries: recommended
+    };
   },
 
   async saveManualSeasonStandings(input: SaveManualSeasonStandingsInput): Promise<SeasonResultsSummary> {
