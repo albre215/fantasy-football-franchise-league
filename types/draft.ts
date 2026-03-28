@@ -66,6 +66,11 @@ export interface DraftState {
   currentPick: DraftPickSummary | null;
   canFinalize: boolean;
   canStart: boolean;
+  keeperEditing: {
+    canEdit: boolean;
+    isLocked: boolean;
+    lockReason: string | null;
+  };
   keeperProgress: {
     completeOwners: number;
     totalOwners: number;

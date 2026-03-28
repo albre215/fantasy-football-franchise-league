@@ -193,6 +193,13 @@ async function getReverseDraftOrderContext(sourceSeasonId: string, targetSeasonI
     throw new ResultsServiceError("Source and target seasons must belong to the same league.", 400);
   }
 
+  if (sourceSeason.year !== targetSeason.year - 1) {
+    throw new ResultsServiceError(
+      "Draft order automation must use the immediately previous season as the source season.",
+      400
+    );
+  }
+
   if (sourceSeason.seasonStandings.length !== targetSeason.league.members.length) {
     throw new ResultsServiceError(
       "Enter complete final standings for the source season before auto-generating draft order.",

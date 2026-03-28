@@ -293,6 +293,26 @@ function assertSeasonIsEditable(isLocked: boolean) {
   }
 }
 
+function getKeeperLockReason(status: DraftStatus, isTargetSeasonLocked: boolean) {
+  if (isTargetSeasonLocked) {
+    return "Keeper selections can only be changed while the target season is unlocked.";
+  }
+
+  if (status === "PLANNING") {
+    return null;
+  }
+
+  if (status === "COMPLETED") {
+    return "Keepers are locked because the draft has already been completed.";
+  }
+
+  if (status === "CANCELLED") {
+    return "Keepers are locked because this draft is no longer active.";
+  }
+
+  return "Keeper selections can only be changed before the draft begins.";
+}
+
 async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<DraftState> {
   const [draft, activeTeams] = await Promise.all([getDraftWithContextOrThrow(tx, draftId), getActiveTeams(tx)]);
 
@@ -358,6 +378,7 @@ async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<D
   const picks = draft.picks.map(mapDraftPick);
   const picksCompleted = picks.filter((pick) => pick.selectedNflTeam !== null).length;
   const completeOwners = members.filter((member) => member.keeperCount === KEEPERS_PER_OWNER).length;
+  const keeperLockReason = getKeeperLockReason(draft.status, draft.targetSeason.isLocked);
   const keeperProgress = {
     completeOwners,
     totalOwners: members.length,
@@ -385,6 +406,11 @@ async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<D
     currentPick,
     canFinalize,
     canStart,
+    keeperEditing: {
+      canEdit: keeperLockReason === null,
+      isLocked: keeperLockReason !== null,
+      lockReason: keeperLockReason
+    },
     keeperProgress
   };
 }
@@ -457,6 +483,13 @@ async function validateDraftInitialization(
 
   if (targetSeason.leagueId !== sourceSeason.leagueId) {
     throw new DraftServiceError("Source and target seasons must belong to the same league.", 400);
+  }
+
+  if (sourceSeason.year !== targetSeason.year - 1) {
+    throw new DraftServiceError(
+      "The offseason draft must use the immediately previous season as its source season.",
+      400
+    );
   }
 
   if (targetSeason.league.members.length !== DRAFT_OWNER_COUNT) {
@@ -543,7 +576,7 @@ async function validateKeeperSave(
   const draft = await getDraftWithContextOrThrow(tx, draftId);
 
   if (draft.status !== "PLANNING") {
-    throw new DraftServiceError("Keepers can only be changed while the draft is in planning.", 409);
+    throw new DraftServiceError("Keeper selections cannot be changed after the draft has started.", 409);
   }
 
   assertSeasonIsEditable(draft.targetSeason.isLocked);

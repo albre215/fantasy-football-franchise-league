@@ -61,7 +61,6 @@ export function OffseasonDraftPanel({
   onSuccess,
   onRefresh
 }: OffseasonDraftPanelProps) {
-  const [selectedSourceSeasonId, setSelectedSourceSeasonId] = useState("");
   const [draftOrderLeagueMemberIds, setDraftOrderLeagueMemberIds] = useState<string[]>([]);
   const [keeperSelectionsByOwner, setKeeperSelectionsByOwner] = useState<Record<string, string[]>>({});
   const [dirtyKeeperOwners, setDirtyKeeperOwners] = useState<Record<string, boolean>>({});
@@ -77,10 +76,14 @@ export function OffseasonDraftPanel({
   const [isLoadingRecommendedOrder, setIsLoadingRecommendedOrder] = useState(false);
   const [recommendedOrderError, setRecommendedOrderError] = useState<string | null>(null);
 
-  const sourceSeasonOptions = useMemo(
-    () => seasons.filter((season) => season.id !== activeSeason?.id),
-    [activeSeason?.id, seasons]
-  );
+  const previousSeason = useMemo(() => {
+    if (!activeSeason) {
+      return null;
+    }
+
+    return seasons.find((season) => season.id !== activeSeason.id && season.year === activeSeason.year - 1) ?? null;
+  }, [activeSeason, seasons]);
+  const setupSourceSeasonId = draftState?.draft.sourceSeasonId ?? previousSeason?.id ?? "";
   const savedKeeperSelectionsByOwner = useMemo(
     () =>
       Object.fromEntries(
@@ -94,7 +97,6 @@ export function OffseasonDraftPanel({
 
   useEffect(() => {
     if (!activeSeason) {
-      setSelectedSourceSeasonId("");
       setDraftOrderLeagueMemberIds([]);
       setRecommendedOrder(null);
       setRecommendedOrderError(null);
@@ -108,7 +110,6 @@ export function OffseasonDraftPanel({
     }
 
     if (draftState) {
-      setSelectedSourceSeasonId(draftState.draft.sourceSeasonId);
       setDraftOrderLeagueMemberIds(draftState.picks.map((pick) => pick.selectingLeagueMemberId));
       setKeeperSelectionsByOwner((current) =>
         Object.fromEntries(
@@ -146,9 +147,6 @@ export function OffseasonDraftPanel({
       return;
     }
 
-    setSelectedSourceSeasonId((current) =>
-      sourceSeasonOptions.some((season) => season.id === current) ? current : sourceSeasonOptions[0]?.id ?? ""
-    );
     setDraftOrderLeagueMemberIds(Array.from({ length: members.length }, () => ""));
     setRecommendedOrder(null);
     setRecommendedOrderError(null);
@@ -158,11 +156,11 @@ export function OffseasonDraftPanel({
     setKeeperFeedbackByOwner({});
     setPendingSavedKeeperSelectionsByOwner({});
     setCurrentPickTeamId("");
-  }, [activeSeason, draftState, members, sourceSeasonOptions]);
+  }, [activeSeason, draftState, members, previousSeason]);
 
   useEffect(() => {
-    if (!activeSeason || draftState || !selectedSourceSeasonId) {
-      if (!selectedSourceSeasonId) {
+    if (!activeSeason || draftState || !setupSourceSeasonId) {
+      if (!setupSourceSeasonId) {
         setRecommendedOrder(null);
         setRecommendedOrderError(null);
         setDraftOrderLeagueMemberIds((current) =>
@@ -178,7 +176,7 @@ export function OffseasonDraftPanel({
 
       try {
         const response = await fetch(
-          `/api/season/${activeSeason.id}/draft/recommended-order?sourceSeasonId=${selectedSourceSeasonId}`,
+          `/api/season/${activeSeason.id}/draft/recommended-order?sourceSeasonId=${setupSourceSeasonId}`,
           { cache: "no-store" }
         );
         const data = await parseJsonResponse<DraftOrderRecommendationResponse>(response);
@@ -205,7 +203,7 @@ export function OffseasonDraftPanel({
         setIsLoadingRecommendedOrder(false);
       }
     })();
-  }, [activeSeason, draftState, members.length, selectedSourceSeasonId]);
+  }, [activeSeason, draftState, members.length, setupSourceSeasonId]);
 
   const filledDraftSlots = draftOrderLeagueMemberIds.filter(Boolean).length;
   const uniqueDraftOwners = new Set(draftOrderLeagueMemberIds.filter(Boolean)).size;
@@ -216,11 +214,15 @@ export function OffseasonDraftPanel({
     filledDraftSlots === members.length &&
     allDraftOwnersUnique &&
     includesEveryEligibleOwner &&
-    Boolean(selectedSourceSeasonId) &&
+    Boolean(setupSourceSeasonId) &&
     Boolean(recommendedOrder);
   const matchesRecommendedOrder =
     Boolean(recommendedOrder) &&
     recommendedOrder!.entries.every((entry, index) => draftOrderLeagueMemberIds[index] === entry.leagueMemberId);
+  const hasUnsavedKeeperChanges = Object.values(dirtyKeeperOwners).some(Boolean);
+  const isAnyKeeperSaveInFlight = Object.values(savingKeeperOwners).some(Boolean);
+  const canStartDraftFromUi =
+    Boolean(draftState?.canStart) && !hasUnsavedKeeperChanges && !isAnyKeeperSaveInFlight;
 
   function toggleKeeperSelection(leagueMemberId: string, nflTeamId: string) {
     setKeeperSelectionsByOwner((current) => {
@@ -297,7 +299,7 @@ export function OffseasonDraftPanel({
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            sourceSeasonId: selectedSourceSeasonId,
+            sourceSeasonId: setupSourceSeasonId,
             actingUserId,
             orderLeagueMemberIds: draftOrderLeagueMemberIds
           })
@@ -445,59 +447,34 @@ export function OffseasonDraftPanel({
             <div className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Source Season</label>
-                <select
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  onChange={(event) => {
-                    setSelectedSourceSeasonId(event.target.value);
-                    setRecommendedOrder(null);
-                    setRecommendedOrderError(null);
-                    setDraftOrderLeagueMemberIds(Array.from({ length: members.length }, () => ""));
-                  }}
-                  value={selectedSourceSeasonId}
-                >
-                  <option value="">Select previous season</option>
-                  {sourceSeasonOptions.map((season) => (
-                    <option key={season.id} value={season.id}>
-                      {formatSeasonLabel(season)}
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-2">
+                  <div className="flex h-10 items-center rounded-md border border-input bg-background px-3 text-sm">
+                    {previousSeason ? formatSeasonLabel(previousSeason) : "Previous season not found"}
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    The offseason draft always uses the immediately previous season as its source season.
+                  </p>
+                </div>
               </div>
               <div className="space-y-3">
                 <p className="text-sm font-medium">Draft Order</p>
                 <p className="text-sm text-muted-foreground">
-                  Enter the reverse standings order for the 10 owners. This draft is one offseason round.
+                  Reverse standings order for the 10 owners. This draft is automatically generated from the previous
+                  season's saved final standings.
                 </p>
                 <div className="grid gap-3 md:grid-cols-2">
-                  {members.map((member, index) => (
-                    <label className="space-y-1 text-sm" key={`${member.id}-slot`}>
-                      <span>Pick {index + 1}</span>
-                      <select
-                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                        onChange={(event) =>
-                          setDraftOrderLeagueMemberIds((current) => {
-                            const next = [...current];
-                            next[index] = event.target.value;
-                            return next;
-                          })
-                        }
-                        value={draftOrderLeagueMemberIds[index] ?? ""}
-                      >
-                        <option value="">Select owner</option>
-                        {members
-                          .filter(
-                            (option) =>
-                              option.id === draftOrderLeagueMemberIds[index] ||
-                              !draftOrderLeagueMemberIds.includes(option.id)
-                          )
-                          .map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {option.displayName}
-                          </option>
-                          ))}
-                      </select>
-                    </label>
-                  ))}
+                  {Array.from({ length: members.length }).map((_, index) => {
+                    const selectedMember = members.find((member) => member.id === draftOrderLeagueMemberIds[index]);
+
+                    return (
+                      <div className="space-y-1 text-sm" key={`draft-order-${index + 1}`}>
+                        <span>Pick {index + 1}</span>
+                        <div className="flex h-10 items-center rounded-md border border-input bg-background px-3 text-sm">
+                          {selectedMember?.displayName ?? "Waiting for saved final standings"}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
                 <div className="space-y-2 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                   {isLoadingRecommendedOrder ? (
@@ -520,11 +497,14 @@ export function OffseasonDraftPanel({
                       <p>
                         {matchesRecommendedOrder
                           ? "Using recommended reverse-standings order."
-                          : "Order has been manually adjusted."}
+                          : "Draft order has drifted from the recommended reverse-standings order."}
                       </p>
                     </>
                   ) : (
-                    <p>{recommendedOrderError ?? "Select a source season to generate reverse-standings draft order."}</p>
+                    <p>
+                      {recommendedOrderError ??
+                        "Final standings for the immediately previous season are required before generating draft order."}
+                    </p>
                   )}
                 </div>
               </div>
@@ -546,6 +526,7 @@ export function OffseasonDraftPanel({
                 disabled={
                   isSubmitting ||
                   activeSeason.isLocked ||
+                  !previousSeason ||
                   !draftOrderReady
                 }
                 onClick={() => void handleInitializeDraft()}
@@ -555,7 +536,9 @@ export function OffseasonDraftPanel({
               </Button>
               {!recommendedOrder && (
                 <div className="rounded-lg border border-dashed border-border p-3">
-                  Enter final standings for the source season before auto-generating draft order.
+                  {previousSeason
+                    ? "Enter final standings for the immediately previous season before auto-generating draft order."
+                    : "Create the immediately previous season before initializing the offseason draft."}
                 </div>
               )}
             </div>
@@ -609,6 +592,12 @@ export function OffseasonDraftPanel({
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    {draftState.keeperEditing.isLocked ? (
+                      <div className="rounded-lg border border-dashed border-border bg-secondary/30 p-4 text-sm text-muted-foreground">
+                        <p className="font-medium text-foreground">Keeper selections are locked.</p>
+                        <p>{draftState.keeperEditing.lockReason}</p>
+                      </div>
+                    ) : null}
                     {draftState.members.map((member) => {
                       const selectedKeepers = keeperSelectionsByOwner[member.leagueMemberId] ?? [];
                       const savedKeepers =
@@ -618,7 +607,7 @@ export function OffseasonDraftPanel({
                       const hasUnsavedChanges = Boolean(dirtyKeeperOwners[member.leagueMemberId]);
                       const isOwnerSaving = Boolean(savingKeeperOwners[member.leagueMemberId]);
                       const feedback = keeperFeedbackByOwner[member.leagueMemberId];
-                      const canEdit = draftState.draft.status === "PLANNING" && !draftState.draft.isTargetSeasonLocked;
+                      const canEdit = draftState.keeperEditing.canEdit;
                       const canSaveKeepers = canEdit && !isOwnerSaving && selectedKeepers.length === 2 && hasUnsavedChanges;
                       const selectedCountLabel = `${selectedKeepers.length}/2 selected`;
 
@@ -626,6 +615,10 @@ export function OffseasonDraftPanel({
 
                       if (isOwnerSaving) {
                         statusLabel = "Saving...";
+                      } else if (!canEdit && savedKeepers.length === 2) {
+                        statusLabel = "Locked after draft start";
+                      } else if (!canEdit) {
+                        statusLabel = "Keeper editing unavailable";
                       } else if (hasUnsavedChanges) {
                         statusLabel = "Unsaved changes";
                       } else if (savedKeepers.length === 2) {
@@ -666,6 +659,12 @@ export function OffseasonDraftPanel({
                               }`}
                             >
                               {feedback.message}
+                            </p>
+                          ) : null}
+                          {!canEdit ? (
+                            <p className="mt-3 text-sm text-muted-foreground">
+                              Keepers are locked after the draft starts. Keeper selections can only be changed before
+                              the draft begins.
                             </p>
                           ) : null}
                           <div className="mt-3 flex flex-wrap gap-2">
@@ -793,9 +792,10 @@ export function OffseasonDraftPanel({
                     <div className="flex flex-wrap gap-3">
                       {draftState.draft.status === "PLANNING" && (
                         <Button
-                          disabled={isSubmitting || !draftState.canStart}
+                          disabled={isSubmitting || !canStartDraftFromUi}
                           onClick={() => void handleDraftAction("start", "Draft started.")}
                           type="button"
+                          variant={canStartDraftFromUi ? "default" : "secondary"}
                         >
                           Start Draft
                         </Button>
@@ -832,6 +832,10 @@ export function OffseasonDraftPanel({
                     <div className="rounded-lg border border-dashed border-border p-3">
                       {draftState.draft.status === "COMPLETED"
                         ? "Draft completed. Team ownership for the target season has been created."
+                        : draftState.draft.status === "PLANNING" && hasUnsavedKeeperChanges
+                        ? "Save all keeper changes before starting the draft. Unsaved keeper edits are still on the screen."
+                        : draftState.draft.status === "PLANNING" && isAnyKeeperSaveInFlight
+                        ? "Wait for keeper saves to finish before starting the draft."
                         : "Save two keepers for every owner, start the draft, record one pick per owner, then finalize."}
                     </div>
                   </CardContent>
