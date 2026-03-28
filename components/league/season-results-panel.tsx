@@ -12,6 +12,8 @@ import type { SeasonSummary } from "@/types/season";
 
 interface SeasonResultsPanelProps {
   activeSeason: SeasonSummary | null;
+  canManageStandings: boolean;
+  accessMessage?: string | null;
 }
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
@@ -48,7 +50,11 @@ function formatPlacement(rank: number) {
   return `${rank}th Place`;
 }
 
-export function SeasonResultsPanel({ activeSeason }: SeasonResultsPanelProps) {
+export function SeasonResultsPanel({
+  activeSeason,
+  canManageStandings,
+  accessMessage
+}: SeasonResultsPanelProps) {
   const [results, setResults] = useState<SeasonResultsResponse["results"] | null>(null);
   const [orderedLeagueMemberIds, setOrderedLeagueMemberIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -153,6 +159,15 @@ export function SeasonResultsPanel({ activeSeason }: SeasonResultsPanelProps) {
         </p>
       </div>
 
+      {!canManageStandings && activeSeason ? (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-4 text-sm text-amber-900">
+            {accessMessage ??
+              "Only the league commissioner can save final standings for this season. Sign in as the commissioner account to make changes."}
+          </CardContent>
+        </Card>
+      ) : null}
+
       {!activeSeason ? (
         <Card>
           <CardContent className="p-6 text-sm text-muted-foreground">
@@ -211,7 +226,11 @@ export function SeasonResultsPanel({ activeSeason }: SeasonResultsPanelProps) {
                     </div>
 
                     <div className="flex flex-wrap gap-3">
-                      <Button disabled={isSaving || !standingsReady} onClick={() => void handleSaveStandings()} type="button">
+                      <Button
+                        disabled={isSaving || !standingsReady || !canManageStandings}
+                        onClick={() => void handleSaveStandings()}
+                        type="button"
+                      >
                         Save Final Standings
                       </Button>
                     </div>

@@ -68,6 +68,14 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   const ownershipOwners = seasonOwnership?.owners ?? [];
   const availableTeams = seasonOwnership?.availableTeams ?? [];
   const actingUserId = session?.user?.id ?? "";
+  const currentUserMembership = members.find((member) => member.userId === actingUserId) ?? null;
+  const currentUserRole = currentUserMembership?.role ?? null;
+  const canManageLeague = currentUserRole === "COMMISSIONER";
+  const commissionerAccessMessage = currentUserMembership
+    ? currentUserRole === "COMMISSIONER"
+      ? null
+      : `You are signed in as ${session?.user?.displayName ?? session?.user?.email ?? "this user"}, but only the commissioner can change this league. Sign in as ${bootstrapState?.league.commissioner?.displayName ?? "the commissioner"} to make updates.`
+    : `You are signed in as ${session?.user?.displayName ?? session?.user?.email ?? "this user"}, but this account is not a member of the current league. Commissioner-only actions are unavailable.`;
 
   const ownerSelectionOptions = useMemo(
     () => ownershipOwners.filter((owner) => owner.teamCount < 3),
@@ -105,6 +113,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       }
 
       const seasonId = bootstrapData.bootstrapState.activeSeason.id;
+      setDraftState(null);
       try {
         const ownershipResponse = await fetch(`/api/season/${seasonId}/ownership`, { cache: "no-store" });
         const ownershipData = await parseJsonResponse<SeasonOwnershipResponse>(ownershipResponse);
@@ -544,8 +553,17 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                   Status: {lockState === "LOCKED" ? "Locked" : lockState === "READY_TO_LOCK" ? "Ready to Lock" : "Not Ready"}
                 </p>
                 <p>Signed in as: {session?.user?.displayName ?? session?.user?.email ?? "Unknown user"}</p>
+                <p>Your league role: {currentUserRole ?? "Not a league member"}</p>
               </CardContent>
             </Card>
+
+            {commissionerAccessMessage ? (
+              <Card className="border-amber-200 bg-amber-50">
+                <CardContent className="p-4 text-sm text-amber-900">
+                  {commissionerAccessMessage}
+                </CardContent>
+              </Card>
+            ) : null}
 
             <Card>
               <CardHeader>
@@ -574,7 +592,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                         value={seasonName}
                       />
                     </div>
-                    <Button disabled={isSubmitting} type="submit">
+                    <Button disabled={isSubmitting || !canManageLeague} type="submit">
                       Create Season
                     </Button>
                   </form>
@@ -609,7 +627,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                           </p>
                         </div>
                         <Button
-                          disabled={isSubmitting || season.status === "ACTIVE"}
+                          disabled={isSubmitting || season.status === "ACTIVE" || !canManageLeague}
                           onClick={() => void handleSetActiveSeason(season.id)}
                           type="button"
                           variant={season.status === "ACTIVE" ? "secondary" : "outline"}
@@ -625,7 +643,10 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
 
             <OffseasonDraftPanel
               activeSeason={activeSeason}
+              accessMessage={commissionerAccessMessage}
+              canManageDraft={canManageLeague}
               draftState={draftState}
+              isDraftStateLoading={isLoading && hasActiveSeason}
               isSubmitting={isSubmitting}
               leagueId={leagueId}
               members={members}
@@ -663,7 +684,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                       value={memberEmail}
                     />
                     <Button
-                      disabled={isSubmitting || !hasActiveSeason || isLocked || !memberDisplayName || !memberEmail}
+                      disabled={isSubmitting || !hasActiveSeason || isLocked || !memberDisplayName || !memberEmail || !canManageLeague}
                       type="submit"
                     >
                       Add Member
@@ -693,7 +714,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                             {member.assignmentCount}/3
                           </span>
                           <Button
-                            disabled={isSubmitting || !member.canRemove}
+                            disabled={isSubmitting || !member.canRemove || !canManageLeague}
                             onClick={() => void handleRemoveMember(member.id)}
                             type="button"
                             variant="outline"
@@ -747,7 +768,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                           ))}
                         </select>
                         <Button
-                          disabled={isSubmitting || isLocked || !selectedOwnerId || !selectedTeamId}
+                          disabled={isSubmitting || isLocked || !selectedOwnerId || !selectedTeamId || !canManageLeague}
                           type="submit"
                         >
                           Assign Team
@@ -800,7 +821,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                                   <span>{entry.team.abbreviation} - {entry.team.name}</span>
                                   <Button
                                     className="h-7 px-2"
-                                    disabled={isSubmitting || isLocked}
+                                    disabled={isSubmitting || isLocked || !canManageLeague}
                                     onClick={() => void handleRemoveTeam(entry.ownershipId, entry.team.name)}
                                     type="button"
                                     variant="ghost"
@@ -870,7 +891,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                       ))}
                     </div>
                     <Button
-                      disabled={isSubmitting || !bootstrapState.lockReadiness.isReadyToLock || isLocked}
+                      disabled={isSubmitting || !bootstrapState.lockReadiness.isReadyToLock || isLocked || !canManageLeague}
                       onClick={() => void handleLockSeason()}
                       type="button"
                       variant="secondary"
@@ -879,7 +900,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                     </Button>
                     {isLocked && (
                       <Button
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || !canManageLeague}
                         onClick={() => void handleUnlockSeason()}
                         type="button"
                         variant="outline"
@@ -900,6 +921,8 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
             <LeagueHistoryPanel leagueId={leagueId} />
             <SeasonResultsPanel
               activeSeason={activeSeason}
+              accessMessage={commissionerAccessMessage}
+              canManageStandings={canManageLeague}
             />
           </>
         )}
