@@ -9,14 +9,15 @@ export default function HomePage() {
       <div className="container flex min-h-screen flex-col justify-center py-20">
         <div className="max-w-3xl space-y-6">
           <span className="inline-flex rounded-full bg-accent/15 px-3 py-1 text-sm font-medium text-foreground">
-            Foundation Scaffold
+            Commissioner Workspace
           </span>
           <div className="space-y-3">
             <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
               Fantasy Franchise League
             </h1>
             <p className="max-w-2xl text-lg text-muted-foreground">
-              A clean, production-oriented Next.js architecture for a multi-year NFL franchise fantasy platform.
+              Sign in to manage long-term franchise ownership, season standings, offseason keeper decisions, and the
+              slow draft lifecycle for your league.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">

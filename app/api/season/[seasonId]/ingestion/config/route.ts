@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { RouteAuthError, requireAuthenticatedUserId } from "@/lib/auth-session";
 import { ingestionService, IngestionServiceError } from "@/server/services/ingestion-service";
 import type {
   SaveSeasonSourceConfigInput,
@@ -32,17 +33,22 @@ export async function GET(_request: Request, { params }: RouteContext) {
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const body = (await request.json()) as Partial<SaveSeasonSourceConfigInput>;
+    const actingUserId = await requireAuthenticatedUserId();
     const config = await ingestionService.saveSeasonSourceConfig({
       seasonId: params.seasonId,
       provider: body.provider ?? "CSV",
       externalLeagueId: body.externalLeagueId,
       externalSeasonKey: body.externalSeasonKey,
       config: body.config ?? {},
-      actingUserId: body.actingUserId ?? ""
+      actingUserId
     });
 
     return NextResponse.json<SaveSeasonSourceConfigResponse>({ config });
   } catch (error) {
+    if (error instanceof RouteAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+
     if (error instanceof IngestionServiceError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
     }

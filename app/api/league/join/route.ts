@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { requireAuthenticatedUserId, RouteAuthError } from "@/lib/auth-session";
 import { LeagueServiceError, leagueService } from "@/server/services/league-service";
 import type { JoinLeagueInput, JoinLeagueResponse } from "@/types/league";
 
@@ -8,13 +9,18 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Partial<JoinLeagueInput>;
+    const actingUserId = await requireAuthenticatedUserId();
     const league = await leagueService.joinLeague({
-      userId: body.userId ?? "",
+      userId: actingUserId,
       leagueId: body.leagueId ?? ""
     });
 
     return NextResponse.json<JoinLeagueResponse>({ league });
   } catch (error) {
+    if (error instanceof RouteAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+
     if (error instanceof LeagueServiceError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
     }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { RouteAuthError, requireAuthenticatedUserId } from "@/lib/auth-session";
 import { SeasonServiceError, seasonService } from "@/server/services/season-service";
 import type { SeasonActorInput, UnlockSeasonResponse } from "@/types/season";
 
@@ -14,13 +15,18 @@ interface RouteContext {
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const body = (await request.json()) as Partial<SeasonActorInput>;
+    const actingUserId = await requireAuthenticatedUserId();
     const season = await seasonService.unlockSeason({
       seasonId: params.seasonId,
-      actingUserId: body.actingUserId ?? ""
+      actingUserId
     });
 
     return NextResponse.json<UnlockSeasonResponse>({ season });
   } catch (error) {
+    if (error instanceof RouteAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+
     if (error instanceof SeasonServiceError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
     }

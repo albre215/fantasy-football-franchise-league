@@ -43,7 +43,7 @@ export interface AssignTeamInput {
   seasonId: string;
   userId: string;
   nflTeamId: string;
-  actingUserId?: string;
+  actingUserId: string;
 }
 
 export interface AssignTeamResponse {

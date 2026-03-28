@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { RouteAuthError, requireAuthenticatedUserId } from "@/lib/auth-session";
 import { ingestionService, IngestionServiceError } from "@/server/services/ingestion-service";
 import type { RunIngestionInput, RunIngestionResponse } from "@/types/ingestion";
 
@@ -14,6 +15,7 @@ interface RouteContext {
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const body = (await request.json()) as Partial<RunIngestionInput>;
+    const actingUserId = await requireAuthenticatedUserId();
     const result = await ingestionService.runImport({
       seasonId: params.seasonId,
       provider: body.provider ?? "CSV",
@@ -23,12 +25,16 @@ export async function POST(request: Request, { params }: RouteContext) {
       externalLeagueId: body.externalLeagueId,
       externalSeasonKey: body.externalSeasonKey,
       config: body.config ?? {},
-      actingUserId: body.actingUserId ?? "",
+      actingUserId,
       mappingOverrides: body.mappingOverrides ?? {}
     });
 
     return NextResponse.json<RunIngestionResponse>(result);
   } catch (error) {
+    if (error instanceof RouteAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+
     if (error instanceof IngestionServiceError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
     }

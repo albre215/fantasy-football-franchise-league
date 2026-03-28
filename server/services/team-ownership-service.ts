@@ -374,10 +374,13 @@ export const teamOwnershipService = {
     const seasonId = input.seasonId.trim();
     const userId = input.userId.trim();
     const nflTeamId = input.nflTeamId.trim();
+    const actingUserId = input.actingUserId.trim();
 
-    if (!seasonId || !userId || !nflTeamId) {
-      throw new TeamOwnershipServiceError("seasonId, userId, and nflTeamId are required.", 400);
+    if (!seasonId || !userId || !nflTeamId || !actingUserId) {
+      throw new TeamOwnershipServiceError("seasonId, userId, nflTeamId, and actingUserId are required.", 400);
     }
+
+    await seasonService.assertCommissionerAccess(seasonId, actingUserId);
 
     return prisma.$transaction(async (tx) => {
       const validation = await validateTeamAssignmentInternal(tx, seasonId, userId, nflTeamId);

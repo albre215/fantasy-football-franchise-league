@@ -35,11 +35,13 @@ export interface CreateSeasonInput {
   leagueId: string;
   year: number;
   name?: string;
+  actingUserId: string;
 }
 
 export interface SetActiveSeasonInput {
   leagueId: string;
   seasonId: string;
+  actingUserId: string;
 }
 
 export interface CreateSeasonResponse {

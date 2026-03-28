@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 
 import { LeagueHistoryPanel } from "@/components/league/league-history-panel";
@@ -33,8 +34,6 @@ interface LeagueDashboardProps {
   leagueId?: string;
 }
 
-const MOCK_COMMISSIONER_USER_ID = "mock-user-1";
-
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   const payload = (await response.json()) as T & { error?: string };
 
@@ -46,6 +45,7 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
 }
 
 export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
+  const { data: session, status: sessionStatus } = useSession();
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [leagueOptions, setLeagueOptions] = useState<LeagueListItem[]>([]);
@@ -58,7 +58,6 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   const [seasonName, setSeasonName] = useState("");
   const [memberDisplayName, setMemberDisplayName] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
-  const [memberMockUserKey, setMemberMockUserKey] = useState("");
   const [selectedOwnerId, setSelectedOwnerId] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -68,6 +67,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   const members = bootstrapState?.members ?? [];
   const ownershipOwners = seasonOwnership?.owners ?? [];
   const availableTeams = seasonOwnership?.availableTeams ?? [];
+  const actingUserId = session?.user?.id ?? "";
 
   const ownerSelectionOptions = useMemo(
     () => ownershipOwners.filter((owner) => owner.teamCount < 3),
@@ -154,6 +154,21 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
 
   useEffect(() => {
     void (async () => {
+      if (sessionStatus === "loading") {
+        return;
+      }
+
+      if (sessionStatus !== "authenticated") {
+        setIsLoading(false);
+        setBootstrapState(null);
+        setSeasons([]);
+        setSeasonOwnership(null);
+        setDraftState(null);
+        setOwnershipError(null);
+        setErrorMessage("Sign in to access the league dashboard.");
+        return;
+      }
+
       if (!leagueId) {
         try {
           setIsLoading(true);
@@ -176,7 +191,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
         setIsLoading(false);
       }
     })();
-  }, [leagueId]);
+  }, [leagueId, sessionStatus]);
 
   async function handleCreateSeason(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -259,15 +274,13 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
         },
         body: JSON.stringify({
           displayName: memberDisplayName,
-          email: memberEmail,
-          mockUserKey: memberMockUserKey || undefined
+          email: memberEmail
         })
       });
       const data = await parseJsonResponse<AddLeagueMemberResponse>(response);
 
       setMemberDisplayName("");
       setMemberEmail("");
-      setMemberMockUserKey("");
       setSuccessMessage(`Added ${data.member.displayName} to the league.`);
       await refreshLeagueDashboard(leagueId);
     } catch (error) {
@@ -355,7 +368,6 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          actingUserId: MOCK_COMMISSIONER_USER_ID
         })
       });
       const data = await parseJsonResponse<LockSeasonResponse>(response);
@@ -385,7 +397,6 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          actingUserId: MOCK_COMMISSIONER_USER_ID
         })
       });
       const data = await parseJsonResponse<UnlockSeasonResponse>(response);
@@ -415,8 +426,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          teamOwnershipId,
-          actingUserId: MOCK_COMMISSIONER_USER_ID
+          teamOwnershipId
         })
       });
       await parseJsonResponse<RemoveTeamOwnershipResponse>(response);
@@ -509,7 +519,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                 <p>League: {bootstrapState.league.name}</p>
                 <p>League ID: {bootstrapState.league.id}</p>
                 <p>
-                  Commissioner: {bootstrapState.league.commissioner?.displayName ?? MOCK_COMMISSIONER_USER_ID}
+                  Commissioner: {bootstrapState.league.commissioner?.displayName ?? "Not assigned"}
                 </p>
                 <p>Members: {bootstrapState.memberCount} / 10</p>
               </CardContent>
@@ -533,7 +543,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                 <p>
                   Status: {lockState === "LOCKED" ? "Locked" : lockState === "READY_TO_LOCK" ? "Ready to Lock" : "Not Ready"}
                 </p>
-                <p>Commissioner actions use mock identity: {MOCK_COMMISSIONER_USER_ID}</p>
+                <p>Signed in as: {session?.user?.displayName ?? session?.user?.email ?? "Unknown user"}</p>
               </CardContent>
             </Card>
 
@@ -576,7 +586,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                   </div>
                   {hasActiveSeason && (
                     <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                      Only the commissioner can lock or unlock the season in the current mock identity flow.
+                      Only the commissioner can lock or unlock the season under the authenticated workflow.
                     </div>
                   )}
                 </div>
@@ -614,7 +624,6 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
             </Card>
 
             <OffseasonDraftPanel
-              actingUserId={MOCK_COMMISSIONER_USER_ID}
               activeSeason={activeSeason}
               draftState={draftState}
               isSubmitting={isSubmitting}
@@ -641,7 +650,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <form className="grid gap-3 md:grid-cols-4" onSubmit={handleAddMember}>
+                  <form className="grid gap-3 md:grid-cols-3" onSubmit={handleAddMember}>
                     <Input
                       onChange={(event) => setMemberDisplayName(event.target.value)}
                       placeholder="Display name"
@@ -652,11 +661,6 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                       placeholder="Email"
                       type="email"
                       value={memberEmail}
-                    />
-                    <Input
-                      onChange={(event) => setMemberMockUserKey(event.target.value)}
-                      placeholder="Optional mock user key"
-                      value={memberMockUserKey}
                     />
                     <Button
                       disabled={isSubmitting || !hasActiveSeason || isLocked || !memberDisplayName || !memberEmail}
@@ -895,7 +899,6 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
 
             <LeagueHistoryPanel leagueId={leagueId} />
             <SeasonResultsPanel
-              actingUserId={MOCK_COMMISSIONER_USER_ID}
               activeSeason={activeSeason}
             />
           </>

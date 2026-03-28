@@ -72,12 +72,14 @@ export interface AddLeagueMemberInput {
   leagueId: string;
   displayName: string;
   email: string;
+  actingUserId: string;
   mockUserKey?: string;
 }
 
 export interface RemoveLeagueMemberInput {
   leagueId: string;
   leagueMemberId: string;
+  actingUserId: string;
 }
 
 export interface LeagueBootstrapMember {

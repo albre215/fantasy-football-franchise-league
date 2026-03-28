@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { RouteAuthError, requireAuthenticatedUserId } from "@/lib/auth-session";
 import { DraftServiceError, draftService } from "@/server/services/draft-service";
 import type { PauseDraftResponse, StartDraftInput } from "@/types/draft";
 
@@ -8,13 +9,18 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Partial<StartDraftInput>;
+    const actingUserId = await requireAuthenticatedUserId();
     const draft = await draftService.pauseDraft({
       draftId: body.draftId ?? "",
-      actingUserId: body.actingUserId ?? ""
+      actingUserId
     });
 
     return NextResponse.json<PauseDraftResponse>({ draft });
   } catch (error) {
+    if (error instanceof RouteAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+
     if (error instanceof DraftServiceError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
     }

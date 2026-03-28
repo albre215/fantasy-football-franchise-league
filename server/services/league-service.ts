@@ -68,28 +68,56 @@ async function generateLeagueSlug(name: string) {
   return `${baseSlug}-${suffix}`;
 }
 
-async function ensureMockUser(userId: string) {
+async function ensureExistingUser(userId: string) {
   const normalizedUserId = userId.trim();
 
   if (!normalizedUserId) {
     throw new LeagueServiceError("A userId is required.", 400);
   }
 
-  return prisma.user.upsert({
+  const user = await prisma.user.findUnique({
     where: {
       id: normalizedUserId
-    },
-    update: {},
-    create: {
-      id: normalizedUserId,
-      email: `${normalizedUserId}@mock.local`,
-      displayName: normalizedUserId
-        .split(/[-_]/g)
-        .filter(Boolean)
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(" ")
     }
   });
+
+  if (!user) {
+    throw new LeagueServiceError("Authenticated user not found.", 401);
+  }
+
+  return user;
+}
+
+async function assertCommissionerAccessForLeague(
+  tx: Prisma.TransactionClient | typeof prisma,
+  leagueId: string,
+  actingUserId: string
+) {
+  const normalizedLeagueId = leagueId.trim();
+  const normalizedActingUserId = actingUserId.trim();
+
+  if (!normalizedLeagueId || !normalizedActingUserId) {
+    throw new LeagueServiceError("leagueId and actingUserId are required.", 400);
+  }
+
+  const membership = await tx.leagueMember.findUnique({
+    where: {
+      leagueId_userId: {
+        leagueId: normalizedLeagueId,
+        userId: normalizedActingUserId
+      }
+    },
+    select: {
+      id: true,
+      role: true
+    }
+  });
+
+  if (!membership || membership.role !== "COMMISSIONER") {
+    throw new LeagueServiceError("Only the commissioner can perform this action.", 403);
+  }
+
+  return membership;
 }
 
 function createMockUserIdSeed(input: string) {
@@ -256,7 +284,7 @@ export const leagueService = {
     }
 
     const description = input.description?.trim() || null;
-    const user = await ensureMockUser(input.userId);
+    const user = await ensureExistingUser(input.userId);
     const slug = await generateLeagueSlug(name);
 
     try {
@@ -339,7 +367,7 @@ export const leagueService = {
       throw new LeagueServiceError("leagueId is required.", 400);
     }
 
-    const user = await ensureMockUser(input.userId);
+    const user = await ensureExistingUser(input.userId);
 
     const league = await prisma.league.findUnique({
       where: {
@@ -410,6 +438,8 @@ export const leagueService = {
     if (!leagueId || !displayName || !email) {
       throw new LeagueServiceError("leagueId, displayName, and email are required.", 400);
     }
+
+    await assertCommissionerAccessForLeague(prisma, leagueId, input.actingUserId);
 
     const activeSeason = await seasonService.getActiveSeason(leagueId);
 
@@ -540,6 +570,8 @@ export const leagueService = {
       throw new LeagueServiceError("leagueId and leagueMemberId are required.", 400);
     }
 
+    await assertCommissionerAccessForLeague(prisma, leagueId, input.actingUserId);
+
     const activeSeason = await seasonService.getActiveSeason(leagueId);
 
     if (!activeSeason) {
@@ -668,6 +700,10 @@ export const leagueService = {
     });
 
     return seasons.map(mapSeason);
+  },
+
+  async assertCommissionerAccess(leagueId: string, actingUserId: string) {
+    return assertCommissionerAccessForLeague(prisma, leagueId, actingUserId);
   },
 
   getLeagueDashboard

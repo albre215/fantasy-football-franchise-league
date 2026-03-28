@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { requireAuthenticatedUserId, RouteAuthError } from "@/lib/auth-session";
 import { resultsService, ResultsServiceError } from "@/server/services/results-service";
 import type {
   SaveManualSeasonStandingsResponse,
@@ -31,18 +32,22 @@ export async function GET(_request: Request, { params }: RouteContext) {
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const body = (await request.json()) as {
-      actingUserId?: string;
       orderedLeagueMemberIds?: string[];
     };
+    const actingUserId = await requireAuthenticatedUserId();
 
     const results = await resultsService.saveManualSeasonStandings({
       seasonId: params.seasonId,
-      actingUserId: body.actingUserId?.trim() ?? "",
+      actingUserId,
       orderedLeagueMemberIds: Array.isArray(body.orderedLeagueMemberIds) ? body.orderedLeagueMemberIds : []
     });
 
     return NextResponse.json<SaveManualSeasonStandingsResponse>({ results });
   } catch (error) {
+    if (error instanceof RouteAuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+
     if (error instanceof ResultsServiceError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
     }

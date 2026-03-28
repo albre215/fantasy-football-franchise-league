@@ -12,7 +12,6 @@ import type { SeasonSummary } from "@/types/season";
 
 interface SeasonResultsPanelProps {
   activeSeason: SeasonSummary | null;
-  actingUserId: string;
 }
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
@@ -49,7 +48,7 @@ function formatPlacement(rank: number) {
   return `${rank}th Place`;
 }
 
-export function SeasonResultsPanel({ activeSeason, actingUserId }: SeasonResultsPanelProps) {
+export function SeasonResultsPanel({ activeSeason }: SeasonResultsPanelProps) {
   const [results, setResults] = useState<SeasonResultsResponse["results"] | null>(null);
   const [orderedLeagueMemberIds, setOrderedLeagueMemberIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -130,7 +129,6 @@ export function SeasonResultsPanel({ activeSeason, actingUserId }: SeasonResults
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          actingUserId,
           orderedLeagueMemberIds
         })
       });

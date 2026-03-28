@@ -57,6 +57,37 @@ async function getLeagueOrThrow(tx: Prisma.TransactionClient | typeof prisma, le
   return league;
 }
 
+async function assertActingCommissionerForLeague(
+  tx: Prisma.TransactionClient | typeof prisma,
+  leagueId: string,
+  actingUserId: string
+) {
+  const normalizedActingUserId = actingUserId.trim();
+
+  if (!normalizedActingUserId) {
+    throw new SeasonServiceError("actingUserId is required.", 400);
+  }
+
+  const commissioner = await tx.leagueMember.findUnique({
+    where: {
+      leagueId_userId: {
+        leagueId,
+        userId: normalizedActingUserId
+      }
+    },
+    select: {
+      id: true,
+      role: true
+    }
+  });
+
+  if (!commissioner || commissioner.role !== "COMMISSIONER") {
+    throw new SeasonServiceError("Only the commissioner can perform this action.", 403);
+  }
+
+  return commissioner;
+}
+
 async function getSeasonOrThrow(tx: Prisma.TransactionClient | typeof prisma, seasonId: string) {
   const season = await tx.season.findUnique({
     where: {
@@ -207,6 +238,7 @@ export const seasonService = {
     const name = input.name?.trim() || null;
 
     await getLeagueOrThrow(prisma, leagueId);
+    await assertActingCommissionerForLeague(prisma, leagueId, input.actingUserId);
 
     try {
       const season = await prisma.season.create({
@@ -279,6 +311,7 @@ export const seasonService = {
 
     return prisma.$transaction(async (tx) => {
       await getLeagueOrThrow(tx, leagueId);
+      await assertActingCommissionerForLeague(tx, leagueId, input.actingUserId);
       const season = await getSeasonOrThrow(tx, seasonId);
 
       if (season.leagueId !== leagueId) {

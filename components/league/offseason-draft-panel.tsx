@@ -25,7 +25,6 @@ interface OffseasonDraftPanelProps {
   members: LeagueBootstrapMember[];
   draftState: DraftState | null;
   isSubmitting: boolean;
-  actingUserId: string;
   onStartSubmit: () => void;
   onEndSubmit: () => void;
   onError: (message: string) => void;
@@ -54,7 +53,6 @@ export function OffseasonDraftPanel({
   members,
   draftState,
   isSubmitting,
-  actingUserId,
   onStartSubmit,
   onEndSubmit,
   onError,
@@ -240,7 +238,6 @@ export function OffseasonDraftPanel({
           },
           body: JSON.stringify({
             sourceSeasonId: setupSourceSeasonId,
-            actingUserId,
             orderLeagueMemberIds: recommendedOrder.entries.map((entry) => entry.leagueMemberId)
           })
         });
@@ -256,7 +253,6 @@ export function OffseasonDraftPanel({
     })();
   }, [
     activeSeason,
-    actingUserId,
     draftState,
     hasAttemptedWorkspacePreparation,
     isLoadingRecommendedOrder,
@@ -379,8 +375,7 @@ export function OffseasonDraftPanel({
         body: JSON.stringify({
           draftId: draftState.draft.id,
           leagueMemberId,
-          nflTeamIds: keeperSelectionsByOwner[leagueMemberId] ?? [],
-          actingUserId
+          nflTeamIds: keeperSelectionsByOwner[leagueMemberId] ?? []
         })
       });
 
@@ -426,8 +421,7 @@ export function OffseasonDraftPanel({
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            draftId: draftState.draft.id,
-            actingUserId
+            draftId: draftState.draft.id
           })
         });
 
@@ -459,8 +453,7 @@ export function OffseasonDraftPanel({
           },
           body: JSON.stringify({
             draftId: draftState.draft.id,
-            nflTeamId: currentPickTeamId,
-            actingUserId
+            nflTeamId: currentPickTeamId
           })
         });
 
