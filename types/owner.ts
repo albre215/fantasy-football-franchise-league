@@ -2,6 +2,7 @@ import type { DraftStatus, DraftTeamSummary } from "@/types/draft";
 
 export interface OwnerLeagueMembershipSummary {
   leagueId: string;
+  leagueCode: string | null;
   leagueName: string;
   leagueSlug: string;
   role: "COMMISSIONER" | "OWNER";

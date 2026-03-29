@@ -32,17 +32,23 @@ export function AccountMenu({
   }, []);
 
   return (
-    <div className="relative flex items-center gap-3" ref={containerRef}>
-      <p className="text-sm font-medium text-foreground">Welcome back, {greetingName}</p>
+    <div
+      className="relative flex items-center gap-4 rounded-full border border-border/70 bg-white/80 px-4 py-2 shadow-sm backdrop-blur"
+      ref={containerRef}
+    >
+      <div className="text-right" title="Account menu">
+        <p className="text-base font-semibold text-foreground sm:text-lg">Welcome back, {greetingName}</p>
+      </div>
       <Button
         aria-expanded={isOpen}
         aria-haspopup="menu"
-        className="h-10 w-10 px-0"
+        className="h-11 w-11 rounded-full px-0"
         onClick={() => setIsOpen((current) => !current)}
+        title="Open account menu"
         type="button"
         variant="outline"
       >
-        <CircleUserRound className="h-5 w-5" />
+        <CircleUserRound className="h-5.5 w-5.5" />
         <span className="sr-only">Open account menu</span>
       </Button>
       {isOpen ? (

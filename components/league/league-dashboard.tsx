@@ -1257,6 +1257,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                 {activeResultsDraftTab === "offseason-draft" ? (
                   <OffseasonDraftPanel
                     leagueId={leagueId}
+                    leagueCode={bootstrapState?.league.leagueCode ?? null}
                     activeSeason={activeSeason}
                     accessMessage={commissionerAccessMessage}
                     canManageDraft={canManageLeague}

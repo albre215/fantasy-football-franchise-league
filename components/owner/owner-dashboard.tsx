@@ -291,7 +291,9 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="font-medium">{membership.leagueName}</div>
-                          <div className="text-sm text-muted-foreground">League ID: {membership.leagueId}</div>
+                          <div className="text-sm text-muted-foreground">
+                            League Code: {membership.leagueCode ?? membership.leagueId}
+                          </div>
                         </div>
                         <span
                           className={cn(

@@ -26,9 +26,11 @@ export default async function HomePage() {
         <div className={`space-y-6 ${isAuthenticated ? "w-full" : "w-full max-w-xl text-center"}`}>
           <div className={`flex gap-6 ${isAuthenticated ? "items-start justify-between" : "flex-col items-center"}`}>
             <div className={`space-y-6 ${isAuthenticated ? "max-w-3xl" : "text-center"}`}>
-              <span className="inline-flex rounded-full bg-accent/15 px-3 py-1 text-sm font-medium text-foreground">
-                {isAuthenticated ? "Commissioner Workspace" : "League Sign In"}
-              </span>
+              {!isAuthenticated ? (
+                <span className="inline-flex rounded-full bg-accent/15 px-3 py-1 text-sm font-medium text-foreground">
+                  League Sign In
+                </span>
+              ) : null}
               <div className="space-y-3">
                 <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
                   GM Fantasy

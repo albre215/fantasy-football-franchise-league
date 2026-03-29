@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Crown, Info } from "lucide-react";
-import { signIn, signOut, useSession } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -126,6 +126,7 @@ export function LeagueControlPanel() {
       setLeagues((current) => [
         {
           id: data.league.id,
+          leagueCode: data.league.leagueCode,
           name: data.league.name,
           slug: data.league.slug,
           description: data.league.description,
@@ -158,7 +159,7 @@ export function LeagueControlPanel() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          leagueId
+          leagueCode: leagueId
         })
       });
       const data = await parseJsonResponse<JoinLeagueResponse>(response);
@@ -181,6 +182,7 @@ export function LeagueControlPanel() {
         return [
           {
             id: data.league.id,
+            leagueCode: data.league.leagueCode,
             name: data.league.name,
             slug: data.league.slug,
             description: data.league.description,
@@ -206,7 +208,7 @@ export function LeagueControlPanel() {
     event.preventDefault();
 
     if (!joinLeagueId.trim()) {
-      setErrorMessage("League ID is required.");
+      setErrorMessage("League code is required.");
       return;
     }
 
@@ -297,14 +299,6 @@ export function LeagueControlPanel() {
     }
   }
 
-  async function handleSignOut() {
-    setErrorMessage(null);
-    setSuccessMessage(null);
-    await signOut({
-      callbackUrl: "/"
-    });
-  }
-
   function AuthFieldLabel({
     htmlFor,
     label,
@@ -331,16 +325,18 @@ export function LeagueControlPanel() {
     <section
       className={
         isAuthenticated
-          ? "mt-14 grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"
+          ? "mt-14 space-y-6"
           : "mt-10 w-full max-w-xl"
       }
     >
-      <div className="space-y-6">
-        {status === "loading" ? (
+      {status === "loading" ? (
+        <div className="space-y-6">
           <Card className="border-border/70 bg-card/90">
             <CardContent className="p-6 text-sm text-muted-foreground">Loading authentication state...</CardContent>
           </Card>
-        ) : !isAuthenticated ? (
+        </div>
+      ) : !isAuthenticated ? (
+        <div className="space-y-6">
           <Card className="border-border/70 bg-card/90">
             <CardHeader>
               <CardTitle>{authMode === "sign-in" ? "Sign In" : "Create Account"}</CardTitle>
@@ -519,8 +515,62 @@ export function LeagueControlPanel() {
               )}
             </CardFooter>
           </Card>
-        ) : (
-          <>
+          {(errorMessage || successMessage) ? (
+            <Card className={cn("border-border/70", errorMessage ? "bg-red-50" : "bg-emerald-50")}>
+              <CardContent className="p-4 text-sm">{errorMessage ?? successMessage}</CardContent>
+            </Card>
+          ) : null}
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <Card className="border-border/70 bg-card/90">
+            <CardHeader className="space-y-2">
+              <CardTitle>My Leagues</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isLoading ? (
+                <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
+                  Loading your leagues...
+                </div>
+              ) : sortedLeagues.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
+                  You are not a member of any leagues yet.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {sortedLeagues.map((league) => (
+                    <Card key={league.id} className="border-border/70 shadow-none">
+                      <CardHeader className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <CardTitle className="text-xl">{league.name}</CardTitle>
+                          {league.currentUserRole === "COMMISSIONER" ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+                              <Crown className="h-3.5 w-3.5" />
+                              Commissioner
+                            </span>
+                          ) : null}
+                        </div>
+                        <CardDescription>{league.description ?? "No description provided yet."}</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3 text-sm text-muted-foreground">
+                        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                          <p>Members: {league.memberCount} / 10</p>
+                          <p>Seasons: {league.seasonCount}</p>
+                          <p className="truncate">League Code: {league.leagueCode ?? league.id}</p>
+                        </div>
+                      </CardContent>
+                      <CardFooter>
+                        <Link className={buttonVariants()} href={`/league?leagueId=${league.id}`}>
+                          View Dashboard
+                        </Link>
+                      </CardFooter>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <div className="grid gap-6 lg:grid-cols-2">
             <Card className="border-border/70 bg-card/90">
               <CardHeader>
                 <CardTitle>Create League</CardTitle>
@@ -542,75 +592,29 @@ export function LeagueControlPanel() {
             <Card className="border-border/70 bg-card/90">
               <CardHeader>
                 <CardTitle>Join League</CardTitle>
-                <CardDescription>Use a league ID to join an existing league with your authenticated user.</CardDescription>
+                <CardDescription>Use a league code to join an existing league with your authenticated user.</CardDescription>
               </CardHeader>
               <CardContent>
                 <form className="space-y-4" onSubmit={handleJoinById}>
                   <Input
                     onChange={(event) => setJoinLeagueId(event.target.value)}
-                    placeholder="League ID"
+                    placeholder="League code (for example, GMF-1)"
                     value={joinLeagueId}
                   />
                   <Button disabled={isSubmitting || !joinLeagueId.trim()} type="submit" variant="secondary">
-                    Join by ID
+                    Join League
                   </Button>
                 </form>
               </CardContent>
             </Card>
-          </>
-        )}
-        {(errorMessage || successMessage) && (
-          <Card className={cn("border-border/70", errorMessage ? "bg-red-50" : "bg-emerald-50")}>
-            <CardContent className="p-4 text-sm">{errorMessage ?? successMessage}</CardContent>
-          </Card>
-        )}
-      </div>
-      {isAuthenticated ? (
-        <Card className="border-border/70 bg-card/90">
-          <CardHeader>
-            <CardTitle>My Leagues</CardTitle>
-            <CardDescription>Leagues where you are a commissioner or member.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {isLoading ? (
-              <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
-                Loading your leagues...
-              </div>
-            ) : sortedLeagues.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
-                You are not a member of any leagues yet.
-              </div>
-            ) : (
-              sortedLeagues.map((league) => (
-                <Card key={league.id} className="border-border/70 shadow-none">
-                  <CardHeader>
-                    <div className="flex items-center gap-2">
-                      <CardTitle className="text-lg">{league.name}</CardTitle>
-                      {league.currentUserRole === "COMMISSIONER" ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
-                          <Crown className="h-3.5 w-3.5" />
-                          Commissioner
-                        </span>
-                      ) : null}
-                    </div>
-                    <CardDescription>{league.description ?? "No description provided yet."}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-sm text-muted-foreground">
-                    <p>League ID: {league.id}</p>
-                    <p>Members: {league.memberCount} / 10</p>
-                    <p>Seasons: {league.seasonCount}</p>
-                  </CardContent>
-                  <CardFooter className="gap-3">
-                    <Link className={buttonVariants({ variant: "outline" })} href={`/league?leagueId=${league.id}`}>
-                      View Dashboard
-                    </Link>
-                  </CardFooter>
-                </Card>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      ) : null}
+          </div>
+          {(errorMessage || successMessage) ? (
+            <Card className={cn("border-border/70", errorMessage ? "bg-red-50" : "bg-emerald-50")}>
+              <CardContent className="p-4 text-sm">{errorMessage ?? successMessage}</CardContent>
+            </Card>
+          ) : null}
+        </div>
+      )}
     </section>
   );
 }

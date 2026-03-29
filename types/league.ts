@@ -2,6 +2,7 @@ import type { SeasonSetupStatus, SeasonSummary } from "@/types/season";
 
 export interface LeagueListItem {
   id: string;
+  leagueCode: string | null;
   name: string;
   slug: string;
   description: string | null;
@@ -34,6 +35,7 @@ export interface LeagueSeasonSummary {
 
 export interface LeagueDashboard {
   id: string;
+  leagueCode: string | null;
   name: string;
   slug: string;
   description: string | null;
@@ -50,7 +52,7 @@ export interface CreateLeagueInput {
 
 export interface JoinLeagueInput {
   userId: string;
-  leagueId: string;
+  leagueCode: string;
 }
 
 export interface CreateLeagueResponse {
@@ -97,6 +99,7 @@ export interface LeagueBootstrapMember {
 export interface LeagueBootstrapState {
   league: {
     id: string;
+    leagueCode: string | null;
     name: string;
     slug: string;
     description: string | null;

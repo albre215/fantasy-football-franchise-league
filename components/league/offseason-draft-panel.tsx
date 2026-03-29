@@ -20,6 +20,7 @@ import type { SeasonSummary } from "@/types/season";
 
 interface OffseasonDraftPanelProps {
   leagueId: string;
+  leagueCode?: string | null;
   activeSeason: SeasonSummary | null;
   seasons: SeasonSummary[];
   members: LeagueBootstrapMember[];
@@ -156,6 +157,7 @@ async function preserveScrollPosition<T>(run: () => Promise<T>, anchorId?: strin
 
 export function OffseasonDraftPanel({
   leagueId,
+  leagueCode,
   activeSeason,
   seasons,
   members,
@@ -663,7 +665,7 @@ export function OffseasonDraftPanel({
             </div>
 
             <div className="space-y-4 rounded-lg border border-border p-4 text-sm text-muted-foreground">
-              <p>League ID: {leagueId}</p>
+              <p>League Code: {leagueCode ?? leagueId}</p>
               <p>Target season: {formatSeasonLabel(activeSeason)}</p>
               <p>Owners in draft: {members.length} / 10</p>
               <p>Expected keepers: 20 total</p>

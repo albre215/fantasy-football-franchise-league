@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     const actingUserId = await requireAuthenticatedUserId();
     const league = await leagueService.joinLeague({
       userId: actingUserId,
-      leagueId: body.leagueId ?? ""
+      leagueCode: body.leagueCode ?? ""
     });
 
     return NextResponse.json<JoinLeagueResponse>({ league });
