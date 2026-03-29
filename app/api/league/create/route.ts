@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { requireAuthenticatedUserId, RouteAuthError } from "@/lib/auth-session";
+import { getLeagueCodeSchemaHelpMessage } from "@/lib/database-errors";
 import { LeagueServiceError, leagueService } from "@/server/services/league-service";
 import type { CreateLeagueInput, CreateLeagueResponse } from "@/types/league";
 
@@ -24,6 +25,11 @@ export async function POST(request: Request) {
 
     if (error instanceof LeagueServiceError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+
+    const schemaHelpMessage = getLeagueCodeSchemaHelpMessage(error);
+    if (schemaHelpMessage) {
+      return NextResponse.json({ error: schemaHelpMessage }, { status: 503 });
     }
 
     return NextResponse.json({ error: "Unable to create league." }, { status: 500 });
