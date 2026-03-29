@@ -3,7 +3,6 @@ import Link from "next/link";
 import { getServerAuthSession } from "@/auth";
 import { AccountMenu } from "@/components/home/account-menu";
 import { LeagueControlPanel } from "@/components/home/league-control-panel";
-import { buttonVariants } from "@/components/ui/button";
 
 function getGreetingName(displayName: string | null | undefined) {
   const trimmed = displayName?.trim();
@@ -41,26 +40,15 @@ export default async function HomePage() {
                     : "Sign in to access your league tools, owner dashboard, and commissioner workflows in one place."}
                 </p>
               </div>
-              {isAuthenticated ? (
-                <div className="flex flex-wrap gap-3">
-                  <Link className={buttonVariants()} href="/dashboard">
-                    Open Dashboard
-                  </Link>
-                  <Link className={buttonVariants({ variant: "secondary" })} href="/me">
-                    My Dashboard
-                  </Link>
-                  <Link className={buttonVariants({ variant: "outline" })} href="/league">
-                    Open League Hub
-                  </Link>
-                </div>
-              ) : null}
             </div>
             {isAuthenticated && session?.user ? (
-              <AccountMenu
-                displayName={session.user.displayName}
-                email={session.user.email ?? ""}
-                greetingName={greetingName}
-              />
+              <div className="justify-self-end">
+                <AccountMenu
+                  displayName={session.user.displayName}
+                  email={session.user.email ?? ""}
+                  greetingName={greetingName}
+                />
+              </div>
             ) : null}
           </div>
         </div>
