@@ -540,30 +540,30 @@ export function LeagueControlPanel() {
                 <div className="space-y-4">
                   {sortedLeagues.map((league) => (
                     <Card key={league.id} className="border-border/70 shadow-none">
-                      <CardHeader className="space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <CardTitle className="text-xl">{league.name}</CardTitle>
-                          {league.currentUserRole === "COMMISSIONER" ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
-                              <Crown className="h-3.5 w-3.5" />
-                              Commissioner
-                            </span>
-                          ) : null}
+                      <CardContent className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0 flex-1 space-y-3">
+                          <div className="flex min-h-10 flex-wrap items-center gap-2">
+                            <CardTitle className="text-xl">{league.name}</CardTitle>
+                            {league.currentUserRole === "COMMISSIONER" ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+                                <Crown className="h-3.5 w-3.5" />
+                                Commissioner
+                              </span>
+                            ) : null}
+                          </div>
+                          {league.description ? <CardDescription>{league.description}</CardDescription> : null}
+                          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+                            <p>Members: {league.memberCount} / 10</p>
+                            <p>Seasons: {league.seasonCount}</p>
+                            <p className="truncate">League Code: {league.leagueCode ?? league.id}</p>
+                          </div>
                         </div>
-                        <CardDescription>{league.description ?? "No description provided yet."}</CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-3 text-sm text-muted-foreground">
-                        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                          <p>Members: {league.memberCount} / 10</p>
-                          <p>Seasons: {league.seasonCount}</p>
-                          <p className="truncate">League Code: {league.leagueCode ?? league.id}</p>
+                        <div className="flex shrink-0 items-center self-stretch sm:self-auto">
+                          <Link className={buttonVariants()} href={`/league?leagueId=${league.id}`}>
+                            Open League
+                          </Link>
                         </div>
                       </CardContent>
-                      <CardFooter>
-                        <Link className={buttonVariants()} href={`/league?leagueId=${league.id}`}>
-                          View Dashboard
-                        </Link>
-                      </CardFooter>
                     </Card>
                   ))}
                 </div>
@@ -583,9 +583,11 @@ export function LeagueControlPanel() {
                     placeholder="League name"
                     value={leagueName}
                   />
-                  <Button disabled={isSubmitting || !leagueName.trim()} type="submit">
-                    Create League
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button disabled={isSubmitting || !leagueName.trim()} type="submit">
+                      Create League
+                    </Button>
+                  </div>
                 </form>
               </CardContent>
             </Card>
@@ -601,15 +603,15 @@ export function LeagueControlPanel() {
                     placeholder="League code (for example, GMF-1)"
                     value={joinLeagueId}
                   />
-                  <Button disabled={isSubmitting || !joinLeagueId.trim()} type="submit" variant="secondary">
-                    Join League
-                  </Button>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <Button disabled={isSubmitting || !joinLeagueId.trim()} type="submit" variant="secondary">
+                      Join League
+                    </Button>
+                    <Link className={buttonVariants({ variant: "outline" })} href="/league">
+                      Open League Hub
+                    </Link>
+                  </div>
                 </form>
-                <div className="mt-4 flex justify-end">
-                  <Link className={buttonVariants({ variant: "outline" })} href="/league">
-                    Open League Hub
-                  </Link>
-                </div>
               </CardContent>
             </Card>
           </div>
