@@ -20,11 +20,16 @@ class AuthServiceError extends Error {
 interface RegisterUserInput {
   displayName: string;
   email: string;
+  phoneNumber?: string;
   password: string;
 }
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+function normalizePhoneNumber(phoneNumber: string) {
+  return phoneNumber.trim();
 }
 
 function validateEmail(email: string) {
@@ -61,6 +66,20 @@ function validatePassword(password: string) {
       `Password must be ${MAX_PASSWORD_BYTES} bytes or fewer to avoid bcrypt truncation.`,
       400
     );
+  }
+}
+
+function validatePhoneNumber(phoneNumber: string) {
+  if (!phoneNumber) {
+    return;
+  }
+
+  if (phoneNumber.length > 25) {
+    throw new AuthServiceError("Phone number is too long.", 400);
+  }
+
+  if (!/^[0-9()+\-\s]{7,25}$/.test(phoneNumber)) {
+    throw new AuthServiceError("Enter a valid phone number.", 400);
   }
 }
 
@@ -109,6 +128,7 @@ export const authService = {
   async registerUser(input: RegisterUserInput) {
     const displayName = input.displayName.trim();
     const email = normalizeEmail(input.email);
+    const phoneNumber = normalizePhoneNumber(input.phoneNumber ?? "");
     const password = input.password;
 
     if (!password) {
@@ -117,6 +137,7 @@ export const authService = {
 
     validateDisplayName(displayName);
     validateEmail(email);
+    validatePhoneNumber(phoneNumber);
     validatePassword(password);
 
     const passwordHash = await hash(password, 12);
@@ -133,6 +154,7 @@ export const authService = {
           },
           data: {
             displayName,
+            phoneNumber: phoneNumber || null,
             passwordHash
           }
         })
@@ -140,6 +162,7 @@ export const authService = {
           data: {
             email,
             displayName,
+            phoneNumber: phoneNumber || null,
             passwordHash
           }
         });
@@ -147,7 +170,8 @@ export const authService = {
     return {
       id: user.id,
       email: user.email,
-      displayName: user.displayName
+      displayName: user.displayName,
+      phoneNumber: user.phoneNumber
     };
   }
 };

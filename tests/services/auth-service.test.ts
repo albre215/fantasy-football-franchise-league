@@ -28,19 +28,22 @@ describe("authService.registerUser", () => {
       id: "user-1",
       email: data.email,
       displayName: data.displayName,
+      phoneNumber: data.phoneNumber,
       passwordHash: data.passwordHash
     }));
 
     const user = await authService.registerUser({
       displayName: "Ben Albrecht",
       email: "Ben@example.com",
+      phoneNumber: "(555) 111-2222",
       password: "safe-password"
     });
 
     expect(user).toEqual({
       id: "user-1",
       email: "ben@example.com",
-      displayName: "Ben Albrecht"
+      displayName: "Ben Albrecht",
+      phoneNumber: "(555) 111-2222"
     });
 
     const createArg = mockPrisma.user.create.mock.calls[0][0];
@@ -61,6 +64,7 @@ describe("authService.registerUser", () => {
         id: where.id,
         email: "ben@example.com",
         displayName: data.displayName,
+        phoneNumber: data.phoneNumber,
         passwordHash: data.passwordHash
       })
     );
@@ -68,6 +72,7 @@ describe("authService.registerUser", () => {
     const user = await authService.registerUser({
       displayName: "Ben Albrecht",
       email: "ben@example.com",
+      phoneNumber: "555-111-2222",
       password: "safe-password"
     });
 
@@ -88,6 +93,7 @@ describe("authService.registerUser", () => {
       authService.registerUser({
         displayName: "Ben Albrecht",
         email: "ben@example.com",
+        phoneNumber: "",
         password: "safe-password"
       })
     ).rejects.toMatchObject<AuthServiceError>({
@@ -111,6 +117,7 @@ describe("authService.registerUser", () => {
       authService.registerUser({
         displayName: "Ben Albrecht",
         email: "ben@example.com",
+        phoneNumber: "",
         password: "safe-password"
       })
     ).rejects.toMatchObject<AuthServiceError>({
@@ -125,10 +132,25 @@ describe("authService.registerUser", () => {
       authService.registerUser({
         displayName: "Ben Albrecht",
         email: "ben@example.com",
+        phoneNumber: "",
         password: "a".repeat(73)
       })
     ).rejects.toMatchObject<AuthServiceError>({
       message: "Password must be 72 bytes or fewer to avoid bcrypt truncation.",
+      statusCode: 400
+    });
+  });
+
+  it("rejects invalid phone numbers", async () => {
+    await expect(
+      authService.registerUser({
+        displayName: "Ben Albrecht",
+        email: "ben@example.com",
+        phoneNumber: "abc123",
+        password: "safe-password"
+      })
+    ).rejects.toMatchObject<AuthServiceError>({
+      message: "Enter a valid phone number.",
       statusCode: 400
     });
   });

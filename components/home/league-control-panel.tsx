@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Info } from "lucide-react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -34,10 +35,15 @@ export function LeagueControlPanel() {
   const [leagues, setLeagues] = useState<LeagueListItem[]>([]);
   const [leagueName, setLeagueName] = useState("");
   const [joinLeagueId, setJoinLeagueId] = useState("");
+  const [registerFirstName, setRegisterFirstName] = useState("");
+  const [registerLastName, setRegisterLastName] = useState("");
   const [registerDisplayName, setRegisterDisplayName] = useState("");
   const [registerEmail, setRegisterEmail] = useState("");
+  const [registerPhoneNumber, setRegisterPhoneNumber] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
-  const [showRegistration, setShowRegistration] = useState(false);
+  const [registerConfirmPassword, setRegisterConfirmPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"sign-in" | "register">("sign-in");
+  const [hasManuallyEditedDisplayName, setHasManuallyEditedDisplayName] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -47,6 +53,19 @@ export function LeagueControlPanel() {
     () => [...leagues].sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
     [leagues]
   );
+  const registerDisplayNameValue = registerDisplayName.trim();
+  const registerPasswordsMatch = registerPassword === registerConfirmPassword;
+  const registerPasswordMismatch =
+    registerPassword.length > 0 && registerConfirmPassword.length > 0 && !registerPasswordsMatch;
+
+  useEffect(() => {
+    if (hasManuallyEditedDisplayName) {
+      return;
+    }
+
+    const derivedDisplayName = [registerFirstName.trim(), registerLastName.trim()].filter(Boolean).join(" ");
+    setRegisterDisplayName(derivedDisplayName);
+  }, [hasManuallyEditedDisplayName, registerFirstName, registerLastName]);
 
   useEffect(() => {
     let isActive = true;
@@ -190,6 +209,12 @@ export function LeagueControlPanel() {
     event.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
+
+    if (registerPasswordMismatch) {
+      setErrorMessage("Confirm password must match password.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -199,8 +224,9 @@ export function LeagueControlPanel() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          displayName: registerDisplayName,
+          displayName: registerDisplayNameValue,
           email: registerEmail,
+          phoneNumber: registerPhoneNumber,
           password: registerPassword
         })
       });
@@ -217,8 +243,14 @@ export function LeagueControlPanel() {
       }
 
       setRegisterDisplayName("");
+      setRegisterFirstName("");
+      setRegisterLastName("");
       setRegisterEmail("");
+      setRegisterPhoneNumber("");
       setRegisterPassword("");
+      setRegisterConfirmPassword("");
+      setHasManuallyEditedDisplayName(false);
+      setAuthMode("sign-in");
       setSuccessMessage("Account created and signed in.");
       router.refresh();
     } catch (error) {
@@ -266,6 +298,28 @@ export function LeagueControlPanel() {
 
   const isAuthenticated = status === "authenticated" && Boolean(session?.user?.id);
 
+  function AuthFieldLabel({
+    htmlFor,
+    label,
+    tooltip
+  }: {
+    htmlFor: string;
+    label: string;
+    tooltip?: string;
+  }) {
+    return (
+      <label className="flex items-center gap-1.5 text-sm font-medium text-foreground" htmlFor={htmlFor}>
+        <span>{label}</span>
+        {tooltip ? (
+          <span className="inline-flex items-center text-muted-foreground" title={tooltip}>
+            <Info className="h-4 w-4" />
+            <span className="sr-only">{tooltip}</span>
+          </span>
+        ) : null}
+      </label>
+    );
+  }
+
   return (
     <section
       className={
@@ -280,85 +334,184 @@ export function LeagueControlPanel() {
             <CardContent className="p-6 text-sm text-muted-foreground">Loading authentication state...</CardContent>
           </Card>
         ) : !isAuthenticated ? (
-          <>
-            <Card className="border-border/70 bg-card/90">
-              <CardHeader>
-                <CardTitle>Sign In</CardTitle>
-                <CardDescription>Use your email and password to access your league workspace.</CardDescription>
-              </CardHeader>
-              <CardContent>
+          <Card className="border-border/70 bg-card/90">
+            <CardHeader>
+              <CardTitle>{authMode === "sign-in" ? "Sign In" : "Create Account"}</CardTitle>
+              <CardDescription>
+                {authMode === "sign-in"
+                  ? "Use your email and password to access your league workspace."
+                  : "Create an account for league access. If a commissioner already added your email, registration will claim that existing user record."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {authMode === "sign-in" ? (
                 <form className="space-y-4" onSubmit={handleLogin}>
-                  <Input
-                    onChange={(event) => setLoginEmail(event.target.value)}
-                    placeholder="Email"
-                    type="email"
-                    value={loginEmail}
-                  />
-                  <Input
-                    onChange={(event) => setLoginPassword(event.target.value)}
-                    placeholder="Password"
-                    type="password"
-                    value={loginPassword}
-                  />
+                  <div className="space-y-2">
+                    <AuthFieldLabel htmlFor="login-email" label="Email" />
+                    <Input
+                      id="login-email"
+                      onChange={(event) => setLoginEmail(event.target.value)}
+                      placeholder="you@example.com"
+                      type="email"
+                      value={loginEmail}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <AuthFieldLabel htmlFor="login-password" label="Password" />
+                    <Input
+                      id="login-password"
+                      onChange={(event) => setLoginPassword(event.target.value)}
+                      placeholder="Password"
+                      type="password"
+                      value={loginPassword}
+                    />
+                  </div>
                   <Button disabled={isSubmitting || !loginEmail.trim() || !loginPassword} type="submit">
                     Sign In
                   </Button>
                 </form>
-              </CardContent>
-              <CardFooter className="flex flex-col items-start gap-3 border-t border-border/60 pt-5">
-                <button
-                  className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
-                  onClick={() => setShowRegistration((current) => !current)}
-                  type="button"
-                >
-                  {showRegistration ? "Hide account creation" : "Create an account"}
-                </button>
-                <p className="text-sm text-muted-foreground">
-                  New to the league? Create an account and then sign in with it here.
-                </p>
-              </CardFooter>
-            </Card>
-
-            {showRegistration ? (
-              <Card className="border-border/70 bg-card/90">
-                <CardHeader>
-                  <CardTitle>Create Account</CardTitle>
-                  <CardDescription>
-                    Register a real account. If a commissioner already added your email to a league, registration will
-                    claim that existing user record.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form className="space-y-4" onSubmit={handleRegister}>
+              ) : (
+                <form className="space-y-4" onSubmit={handleRegister}>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <AuthFieldLabel htmlFor="register-first-name" label="First name" />
+                      <Input
+                        id="register-first-name"
+                        onChange={(event) => setRegisterFirstName(event.target.value)}
+                        placeholder="First name"
+                        value={registerFirstName}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <AuthFieldLabel htmlFor="register-last-name" label="Last name" />
+                      <Input
+                        id="register-last-name"
+                        onChange={(event) => setRegisterLastName(event.target.value)}
+                        placeholder="Last name"
+                        value={registerLastName}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <AuthFieldLabel htmlFor="register-display-name" label="Display name" />
                     <Input
-                      onChange={(event) => setRegisterDisplayName(event.target.value)}
-                      placeholder="Display name"
+                      id="register-display-name"
+                      onChange={(event) => {
+                        setHasManuallyEditedDisplayName(true);
+                        setRegisterDisplayName(event.target.value);
+                      }}
+                      placeholder="Display name shown in league views"
                       value={registerDisplayName}
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <AuthFieldLabel
+                      htmlFor="register-email"
+                      label="Email"
+                      tooltip="This email is used for sign-in, verification, and password recovery."
+                    />
                     <Input
+                      id="register-email"
                       onChange={(event) => setRegisterEmail(event.target.value)}
-                      placeholder="Email"
+                      placeholder="you@example.com"
                       type="email"
                       value={registerEmail}
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <AuthFieldLabel
+                      htmlFor="register-phone-number"
+                      label="Phone number"
+                      tooltip="This phone number can be used for two-factor verification and password recovery."
+                    />
                     <Input
+                      id="register-phone-number"
+                      onChange={(event) => setRegisterPhoneNumber(event.target.value)}
+                      placeholder="Optional phone number"
+                      type="tel"
+                      value={registerPhoneNumber}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <AuthFieldLabel htmlFor="register-password" label="Password" />
+                    <Input
+                      id="register-password"
                       onChange={(event) => setRegisterPassword(event.target.value)}
                       placeholder="Password"
                       type="password"
                       value={registerPassword}
                     />
-                    <Button
-                      disabled={isSubmitting || !registerDisplayName.trim() || !registerEmail.trim() || !registerPassword}
-                      type="submit"
-                      variant="secondary"
-                    >
-                      Create Account
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-            ) : null}
-          </>
+                  </div>
+                  <div className="space-y-2">
+                    <AuthFieldLabel htmlFor="register-confirm-password" label="Confirm password" />
+                    <Input
+                      id="register-confirm-password"
+                      onChange={(event) => setRegisterConfirmPassword(event.target.value)}
+                      placeholder="Confirm password"
+                      type="password"
+                      value={registerConfirmPassword}
+                    />
+                    {registerPasswordMismatch ? (
+                      <p className="text-sm text-red-600">Confirm password must match password.</p>
+                    ) : null}
+                  </div>
+                  <Button
+                    disabled={
+                      isSubmitting ||
+                      !registerFirstName.trim() ||
+                      !registerLastName.trim() ||
+                      !registerDisplayNameValue ||
+                      !registerEmail.trim() ||
+                      !registerPassword ||
+                      !registerConfirmPassword ||
+                      registerPasswordMismatch
+                    }
+                    type="submit"
+                    variant="secondary"
+                  >
+                    Create Account
+                  </Button>
+                </form>
+              )}
+            </CardContent>
+            <CardFooter className="flex flex-col items-start gap-3 border-t border-border/60 pt-5">
+              {authMode === "sign-in" ? (
+                <>
+                  <button
+                    className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                    onClick={() => {
+                      setErrorMessage(null);
+                      setSuccessMessage(null);
+                      setAuthMode("register");
+                    }}
+                    type="button"
+                  >
+                    Create an account
+                  </button>
+                  <p className="text-sm text-muted-foreground">
+                    New to the league? Create an account and then sign in with it here.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                    onClick={() => {
+                      setErrorMessage(null);
+                      setSuccessMessage(null);
+                      setAuthMode("sign-in");
+                    }}
+                    type="button"
+                  >
+                    Already have an account? Sign in
+                  </button>
+                  <p className="text-sm text-muted-foreground">
+                    Return to sign in with an existing account.
+                  </p>
+                </>
+              )}
+            </CardFooter>
+          </Card>
         ) : (
           <>
             <Card className="border-border/70 bg-card/90">
