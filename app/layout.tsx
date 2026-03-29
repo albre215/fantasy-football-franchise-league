@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 
 import "@/app/globals.css";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
+import { ScrollStabilityProvider } from "@/components/providers/scroll-stability-provider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -22,7 +23,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AuthSessionProvider>{children}</AuthSessionProvider>
+        <AuthSessionProvider>
+          <ScrollStabilityProvider>{children}</ScrollStabilityProvider>
+        </AuthSessionProvider>
       </body>
     </html>
   );

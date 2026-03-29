@@ -49,32 +49,109 @@ function formatSeasonLabel(season: { year: number; name: string | null }) {
   return season.name ?? `${season.year} Season`;
 }
 
-async function preserveScrollPosition<T>(run: () => Promise<T>) {
+async function preserveScrollPosition<T>(run: () => Promise<T>, anchorId?: string) {
   if (typeof window === "undefined") {
     return run();
   }
 
+  const activeElement =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const activeAnchor = anchorId
+    ? document.querySelector<HTMLElement>(`[data-scroll-anchor-id="${anchorId}"]`)
+    : activeElement?.closest<HTMLElement>("[data-scroll-anchor-id]") ?? null;
+  const anchorSnapshot = activeAnchor
+    ? {
+        id: activeAnchor.dataset.scrollAnchorId ?? "",
+        top: activeAnchor.getBoundingClientRect().top
+      }
+    : null;
   const scrollX = window.scrollX;
   const scrollY = window.scrollY;
-  const result = await run();
+  let isFinished = false;
+  let trailingFrames = 12;
+  let animationFrameId = 0;
+  let userInterrupted = false;
 
-  requestAnimationFrame(() => {
-    window.scrollTo({
-      left: scrollX,
-      top: scrollY,
-      behavior: "auto"
-    });
+  activeElement?.blur();
 
-    requestAnimationFrame(() => {
+  function restorePosition() {
+    if (userInterrupted) {
+      return;
+    }
+
+    const anchorTarget =
+      anchorSnapshot?.id
+        ? document.querySelector<HTMLElement>(`[data-scroll-anchor-id="${anchorSnapshot.id}"]`)
+        : null;
+
+    if (anchorSnapshot && anchorTarget) {
+      const nextTop = anchorTarget.getBoundingClientRect().top;
+      const delta = nextTop - anchorSnapshot.top;
+
+      window.scrollTo({
+        left: scrollX,
+        top: scrollY + delta,
+        behavior: "auto"
+      });
+    } else {
       window.scrollTo({
         left: scrollX,
         top: scrollY,
         behavior: "auto"
       });
-    });
-  });
+    }
 
-  return result;
+    if (!isFinished || trailingFrames > 0) {
+      if (isFinished) {
+        trailingFrames -= 1;
+      }
+
+      animationFrameId = requestAnimationFrame(restorePosition);
+    }
+  }
+
+  function interruptPreservation() {
+    userInterrupted = true;
+
+    if (animationFrameId) {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = 0;
+    }
+  }
+
+  function handleUserScrollIntent(event: KeyboardEvent | WheelEvent | TouchEvent) {
+    if (event instanceof KeyboardEvent) {
+      if (!["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) {
+        return;
+      }
+    }
+
+    interruptPreservation();
+  }
+
+  window.addEventListener("wheel", handleUserScrollIntent, { passive: true });
+  window.addEventListener("touchmove", handleUserScrollIntent, { passive: true });
+  window.addEventListener("keydown", handleUserScrollIntent);
+  animationFrameId = requestAnimationFrame(restorePosition);
+
+  try {
+    return await run();
+  } catch (error) {
+    throw error;
+  } finally {
+    isFinished = true;
+
+    const cleanup = () => {
+      window.removeEventListener("wheel", handleUserScrollIntent);
+      window.removeEventListener("touchmove", handleUserScrollIntent);
+      window.removeEventListener("keydown", handleUserScrollIntent);
+      if (!userInterrupted && animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+
+    setTimeout(cleanup, 250);
+  }
 }
 
 export function OffseasonDraftPanel({
@@ -376,9 +453,11 @@ export function OffseasonDraftPanel({
     onStartSubmit();
 
     try {
-      await run();
-      onSuccess(successMessage);
-      await preserveScrollPosition(onRefresh);
+      await preserveScrollPosition(async () => {
+        await run();
+        onSuccess(successMessage);
+        await onRefresh();
+      }, "draft-controls");
     } catch (error) {
       onError(error instanceof Error ? error.message : "Request failed.");
     } finally {
@@ -391,42 +470,47 @@ export function OffseasonDraftPanel({
       return;
     }
 
-    setKeeperFeedbackByOwner((current) => ({
-      ...current,
-      [leagueMemberId]: undefined
-    }));
-    setPendingSavedKeeperSelectionsByOwner((current) => ({
-      ...current,
-      [leagueMemberId]: keeperSelectionsByOwner[leagueMemberId] ?? []
-    }));
-    setSavingKeeperOwners((current) => ({
-      ...current,
-      [leagueMemberId]: true
-    }));
-
     try {
-      const response = await fetch(`/api/season/${activeSeason.id}/draft/keepers`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          draftId: draftState.draft.id,
-          leagueMemberId,
-          nflTeamIds: keeperSelectionsByOwner[leagueMemberId] ?? []
-        })
-      });
-
-      await parseJsonResponse<SaveKeepersResponse>(response);
-      setDirtyKeeperOwners((current) => ({
-        ...current,
-        [leagueMemberId]: false
-      }));
       setKeeperFeedbackByOwner((current) => ({
         ...current,
         [leagueMemberId]: undefined
       }));
-      await preserveScrollPosition(onRefresh);
+      await preserveScrollPosition(
+        async () => {
+          setPendingSavedKeeperSelectionsByOwner((current) => ({
+            ...current,
+            [leagueMemberId]: keeperSelectionsByOwner[leagueMemberId] ?? []
+          }));
+          setSavingKeeperOwners((current) => ({
+            ...current,
+            [leagueMemberId]: true
+          }));
+
+          const response = await fetch(`/api/season/${activeSeason.id}/draft/keepers`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              draftId: draftState.draft.id,
+              leagueMemberId,
+              nflTeamIds: keeperSelectionsByOwner[leagueMemberId] ?? []
+            })
+          });
+
+          await parseJsonResponse<SaveKeepersResponse>(response);
+          setDirtyKeeperOwners((current) => ({
+            ...current,
+            [leagueMemberId]: false
+          }));
+          setKeeperFeedbackByOwner((current) => ({
+            ...current,
+            [leagueMemberId]: undefined
+          }));
+          await onRefresh();
+        },
+        `keeper-${leagueMemberId}`
+      );
     } catch (error) {
       setKeeperFeedbackByOwner((current) => ({
         ...current,
@@ -690,7 +774,11 @@ export function OffseasonDraftPanel({
                       }
 
                       return (
-                        <div className="rounded-lg border border-border p-4" key={member.leagueMemberId}>
+                        <div
+                          className="rounded-lg border border-border p-4"
+                          data-scroll-anchor-id={`keeper-${member.leagueMemberId}`}
+                          key={member.leagueMemberId}
+                        >
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                               <p className="font-medium text-foreground">{member.displayName}</p>
@@ -816,12 +904,12 @@ export function OffseasonDraftPanel({
               </div>
 
               <div className="space-y-6">
-                <Card>
+                <Card data-scroll-anchor-id="draft-controls">
                   <CardHeader>
                     <CardTitle>Draft Pool</CardTitle>
                     <CardDescription>Teams currently available to be drafted.</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-2">
+                  <CardContent className="space-y-2 lg:min-h-[44rem]">
                     {draftState.draftPool.length === 0 ? (
                       <p className="text-sm text-muted-foreground">Draft pool is empty.</p>
                     ) : (

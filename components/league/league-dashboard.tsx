@@ -116,7 +116,6 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       }
 
       const seasonId = bootstrapData.bootstrapState.activeSeason.id;
-      setDraftState(null);
       try {
         const ownershipResponse = await fetch(`/api/season/${seasonId}/ownership`, { cache: "no-store" });
         const ownershipData = await parseJsonResponse<SeasonOwnershipResponse>(ownershipResponse);
@@ -580,9 +579,11 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
         </div>
 
         {(errorMessage || successMessage) && (
-          <Card className={errorMessage ? "bg-red-50" : "bg-emerald-50"}>
-            <CardContent className="p-4 text-sm">{errorMessage ?? successMessage}</CardContent>
-          </Card>
+          <div className="pointer-events-none fixed right-6 top-6 z-50 w-full max-w-md">
+            <Card className={errorMessage ? "border-red-200 bg-red-50 shadow-lg" : "border-emerald-200 bg-emerald-50 shadow-lg"}>
+              <CardContent className="p-4 text-sm">{errorMessage ?? successMessage}</CardContent>
+            </Card>
+          </div>
         )}
 
         {!bootstrapState && !errorMessage && (
@@ -763,7 +764,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
               accessMessage={commissionerAccessMessage}
               canManageDraft={canManageLeague}
               draftState={draftState}
-              isDraftStateLoading={isLoading && hasActiveSeason}
+              isDraftStateLoading={isLoading && hasActiveSeason && !draftState}
               isSubmitting={isSubmitting}
               leagueId={leagueId}
               members={members}
