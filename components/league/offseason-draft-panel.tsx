@@ -847,7 +847,7 @@ export function OffseasonDraftPanel({
                           </div>
                           {member.draftedTeam && (
                             <p className="mt-3 text-sm text-muted-foreground">
-                              Drafted team: {member.draftedTeam.abbreviation} - {member.draftedTeam.name}
+                              Drafted team added. Final roster complete.
                             </p>
                           )}
                         </div>

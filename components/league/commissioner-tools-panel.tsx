@@ -438,19 +438,17 @@ export function CommissionerToolsPanel({
       {showStateSection ? (
       <Card>
         <CardHeader>
-          <CardTitle>Commissioner State</CardTitle>
-          <CardDescription>Read-only visibility into the current season, draft source, standings, and ownership state.</CardDescription>
+          <CardTitle>Current State</CardTitle>
+          <CardDescription>Single source of truth for the current operational state of the active season.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2 xl:grid-cols-3">
-          <p>Active season: {seasonLabel(activeSeason)}</p>
-          <p>Previous season: {seasonLabel(previousSeason)}</p>
+        <CardContent className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
+          <p>Assigned teams: {assignedTeamCount} / 30</p>
           <p>Final standings saved: {results?.availability.hasFinalStandings ? "Yes" : "No"}</p>
           <p>Draft exists: {draftState ? "Yes" : "No"}</p>
           <p>Draft status: {draftState?.draft.status ?? "No draft"}</p>
-          <p>Ownership finalized: {ownershipFinalized ? "Yes" : "No"}</p>
-          <p>Assigned teams: {assignedTeamCount} / 30</p>
-          <p>Recommended draft order ready: {results?.availability.isReadyForDraftOrderAutomation ? "Yes" : "No"}</p>
           <p>Target season locked: {activeSeason?.isLocked ? "Yes" : "No"}</p>
+          <p>Ownership finalized: {ownershipFinalized ? "Yes" : "No"}</p>
+          <p>Recommended draft order ready: {results?.availability.isReadyForDraftOrderAutomation ? "Yes" : "No"}</p>
         </CardContent>
       </Card>
       ) : null}
