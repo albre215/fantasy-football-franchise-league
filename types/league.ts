@@ -8,6 +8,7 @@ export interface LeagueListItem {
   createdAt: string;
   memberCount: number;
   seasonCount: number;
+  currentUserRole?: "COMMISSIONER" | "OWNER";
 }
 
 export interface LeagueMemberSummary {

@@ -360,6 +360,55 @@ export const leagueService = {
     }));
   },
 
+  async listLeaguesForUser(userId: string): Promise<LeagueListItem[]> {
+    const normalizedUserId = userId.trim();
+
+    if (!normalizedUserId) {
+      throw new LeagueServiceError("A userId is required.", 400);
+    }
+
+    const leagues = await prisma.league.findMany({
+      where: {
+        members: {
+          some: {
+            userId: normalizedUserId
+          }
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      },
+      include: {
+        members: {
+          where: {
+            userId: normalizedUserId
+          },
+          select: {
+            role: true
+          },
+          take: 1
+        },
+        _count: {
+          select: {
+            members: true,
+            seasons: true
+          }
+        }
+      }
+    });
+
+    return leagues.map((league) => ({
+      id: league.id,
+      name: league.name,
+      slug: league.slug,
+      description: league.description,
+      createdAt: league.createdAt.toISOString(),
+      memberCount: league._count.members,
+      seasonCount: league._count.seasons,
+      currentUserRole: league.members[0]?.role
+    }));
+  },
+
   async joinLeague(input: JoinLeagueInput) {
     const leagueId = input.leagueId.trim();
 

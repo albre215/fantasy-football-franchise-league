@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Info } from "lucide-react";
+import { Crown, Info } from "lucide-react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -57,6 +57,7 @@ export function LeagueControlPanel() {
   const registerPasswordsMatch = registerPassword === registerConfirmPassword;
   const registerPasswordMismatch =
     registerPassword.length > 0 && registerConfirmPassword.length > 0 && !registerPasswordsMatch;
+  const isAuthenticated = status === "authenticated" && Boolean(session?.user?.id);
 
   useEffect(() => {
     if (hasManuallyEditedDisplayName) {
@@ -68,6 +69,12 @@ export function LeagueControlPanel() {
   }, [hasManuallyEditedDisplayName, registerFirstName, registerLastName]);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setLeagues([]);
+      setIsLoading(false);
+      return;
+    }
+
     let isActive = true;
 
     void (async () => {
@@ -94,7 +101,7 @@ export function LeagueControlPanel() {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [isAuthenticated]);
 
   async function handleCreateLeague(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -124,7 +131,8 @@ export function LeagueControlPanel() {
           description: data.league.description,
           createdAt: data.league.createdAt,
           memberCount: data.league.members.length,
-          seasonCount: data.league.seasons.length
+          seasonCount: data.league.seasons.length,
+          currentUserRole: "COMMISSIONER"
         },
         ...current.filter((league) => league.id !== data.league.id)
       ]);
@@ -178,7 +186,8 @@ export function LeagueControlPanel() {
             description: data.league.description,
             createdAt: data.league.createdAt,
             memberCount: data.league.members.length,
-            seasonCount: data.league.seasons.length
+            seasonCount: data.league.seasons.length,
+            currentUserRole: "OWNER"
           },
           ...nextLeagues
         ];
@@ -295,8 +304,6 @@ export function LeagueControlPanel() {
       callbackUrl: "/"
     });
   }
-
-  const isAuthenticated = status === "authenticated" && Boolean(session?.user?.id);
 
   function AuthFieldLabel({
     htmlFor,
@@ -516,24 +523,6 @@ export function LeagueControlPanel() {
           <>
             <Card className="border-border/70 bg-card/90">
               <CardHeader>
-                <CardTitle>Signed In</CardTitle>
-                <CardDescription>Commissioner and owner actions now run under your authenticated account.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm text-muted-foreground">
-                <p>{session.user.displayName}</p>
-                <p>{session.user.email}</p>
-              </CardContent>
-              <CardFooter className="flex flex-wrap gap-3">
-                <Link className={buttonVariants({ variant: "secondary" })} href="/me">
-                  My Dashboard
-                </Link>
-                <Button onClick={() => void handleSignOut()} type="button" variant="outline">
-                  Sign Out
-                </Button>
-              </CardFooter>
-            </Card>
-            <Card className="border-border/70 bg-card/90">
-              <CardHeader>
                 <CardTitle>Create League</CardTitle>
                 <CardDescription>Create a league and make your authenticated user the commissioner.</CardDescription>
               </CardHeader>
@@ -579,23 +568,31 @@ export function LeagueControlPanel() {
       {isAuthenticated ? (
         <Card className="border-border/70 bg-card/90">
           <CardHeader>
-            <CardTitle>Leagues</CardTitle>
-            <CardDescription>League records currently available in the system.</CardDescription>
+            <CardTitle>My Leagues</CardTitle>
+            <CardDescription>Leagues where you are a commissioner or member.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {isLoading ? (
               <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
-                Loading leagues...
+                Loading your leagues...
               </div>
             ) : sortedLeagues.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
-                No leagues exist yet.
+                You are not a member of any leagues yet.
               </div>
             ) : (
               sortedLeagues.map((league) => (
                 <Card key={league.id} className="border-border/70 shadow-none">
                   <CardHeader>
-                    <CardTitle className="text-lg">{league.name}</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-lg">{league.name}</CardTitle>
+                      {league.currentUserRole === "COMMISSIONER" ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
+                          <Crown className="h-3.5 w-3.5" />
+                          Commissioner
+                        </span>
+                      ) : null}
+                    </div>
                     <CardDescription>{league.description ?? "No description provided yet."}</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm text-muted-foreground">
@@ -607,14 +604,6 @@ export function LeagueControlPanel() {
                     <Link className={buttonVariants({ variant: "outline" })} href={`/league?leagueId=${league.id}`}>
                       View Dashboard
                     </Link>
-                    <Button
-                      disabled={isSubmitting}
-                      onClick={() => void handleJoinLeague(league.id)}
-                      type="button"
-                      variant="secondary"
-                    >
-                      Join League
-                    </Button>
                   </CardFooter>
                 </Card>
               ))
