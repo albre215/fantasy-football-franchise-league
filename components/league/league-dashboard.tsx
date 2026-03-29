@@ -35,6 +35,9 @@ interface LeagueDashboardProps {
   leagueId?: string;
 }
 
+type DashboardTab = "overview" | "seasons" | "members" | "ownership" | "results-draft" | "history-analytics";
+type ResultsDraftTab = "final-standings" | "draft-order" | "offseason-draft" | "commissioner-overrides";
+
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   const payload = (await response.json()) as T & { error?: string };
 
@@ -65,6 +68,8 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
+  const [activeResultsDraftTab, setActiveResultsDraftTab] = useState<ResultsDraftTab>("offseason-draft");
 
   const activeSeason = bootstrapState?.activeSeason ?? null;
   const members = bootstrapState?.members ?? [];
@@ -562,6 +567,19 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   const hasActiveSeason = Boolean(activeSeason);
   const isLocked = Boolean(activeSeason?.isLocked);
   const lockState = bootstrapState?.lockReadiness.state ?? "NOT_READY";
+  const nextActionMessage = !hasActiveSeason
+    ? "Create or activate a season to begin commissioner workflows."
+    : commissionerAccessMessage
+    ? commissionerAccessMessage
+    : !bootstrapState?.lockReadiness.hasExactlyTenMembers
+    ? "Add league members until the season has all 10 owners."
+    : !bootstrapState.lockReadiness.hasThirtyAssignedTeams
+    ? "Finish assigning active-season team ownership before locking the season."
+    : draftState && draftState.draft.status === "PLANNING"
+    ? "Complete keepers and review draft order to continue the offseason workflow."
+    : bootstrapState.lockReadiness.isReadyToLock && !isLocked
+    ? "The active season is structurally ready. Lock it when you are done correcting setup."
+    : "Use the tabs to manage this league's current operational state.";
 
   return (
     <main className="container py-12">
@@ -642,413 +660,598 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
               </Card>
             ) : null}
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Season Management</CardTitle>
-                <CardDescription>
-                  Create seasons, pick the current active season, and keep bootstrap work focused on that season only.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-                <div className="space-y-4">
-                  <form className="space-y-4" onSubmit={handleCreateSeason}>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium" htmlFor="season-year">
-                        Create New Season
-                      </label>
-                      <Input
-                        id="season-year"
-                        inputMode="numeric"
-                        onChange={(event) => setSeasonYear(event.target.value)}
-                        placeholder="Season year"
-                        value={seasonYear}
-                      />
-                      <Input
-                        onChange={(event) => setSeasonName(event.target.value)}
-                        placeholder="Optional season name"
-                        value={seasonName}
-                      />
-                    </div>
-                    <Button disabled={isSubmitting || !canManageLeague} type="submit">
-                      Create Season
-                    </Button>
-                  </form>
-
-                  <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
-                    {hasActiveSeason
-                      ? `Active season: ${activeSeason?.name ?? activeSeason?.year} - ${isLocked ? "Locked" : "Open"}`
-                      : "Create or activate a season first. All bootstrap actions run against the active season only."}
-                  </div>
-                  {hasActiveSeason && (
-                    <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                      Only the commissioner can lock or unlock the season under the authenticated workflow.
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-3">
-                  {seasons.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                      No seasons exist yet.
-                    </div>
-                  ) : (
-                    seasons.map((season) => (
-                      <div
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4"
-                        key={season.id}
-                      >
-                        <div>
-                          <p className="font-medium text-foreground">{season.name ?? `${season.year} Season`}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {season.status} - {season.isLocked ? "Locked" : "Open"}
-                          </p>
-                          {editingSeasonId === season.id ? (
-                            <div className="mt-3 flex flex-wrap items-center gap-2">
-                              <Input
-                                className="w-32"
-                                inputMode="numeric"
-                                onChange={(event) => setEditingSeasonYear(event.target.value)}
-                                value={editingSeasonYear}
-                              />
-                              <Button
-                                disabled={isSubmitting || !canManageLeague || !editingSeasonYear.trim()}
-                                onClick={() => void handleUpdateSeasonYear(season.id)}
-                                type="button"
-                              >
-                                Save Year
-                              </Button>
-                              <Button
-                                disabled={isSubmitting}
-                                onClick={cancelSeasonYearEdit}
-                                type="button"
-                                variant="outline"
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          ) : (
-                            <p className="mt-2 text-xs text-muted-foreground">
-                              Need to correct the season year? Use Edit Year before relying on standings or draft order.
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          {editingSeasonId !== season.id ? (
-                            <Button
-                              disabled={isSubmitting || !canManageLeague}
-                              onClick={() => startSeasonYearEdit(season.id, season.year)}
-                              type="button"
-                              variant="outline"
-                            >
-                              Edit Year
-                            </Button>
-                          ) : null}
-                          <Button
-                            disabled={isSubmitting || season.status === "ACTIVE" || !canManageLeague}
-                            onClick={() => void handleSetActiveSeason(season.id)}
-                            type="button"
-                            variant={season.status === "ACTIVE" ? "secondary" : "outline"}
-                          >
-                            {season.status === "ACTIVE" ? "Active Season" : "Set Active"}
-                          </Button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            <OffseasonDraftPanel
-              activeSeason={activeSeason}
-              accessMessage={commissionerAccessMessage}
-              canManageDraft={canManageLeague}
-              draftState={draftState}
-              isDraftStateLoading={isLoading && hasActiveSeason && !draftState}
-              isSubmitting={isSubmitting}
-              leagueId={leagueId}
-              members={members}
-              onEndSubmit={() => setIsSubmitting(false)}
-              onError={(message) => setErrorMessage(message || null)}
-              onRefresh={() => refreshLeagueDashboard(leagueId)}
-              onStartSubmit={() => {
-                setErrorMessage(null);
-                setSuccessMessage(null);
-                setIsSubmitting(true);
-              }}
-              onSuccess={(message) => setSuccessMessage(message || null)}
-              seasons={seasons}
-            />
-
-            <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Members Management</CardTitle>
-                  <CardDescription>
-                    Add league members manually, review their assignment counts, and remove only when safe.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <form className="grid gap-3 md:grid-cols-3" onSubmit={handleAddMember}>
-                    <Input
-                      onChange={(event) => setMemberDisplayName(event.target.value)}
-                      placeholder="Display name"
-                      value={memberDisplayName}
-                    />
-                    <Input
-                      onChange={(event) => setMemberEmail(event.target.value)}
-                      placeholder="Email"
-                      type="email"
-                      value={memberEmail}
-                    />
-                    <Button
-                      disabled={isSubmitting || !hasActiveSeason || isLocked || !memberDisplayName || !memberEmail || !canManageLeague}
-                      type="submit"
-                    >
-                      Add Member
-                    </Button>
-                  </form>
-
-                  {!hasActiveSeason && (
-                    <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                      Create or activate a season first. Member bootstrap is tied to the current active season.
-                    </div>
-                  )}
-
-                  <div className="space-y-3">
-                    {members.map((member) => (
-                      <div
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4"
-                        key={member.id}
-                      >
-                        <div>
-                          <p className="font-medium text-foreground">{member.displayName}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {member.email} - {member.role}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground">
-                            {member.assignmentCount}/3
-                          </span>
-                          <Button
-                            disabled={isSubmitting || !member.canRemove || !canManageLeague}
-                            onClick={() => void handleRemoveMember(member.id)}
-                            type="button"
-                            variant="outline"
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Team Assignment Workspace</CardTitle>
-                  <CardDescription>
-                    Assign available NFL teams to members for the active season.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {!hasActiveSeason ? (
-                    <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                      Create or activate a season first to assign NFL teams.
-                    </div>
-                  ) : (
-                    <>
-                      <form className="grid gap-3 md:grid-cols-3" onSubmit={handleAssignTeam}>
-                        <select
-                          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                          onChange={(event) => setSelectedOwnerId(event.target.value)}
-                          value={selectedOwnerId}
-                        >
-                          <option value="">Select member</option>
-                          {ownerSelectionOptions.map((owner) => (
-                            <option key={owner.leagueMemberId} value={owner.userId}>
-                              {owner.displayName} ({owner.teamCount}/3)
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                          onChange={(event) => setSelectedTeamId(event.target.value)}
-                          value={selectedTeamId}
-                        >
-                          <option value="">Select available NFL team</option>
-                          {availableTeams.map((team) => (
-                            <option key={team.id} value={team.id}>
-                              {team.abbreviation} - {team.name}
-                            </option>
-                          ))}
-                        </select>
-                        <Button
-                          disabled={isSubmitting || isLocked || !selectedOwnerId || !selectedTeamId || !canManageLeague}
-                          type="submit"
-                        >
-                          Assign Team
-                        </Button>
-                      </form>
-
-                      {isLocked && (
-                        <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                          Season Locked. Unlock the season to fix setup mistakes, then relock it.
-                        </div>
-                      )}
-                    </>
-                  )}
-                </CardContent>
-              </Card>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: "overview", label: "Overview" },
+                { id: "seasons", label: "Seasons" },
+                { id: "members", label: "Members" },
+                { id: "ownership", label: "Ownership" },
+                { id: "results-draft", label: "Results & Draft" },
+                { id: "history-analytics", label: "History & Analytics" }
+              ].map((tab) => (
+                <Button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as DashboardTab)}
+                  type="button"
+                  variant={activeTab === tab.id ? "default" : "outline"}
+                >
+                  {tab.label}
+                </Button>
+              ))}
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Ownership Table</CardTitle>
-                  <CardDescription>Member-to-team ownership for the active season.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {!hasActiveSeason ? (
-                    <p className="text-sm text-muted-foreground">No active season selected.</p>
-                  ) : ownershipError ? (
-                    <p className="text-sm text-red-600">{ownershipError}</p>
-                  ) : !seasonOwnership ? (
-                    <p className="text-sm text-muted-foreground">Unable to load active-season ownership.</p>
-                  ) : (
-                    ownershipOwners.map((owner) => (
-                        <div className="rounded-lg border border-border p-4" key={owner.leagueMemberId}>
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <p className="font-medium text-foreground">{owner.displayName}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {owner.role} - {owner.teamCount}/3 teams assigned
-                              </p>
-                            </div>
-                            <p className="text-sm text-muted-foreground">{owner.email}</p>
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {owner.teams.length > 0 ? (
-                              owner.teams.map((entry) => (
-                                <div
-                                  className="flex items-center gap-2 rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground"
-                                  key={entry.ownershipId}
-                                >
-                                  <span>{entry.team.abbreviation} - {entry.team.name}</span>
-                                  <Button
-                                    className="h-7 px-2"
-                                    disabled={isSubmitting || isLocked || !canManageLeague}
-                                    onClick={() => void handleRemoveTeam(entry.ownershipId, entry.team.name)}
-                                    type="button"
-                                    variant="ghost"
-                                  >
-                                    Remove Team
-                                  </Button>
-                                </div>
-                              ))
-                            ) : (
-                              <span className="text-sm text-muted-foreground">No NFL teams assigned.</span>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                  )}
-                </CardContent>
-              </Card>
+            {activeTab === "overview" ? (
+              <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+                <div className="space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>League Summary</CardTitle>
+                      <CardDescription>High-signal overview of the current league and active season.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
+                      <p>League: {bootstrapState.league.name}</p>
+                      <p>League ID: {bootstrapState.league.id}</p>
+                      <p>Active season: {activeSeason ? activeSeason.name ?? activeSeason.year : "None selected"}</p>
+                      <p>Commissioner: {bootstrapState.league.commissioner?.displayName ?? "Not assigned"}</p>
+                      <p>Members: {bootstrapState.memberCount} / 10</p>
+                      <p>Assigned teams: {bootstrapState.assignedTeamCount} / 30</p>
+                    </CardContent>
+                  </Card>
 
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Readiness & Blockers</CardTitle>
+                      <CardDescription>The quickest way to see what needs attention next.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-sm text-muted-foreground">
+                      <p>Season lock readiness: {bootstrapState.lockReadiness.isReadyToLock ? "Ready" : "Blocked"}</p>
+                      <p>Draft status: {draftState?.draft.status ?? "No offseason draft"}</p>
+                      <p>Ownership evenly assigned: {bootstrapState.everyMemberHasExactlyThreeTeams ? "Yes" : "No"}</p>
+                      <div className="rounded-lg border border-dashed border-border p-4">
+                        <p className="font-medium text-foreground">Next action</p>
+                        <p className="mt-1">{nextActionMessage}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <CommissionerToolsPanel
+                  activeSeason={activeSeason}
+                  accessMessage={commissionerAccessMessage}
+                  canManageLeague={canManageLeague}
+                  draftState={draftState}
+                  hideHeading
+                  members={members}
+                  onError={(message) => setErrorMessage(message || null)}
+                  onRefresh={() => refreshLeagueDashboard(leagueId)}
+                  onSuccess={(message) => setSuccessMessage(message || null)}
+                  seasonOwnership={seasonOwnership}
+                  seasons={seasons}
+                  visibleSections={["state"]}
+                />
+              </div>
+            ) : null}
+
+            {activeTab === "seasons" ? (
               <div className="space-y-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Unassigned Teams</CardTitle>
+                    <CardTitle>Season Management</CardTitle>
                     <CardDescription>
-                      These are the two teams that should remain unused when setup is complete.
+                      Create seasons, pick the current active season, and keep structural season setup focused here.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-2">
-                    {!hasActiveSeason ? (
-                      <p className="text-sm text-muted-foreground">No active season selected.</p>
-                    ) : ownershipError ? (
-                      <p className="text-sm text-red-600">{ownershipError}</p>
-                    ) : !seasonOwnership ? (
-                      <p className="text-sm text-muted-foreground">Unable to load active-season ownership.</p>
-                    ) : availableTeams.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No unassigned teams remain.</p>
-                    ) : (
-                      availableTeams.map((team) => (
-                        <div className="rounded-lg border border-border p-3 text-sm" key={team.id}>
-                          {team.abbreviation} - {team.name}
+                  <CardContent className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+                    <div className="space-y-4">
+                      <form className="space-y-4" onSubmit={handleCreateSeason}>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium" htmlFor="season-year">
+                            Create New Season
+                          </label>
+                          <Input
+                            id="season-year"
+                            inputMode="numeric"
+                            onChange={(event) => setSeasonYear(event.target.value)}
+                            placeholder="Season year"
+                            value={seasonYear}
+                          />
+                          <Input
+                            onChange={(event) => setSeasonName(event.target.value)}
+                            placeholder="Optional season name"
+                            value={seasonName}
+                          />
                         </div>
-                      ))
-                    )}
+                        <Button disabled={isSubmitting || !canManageLeague} type="submit">
+                          Create Season
+                        </Button>
+                      </form>
+
+                      <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
+                        {hasActiveSeason
+                          ? `Active season: ${activeSeason?.name ?? activeSeason?.year} - ${isLocked ? "Locked" : "Open"}`
+                          : "Create or activate a season first. All season-scoped workflows use the active season."}
+                      </div>
+                      {hasActiveSeason ? (
+                        <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                          Only the commissioner can lock or unlock the season under the authenticated workflow.
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="space-y-3">
+                      {seasons.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                          No seasons exist yet.
+                        </div>
+                      ) : (
+                        seasons.map((season) => (
+                          <div
+                            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4"
+                            key={season.id}
+                          >
+                            <div>
+                              <p className="font-medium text-foreground">{season.name ?? `${season.year} Season`}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {season.status} - {season.isLocked ? "Locked" : "Open"}
+                              </p>
+                              {editingSeasonId === season.id ? (
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
+                                  <Input
+                                    className="w-32"
+                                    inputMode="numeric"
+                                    onChange={(event) => setEditingSeasonYear(event.target.value)}
+                                    value={editingSeasonYear}
+                                  />
+                                  <Button
+                                    disabled={isSubmitting || !canManageLeague || !editingSeasonYear.trim()}
+                                    onClick={() => void handleUpdateSeasonYear(season.id)}
+                                    type="button"
+                                  >
+                                    Save Year
+                                  </Button>
+                                  <Button
+                                    disabled={isSubmitting}
+                                    onClick={cancelSeasonYearEdit}
+                                    type="button"
+                                    variant="outline"
+                                  >
+                                    Cancel
+                                  </Button>
+                                </div>
+                              ) : (
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                  Need to correct the season year? Use Edit Year before relying on standings or draft order.
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {editingSeasonId !== season.id ? (
+                                <Button
+                                  disabled={isSubmitting || !canManageLeague}
+                                  onClick={() => startSeasonYearEdit(season.id, season.year)}
+                                  type="button"
+                                  variant="outline"
+                                >
+                                  Edit Year
+                                </Button>
+                              ) : null}
+                              <Button
+                                disabled={isSubmitting || season.status === "ACTIVE" || !canManageLeague}
+                                onClick={() => void handleSetActiveSeason(season.id)}
+                                type="button"
+                                variant={season.status === "ACTIVE" ? "secondary" : "outline"}
+                              >
+                                {season.status === "ACTIVE" ? "Active Season" : "Set Active"}
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Season Setup & Readiness</CardTitle>
+                      <CardDescription>
+                        Use this checklist to get the active season structurally ready before locking it.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-sm">
+                      <p>
+                        Overall status:{" "}
+                        {lockState === "LOCKED"
+                          ? "Locked"
+                          : lockState === "READY_TO_LOCK"
+                          ? "Ready to Lock"
+                          : "Not Ready"}
+                      </p>
+                      <p>Active season exists: {bootstrapState.lockReadiness.hasActiveSeason ? "Pass" : "Fail"}</p>
+                      <p>10 members required: {bootstrapState.lockReadiness.hasExactlyTenMembers ? "Pass" : "Fail"}</p>
+                      <p>
+                        30 assigned teams required: {bootstrapState.lockReadiness.hasThirtyAssignedTeams ? "Pass" : "Fail"}
+                      </p>
+                      <p>2 unassigned teams required: {bootstrapState.lockReadiness.hasTwoUnassignedTeams ? "Pass" : "Fail"}</p>
+                      <p>
+                        Every member has exactly 3 teams:{" "}
+                        {bootstrapState.lockReadiness.everyMemberHasExactlyThreeTeams ? "Pass" : "Fail"}
+                      </p>
+                      <div className="rounded-lg border border-border p-3">
+                        {members.map((member) => (
+                          <p key={member.id}>
+                            {member.displayName}: {member.assignmentCount}/3 {member.assignmentCount === 3 ? "Pass" : "Fail"}
+                          </p>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Season Controls</CardTitle>
+                      <CardDescription>
+                        Lock and unlock the active season once setup is correct or when a correction is needed.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4 text-sm text-muted-foreground">
+                      <p>
+                        Active season: {activeSeason ? activeSeason.name ?? activeSeason.year : "None selected"}
+                      </p>
+                      <p>Current lock state: {isLocked ? "Locked" : "Open"}</p>
+                      <p>
+                        Commissioner-only action. Lock once members and ownership are complete, unlock only to correct mistakes.
+                      </p>
+                      <div className="flex flex-wrap gap-3">
+                        <Button
+                          disabled={isSubmitting || !bootstrapState.lockReadiness.isReadyToLock || isLocked || !canManageLeague}
+                          onClick={() => void handleLockSeason()}
+                          type="button"
+                          variant="secondary"
+                        >
+                          {isLocked ? "Season Locked" : "Lock Season"}
+                        </Button>
+                        <Button
+                          disabled={isSubmitting || !isLocked || !canManageLeague}
+                          onClick={() => void handleUnlockSeason()}
+                          type="button"
+                          variant="outline"
+                        >
+                          Unlock Season
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            ) : null}
+
+            {activeTab === "members" ? (
+              <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Members Management</CardTitle>
+                    <CardDescription>
+                      Add league members, review roles, and remove members only when it is safe to do so.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <form className="grid gap-3 md:grid-cols-3" onSubmit={handleAddMember}>
+                      <Input onChange={(event) => setMemberDisplayName(event.target.value)} placeholder="Display name" value={memberDisplayName} />
+                      <Input onChange={(event) => setMemberEmail(event.target.value)} placeholder="Email" type="email" value={memberEmail} />
+                      <Button
+                        disabled={isSubmitting || !hasActiveSeason || isLocked || !memberDisplayName || !memberEmail || !canManageLeague}
+                        type="submit"
+                      >
+                        Add Member
+                      </Button>
+                    </form>
+
+                    {!hasActiveSeason ? (
+                      <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                        Create or activate a season first. Member management is tied to the active season workflow.
+                      </div>
+                    ) : null}
+
+                    <div className="space-y-3">
+                      {members.map((member) => (
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4" key={member.id}>
+                          <div>
+                            <p className="font-medium text-foreground">{member.displayName}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {member.email} - {member.role}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground">
+                              {member.assignmentCount}/3
+                            </span>
+                            <Button
+                              disabled={isSubmitting || !member.canRemove || !canManageLeague}
+                              onClick={() => void handleRemoveMember(member.id)}
+                              type="button"
+                              variant="outline"
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Setup Validation Card</CardTitle>
-                    <CardDescription>
-                      Follow this checklist until the season is ready to lock.
-                    </CardDescription>
+                    <CardTitle>Membership Notes</CardTitle>
+                    <CardDescription>Keep league people management separate from season operations.</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-3 text-sm">
-                    <p>Overall status: {lockState === "LOCKED" ? "Locked" : lockState === "READY_TO_LOCK" ? "Ready to Lock" : "Not Ready"}</p>
-                    <p>Active season exists: {bootstrapState.lockReadiness.hasActiveSeason ? "Pass" : "Fail"}</p>
-                    <p>10 members required: {bootstrapState.lockReadiness.hasExactlyTenMembers ? "Pass" : "Fail"}</p>
-                    <p>30 assigned teams required: {bootstrapState.lockReadiness.hasThirtyAssignedTeams ? "Pass" : "Fail"}</p>
-                    <p>2 unassigned teams required: {bootstrapState.lockReadiness.hasTwoUnassignedTeams ? "Pass" : "Fail"}</p>
-                    <p>
-                      Every member has exactly 3 teams: {bootstrapState.lockReadiness.everyMemberHasExactlyThreeTeams ? "Pass" : "Fail"}
-                    </p>
-                    <div className="rounded-lg border border-border p-3">
-                      {members.map((member) => (
-                        <p key={member.id}>
-                          {member.displayName}: {member.assignmentCount}/3 {member.assignmentCount === 3 ? "Pass" : "Fail"}
-                        </p>
-                      ))}
+                  <CardContent className="space-y-3 text-sm text-muted-foreground">
+                    <p>Commissioner: {bootstrapState.league.commissioner?.displayName ?? "Not assigned"}</p>
+                    <p>Current signed-in role: {currentUserRole ?? "Not a league member"}</p>
+                    <p>League membership count: {bootstrapState.memberCount} / 10</p>
+                    <div className="rounded-lg border border-dashed border-border p-4">
+                      Add and remove members here before relying on season ownership, standings, or offseason draft workflows.
                     </div>
-                    <Button
-                      disabled={isSubmitting || !bootstrapState.lockReadiness.isReadyToLock || isLocked || !canManageLeague}
-                      onClick={() => void handleLockSeason()}
-                      type="button"
-                      variant="secondary"
-                    >
-                      {isLocked ? "Season Locked" : "Lock Season"}
-                    </Button>
-                    {isLocked && (
-                      <Button
-                        disabled={isSubmitting || !canManageLeague}
-                        onClick={() => void handleUnlockSeason()}
-                        type="button"
-                        variant="outline"
-                      >
-                        Unlock Season
-                      </Button>
-                    )}
-                    {!isLocked && (
-                      <p className="text-muted-foreground">
-                        This action is only available to the commissioner.
-                      </p>
-                    )}
                   </CardContent>
                 </Card>
               </div>
-            </div>
+            ) : null}
 
-            <CommissionerToolsPanel
-              activeSeason={activeSeason}
-              accessMessage={commissionerAccessMessage}
-              canManageLeague={canManageLeague}
-              draftState={draftState}
-              members={members}
-              onError={(message) => setErrorMessage(message || null)}
-              onRefresh={() => refreshLeagueDashboard(leagueId)}
-              onSuccess={(message) => setSuccessMessage(message || null)}
-              seasonOwnership={seasonOwnership}
-              seasons={seasons}
-            />
-            <LeagueHistoryPanel leagueId={leagueId} />
+            {activeTab === "ownership" ? (
+              <div className="space-y-6">
+                <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Team Assignment Workspace</CardTitle>
+                      <CardDescription>Assign available NFL teams to owners for the active season.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {!hasActiveSeason ? (
+                        <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                          Create or activate a season first to assign NFL teams.
+                        </div>
+                      ) : (
+                        <>
+                          <form className="grid gap-3 md:grid-cols-3" onSubmit={handleAssignTeam}>
+                            <select
+                              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                              onChange={(event) => setSelectedOwnerId(event.target.value)}
+                              value={selectedOwnerId}
+                            >
+                              <option value="">Select member</option>
+                              {ownerSelectionOptions.map((owner) => (
+                                <option key={owner.leagueMemberId} value={owner.userId}>
+                                  {owner.displayName} ({owner.teamCount}/3)
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                              onChange={(event) => setSelectedTeamId(event.target.value)}
+                              value={selectedTeamId}
+                            >
+                              <option value="">Select available NFL team</option>
+                              {availableTeams.map((team) => (
+                                <option key={team.id} value={team.id}>
+                                  {team.abbreviation} - {team.name}
+                                </option>
+                              ))}
+                            </select>
+                            <Button
+                              disabled={isSubmitting || isLocked || !selectedOwnerId || !selectedTeamId || !canManageLeague}
+                              type="submit"
+                            >
+                              Assign Team
+                            </Button>
+                          </form>
+
+                          {isLocked ? (
+                            <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                              Season locked. Unlock the season to fix setup mistakes, then relock it.
+                            </div>
+                          ) : null}
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Available Teams</CardTitle>
+                      <CardDescription>These are the teams currently unassigned in the active season ownership table.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {!hasActiveSeason ? (
+                        <p className="text-sm text-muted-foreground">No active season selected.</p>
+                      ) : ownershipError ? (
+                        <p className="text-sm text-red-600">{ownershipError}</p>
+                      ) : !seasonOwnership ? (
+                        <p className="text-sm text-muted-foreground">Unable to load active-season ownership.</p>
+                      ) : availableTeams.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No unassigned teams remain.</p>
+                      ) : (
+                        availableTeams.map((team) => (
+                          <div className="rounded-lg border border-border p-3 text-sm" key={team.id}>
+                            {team.abbreviation} - {team.name}
+                          </div>
+                        ))
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Ownership Table</CardTitle>
+                      <CardDescription>Owner-to-team assignments for the active season.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {!hasActiveSeason ? (
+                        <p className="text-sm text-muted-foreground">No active season selected.</p>
+                      ) : ownershipError ? (
+                        <p className="text-sm text-red-600">{ownershipError}</p>
+                      ) : !seasonOwnership ? (
+                        <p className="text-sm text-muted-foreground">Unable to load active-season ownership.</p>
+                      ) : (
+                        ownershipOwners.map((owner) => (
+                          <div className="rounded-lg border border-border p-4" key={owner.leagueMemberId}>
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <p className="font-medium text-foreground">{owner.displayName}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {owner.role} - {owner.teamCount}/3 teams assigned
+                                </p>
+                              </div>
+                              <p className="text-sm text-muted-foreground">{owner.email}</p>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {owner.teams.length > 0 ? (
+                                owner.teams.map((entry) => (
+                                  <div className="flex items-center gap-2 rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground" key={entry.ownershipId}>
+                                    <span>{entry.team.abbreviation} - {entry.team.name}</span>
+                                    <Button
+                                      className="h-7 px-2"
+                                      disabled={isSubmitting || isLocked || !canManageLeague}
+                                      onClick={() => void handleRemoveTeam(entry.ownershipId, entry.team.name)}
+                                      type="button"
+                                      variant="ghost"
+                                    >
+                                      Remove Team
+                                    </Button>
+                                  </div>
+                                ))
+                              ) : (
+                                <span className="text-sm text-muted-foreground">No NFL teams assigned.</span>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <CommissionerToolsPanel
+                    activeSeason={activeSeason}
+                    accessMessage={commissionerAccessMessage}
+                    canManageLeague={canManageLeague}
+                    draftState={draftState}
+                    hideHeading
+                    members={members}
+                    onError={(message) => setErrorMessage(message || null)}
+                    onRefresh={() => refreshLeagueDashboard(leagueId)}
+                    onSuccess={(message) => setSuccessMessage(message || null)}
+                    seasonOwnership={seasonOwnership}
+                    seasons={seasons}
+                    visibleSections={["ownership"]}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            {activeTab === "results-draft" ? (
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Results & Draft Workflow</CardTitle>
+                    <CardDescription>
+                      Move through the annual sequence from final standings to draft order to the offseason draft.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-wrap gap-2">
+                    {[
+                      { id: "final-standings", label: "Final Standings" },
+                      { id: "draft-order", label: "Draft Order" },
+                      { id: "offseason-draft", label: "Offseason Draft" },
+                      { id: "commissioner-overrides", label: "Commissioner Overrides" }
+                    ].map((tab) => (
+                      <Button
+                        key={tab.id}
+                        onClick={() => setActiveResultsDraftTab(tab.id as ResultsDraftTab)}
+                        type="button"
+                        variant={activeResultsDraftTab === tab.id ? "default" : "outline"}
+                      >
+                        {tab.label}
+                      </Button>
+                    ))}
+                  </CardContent>
+                </Card>
+
+                {activeResultsDraftTab === "final-standings" ? (
+                  <CommissionerToolsPanel
+                    activeSeason={activeSeason}
+                    accessMessage={commissionerAccessMessage}
+                    canManageLeague={canManageLeague}
+                    draftState={draftState}
+                    hideHeading
+                    members={members}
+                    onError={(message) => setErrorMessage(message || null)}
+                    onRefresh={() => refreshLeagueDashboard(leagueId)}
+                    onSuccess={(message) => setSuccessMessage(message || null)}
+                    seasonOwnership={seasonOwnership}
+                    seasons={seasons}
+                    visibleSections={["standings"]}
+                  />
+                ) : null}
+
+                {activeResultsDraftTab === "draft-order" ? (
+                  <CommissionerToolsPanel
+                    activeSeason={activeSeason}
+                    accessMessage={commissionerAccessMessage}
+                    canManageLeague={canManageLeague}
+                    draftState={draftState}
+                    hideHeading
+                    members={members}
+                    onError={(message) => setErrorMessage(message || null)}
+                    onRefresh={() => refreshLeagueDashboard(leagueId)}
+                    onSuccess={(message) => setSuccessMessage(message || null)}
+                    seasonOwnership={seasonOwnership}
+                    seasons={seasons}
+                    visibleSections={["draftOrder"]}
+                  />
+                ) : null}
+
+                {activeResultsDraftTab === "offseason-draft" ? (
+                  <OffseasonDraftPanel
+                    leagueId={leagueId}
+                    activeSeason={activeSeason}
+                    accessMessage={commissionerAccessMessage}
+                    canManageDraft={canManageLeague}
+                    draftState={draftState}
+                    isDraftStateLoading={isLoading && hasActiveSeason && !draftState}
+                    isSubmitting={isSubmitting}
+                    members={members}
+                    onEndSubmit={() => setIsSubmitting(false)}
+                    onError={(message) => setErrorMessage(message || null)}
+                    onRefresh={() => refreshLeagueDashboard(leagueId)}
+                    onStartSubmit={() => setIsSubmitting(true)}
+                    onSuccess={(message) => setSuccessMessage(message || null)}
+                    seasons={seasons}
+                  />
+                ) : null}
+
+                {activeResultsDraftTab === "commissioner-overrides" ? (
+                  <CommissionerToolsPanel
+                    activeSeason={activeSeason}
+                    accessMessage={commissionerAccessMessage}
+                    canManageLeague={canManageLeague}
+                    draftState={draftState}
+                    hideHeading
+                    members={members}
+                    onError={(message) => setErrorMessage(message || null)}
+                    onRefresh={() => refreshLeagueDashboard(leagueId)}
+                    onSuccess={(message) => setSuccessMessage(message || null)}
+                    seasonOwnership={seasonOwnership}
+                    seasons={seasons}
+                    visibleSections={["standings", "draftReset", "draftOrder"]}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+
+            {activeTab === "history-analytics" ? <LeagueHistoryPanel leagueId={leagueId} /> : null}
           </>
         )}
       </div>

@@ -33,6 +33,8 @@ interface CommissionerToolsPanelProps {
   onError: (message: string) => void;
   onSuccess: (message: string) => void;
   onRefresh: () => Promise<void>;
+  visibleSections?: Array<"state" | "standings" | "draftReset" | "draftOrder" | "ownership">;
+  hideHeading?: boolean;
 }
 
 interface ConfirmationState {
@@ -87,7 +89,9 @@ export function CommissionerToolsPanel({
   accessMessage,
   onError,
   onSuccess,
-  onRefresh
+  onRefresh,
+  visibleSections,
+  hideHeading = false
 }: CommissionerToolsPanelProps) {
   const [results, setResults] = useState<SeasonResultsResponse["results"] | null>(null);
   const [orderedLeagueMemberIds, setOrderedLeagueMemberIds] = useState<string[]>([]);
@@ -140,6 +144,14 @@ export function CommissionerToolsPanel({
     ? seasonOwnership.owners.reduce((total, owner) => total + owner.teamCount, 0)
     : 0;
   const ownershipFinalized = activeSeason ? activeSeason.isLocked && assignedTeamCount === 30 : false;
+  const visibleSectionSet = new Set(
+    visibleSections ?? ["state", "standings", "draftReset", "draftOrder", "ownership"]
+  );
+  const showStateSection = visibleSectionSet.has("state");
+  const showStandingsSection = visibleSectionSet.has("standings");
+  const showDraftResetSection = visibleSectionSet.has("draftReset");
+  const showDraftOrderSection = visibleSectionSet.has("draftOrder");
+  const showOwnershipSection = visibleSectionSet.has("ownership");
 
   useEffect(() => {
     if (!activeSeason) {
@@ -406,12 +418,14 @@ export function CommissionerToolsPanel({
 
   return (
     <section className="space-y-6">
-      <div className="space-y-2">
-        <h2 className="text-2xl font-semibold tracking-tight">Commissioner Tools</h2>
-        <p className="text-muted-foreground">
-          Explicit correction and override tools for standings, draft state, ownership, and system visibility.
-        </p>
-      </div>
+      {!hideHeading ? (
+        <div className="space-y-2">
+          <h2 className="text-2xl font-semibold tracking-tight">Commissioner Tools</h2>
+          <p className="text-muted-foreground">
+            Explicit correction and override tools for standings, draft state, ownership, and system visibility.
+          </p>
+        </div>
+      ) : null}
 
       {!canManageLeague ? (
         <Card className="border-amber-200 bg-amber-50">
@@ -421,6 +435,7 @@ export function CommissionerToolsPanel({
         </Card>
       ) : null}
 
+      {showStateSection ? (
       <Card>
         <CardHeader>
           <CardTitle>Commissioner State</CardTitle>
@@ -438,8 +453,11 @@ export function CommissionerToolsPanel({
           <p>Target season locked: {activeSeason?.isLocked ? "Yes" : "No"}</p>
         </CardContent>
       </Card>
+      ) : null}
 
+      {showStandingsSection || showDraftResetSection ? (
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        {showStandingsSection ? (
         <Card>
           <CardHeader>
             <CardTitle>Final Standings Correction</CardTitle>
@@ -496,10 +514,12 @@ export function CommissionerToolsPanel({
                   Overwrite Final Standings
                 </Button>
               </>
-            )}
-          </CardContent>
-        </Card>
+                )}
+              </CardContent>
+            </Card>
+        ) : null}
 
+        {showDraftResetSection ? (
         <Card>
           <CardHeader>
             <CardTitle>Offseason Draft Reset</CardTitle>
@@ -541,9 +561,13 @@ export function CommissionerToolsPanel({
             )}
           </CardContent>
         </Card>
+        ) : null}
       </div>
+      ) : null}
 
+      {showDraftOrderSection || showOwnershipSection ? (
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        {showDraftOrderSection ? (
         <Card>
           <CardHeader>
             <CardTitle>Draft Order Override</CardTitle>
@@ -623,10 +647,12 @@ export function CommissionerToolsPanel({
                   Save Draft Order Override
                 </Button>
               </>
-            )}
-          </CardContent>
-        </Card>
+                )}
+              </CardContent>
+            </Card>
+        ) : null}
 
+        {showOwnershipSection ? (
         <Card>
           <CardHeader>
             <CardTitle>Ownership Correction</CardTitle>
@@ -724,7 +750,9 @@ export function CommissionerToolsPanel({
             )}
           </CardContent>
         </Card>
+        ) : null}
       </div>
+      ) : null}
 
       {confirmation ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

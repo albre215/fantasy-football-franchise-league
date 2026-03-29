@@ -31,6 +31,9 @@ function seasonLabel(name: string | null, year: number) {
 }
 
 export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
+  const [activeSection, setActiveSection] = useState<"league" | "seasons" | "franchises" | "owners" | "drafts">(
+    "league"
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [overview, setOverview] = useState<LeagueHistoryOverviewResponse["overview"] | null>(null);
@@ -131,6 +134,32 @@ export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
         </Card>
       ) : (
         <>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { id: "league", label: "League" },
+              { id: "seasons", label: "Seasons" },
+              { id: "franchises", label: "Franchises" },
+              { id: "owners", label: "Owners" },
+              { id: "drafts", label: "Draft History" }
+            ].map((section) => (
+              <button
+                className={`rounded-full px-4 py-2 text-sm font-medium ${
+                  activeSection === section.id
+                    ? "bg-primary text-primary-foreground"
+                    : "border border-border bg-background text-muted-foreground"
+                }`}
+                key={section.id}
+                onClick={() =>
+                  setActiveSection(section.id as "league" | "seasons" | "franchises" | "owners" | "drafts")
+                }
+                type="button"
+              >
+                {section.label}
+              </button>
+            ))}
+          </div>
+
+          {activeSection === "league" ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Card>
               <CardHeader>
@@ -196,7 +225,9 @@ export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
               </CardContent>
             </Card>
           </div>
+          ) : null}
 
+          {activeSection === "seasons" ? (
           <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
             <Card>
               <CardHeader>
@@ -271,8 +302,11 @@ export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
               </CardContent>
             </Card>
           </div>
+          ) : null}
 
+          {activeSection === "franchises" || activeSection === "owners" ? (
           <div className="grid gap-6 xl:grid-cols-2">
+            {activeSection === "franchises" ? (
             <Card>
               <CardHeader>
                 <CardTitle>Franchise History Explorer</CardTitle>
@@ -325,7 +359,16 @@ export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
                 )}
               </CardContent>
             </Card>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Franchise History Explorer</CardTitle>
+                  <CardDescription>Select the Franchises subsection to explore NFL team continuity.</CardDescription>
+                </CardHeader>
+              </Card>
+            )}
 
+            {activeSection === "owners" ? (
             <Card>
               <CardHeader>
                 <CardTitle>Owner History Explorer</CardTitle>
@@ -375,8 +418,18 @@ export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
                 )}
               </CardContent>
             </Card>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Owner History Explorer</CardTitle>
+                  <CardDescription>Select the Owners subsection to explore owner portfolio history.</CardDescription>
+                </CardHeader>
+              </Card>
+            )}
           </div>
+          ) : null}
 
+          {activeSection === "drafts" ? (
           <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
             <Card>
               <CardHeader>
@@ -431,6 +484,7 @@ export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
               </CardContent>
             </Card>
           </div>
+          ) : null}
         </>
       )}
     </section>
