@@ -49,6 +49,34 @@ function formatSeasonLabel(season: { year: number; name: string | null }) {
   return season.name ?? `${season.year} Season`;
 }
 
+async function preserveScrollPosition<T>(run: () => Promise<T>) {
+  if (typeof window === "undefined") {
+    return run();
+  }
+
+  const scrollX = window.scrollX;
+  const scrollY = window.scrollY;
+  const result = await run();
+
+  requestAnimationFrame(() => {
+    window.scrollTo({
+      left: scrollX,
+      top: scrollY,
+      behavior: "auto"
+    });
+
+    requestAnimationFrame(() => {
+      window.scrollTo({
+        left: scrollX,
+        top: scrollY,
+        behavior: "auto"
+      });
+    });
+  });
+
+  return result;
+}
+
 export function OffseasonDraftPanel({
   leagueId,
   activeSeason,
@@ -350,7 +378,7 @@ export function OffseasonDraftPanel({
     try {
       await run();
       onSuccess(successMessage);
-      await onRefresh();
+      await preserveScrollPosition(onRefresh);
     } catch (error) {
       onError(error instanceof Error ? error.message : "Request failed.");
     } finally {
@@ -398,7 +426,7 @@ export function OffseasonDraftPanel({
         ...current,
         [leagueMemberId]: undefined
       }));
-      await onRefresh();
+      await preserveScrollPosition(onRefresh);
     } catch (error) {
       setKeeperFeedbackByOwner((current) => ({
         ...current,
