@@ -135,6 +135,18 @@ export interface FinalizeDraftInput {
   actingUserId: string;
 }
 
+export interface ResetDraftInput {
+  targetSeasonId: string;
+  actingUserId: string;
+  force: boolean;
+}
+
+export interface OverrideDraftOrderInput {
+  targetSeasonId: string;
+  actingUserId: string;
+  orderLeagueMemberIds: string[];
+}
+
 export interface InitializeDraftResponse {
   draft: DraftState;
 }
@@ -168,5 +180,14 @@ export interface PauseDraftResponse {
 }
 
 export interface ResumeDraftResponse {
+  draft: DraftState;
+}
+
+export interface ResetDraftResponse {
+  removedDraftId: string;
+  removedTargetSeasonOwnershipCount: number;
+}
+
+export interface OverrideDraftOrderResponse {
   draft: DraftState;
 }

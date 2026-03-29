@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { CommissionerToolsPanel } from "@/components/league/commissioner-tools-panel";
 import { LeagueHistoryPanel } from "@/components/league/league-history-panel";
 import { OffseasonDraftPanel } from "@/components/league/offseason-draft-panel";
-import { SeasonResultsPanel } from "@/components/league/season-results-panel";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import type {
   CreateSeasonResponse,
   LockSeasonResponse,
   SeasonListResponse,
+  UpdateSeasonYearResponse,
   UnlockSeasonResponse
 } from "@/types/season";
 import type {
@@ -56,6 +57,8 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   const [ownershipError, setOwnershipError] = useState<string | null>(null);
   const [seasonYear, setSeasonYear] = useState(new Date().getFullYear().toString());
   const [seasonName, setSeasonName] = useState("");
+  const [editingSeasonId, setEditingSeasonId] = useState<string | null>(null);
+  const [editingSeasonYear, setEditingSeasonYear] = useState("");
   const [memberDisplayName, setMemberDisplayName] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
   const [selectedOwnerId, setSelectedOwnerId] = useState("");
@@ -264,6 +267,62 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
     }
   }
 
+  function startSeasonYearEdit(seasonId: string, year: number) {
+    setEditingSeasonId(seasonId);
+    setEditingSeasonYear(year.toString());
+  }
+
+  function cancelSeasonYearEdit() {
+    setEditingSeasonId(null);
+    setEditingSeasonYear("");
+  }
+
+  async function handleUpdateSeasonYear(seasonId: string) {
+    if (!leagueId) {
+      return;
+    }
+
+    const nextYear = Number(editingSeasonYear);
+
+    if (!Number.isInteger(nextYear)) {
+      setErrorMessage("Enter a valid season year before saving.");
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `Change this season's year to ${nextYear}? This updates how the season is labeled and how adjacent-season draft logic relates to it.`
+      )
+    ) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch(`/api/season/${seasonId}/year`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          year: nextYear
+        })
+      });
+      const data = await parseJsonResponse<UpdateSeasonYearResponse>(response);
+
+      setSuccessMessage(`Updated season year to ${data.season.year}.`);
+      cancelSeasonYearEdit();
+      await refreshLeagueDashboard(leagueId);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to update season year.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   async function handleAddMember(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -335,12 +394,25 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       return;
     }
 
+    const selectedOwner = ownershipOwners.find((owner) => owner.userId === selectedOwnerId);
+    const selectedTeam = availableTeams.find((team) => team.id === selectedTeamId);
+
+    if (
+      selectedOwner &&
+      selectedTeam &&
+      !window.confirm(
+        `Assign ${selectedTeam.abbreviation} - ${selectedTeam.name} to ${selectedOwner.displayName} for ${activeSeason.name ?? activeSeason.year}?`
+      )
+    ) {
+      return;
+    }
+
     setErrorMessage(null);
     setSuccessMessage(null);
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`/api/season/${activeSeason.id}/assign-team`, {
+      const response = await fetch(`/api/season/${activeSeason.id}/ownership/assign`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -424,12 +496,16 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       return;
     }
 
+    if (!window.confirm(`Remove ${teamName} from its owner in ${activeSeason.name ?? activeSeason.year}?`)) {
+      return;
+    }
+
     setErrorMessage(null);
     setSuccessMessage(null);
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`/api/season/${activeSeason.id}/remove-team`, {
+      const response = await fetch(`/api/season/${activeSeason.id}/ownership/remove`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -625,15 +701,56 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                           <p className="text-sm text-muted-foreground">
                             {season.status} - {season.isLocked ? "Locked" : "Open"}
                           </p>
+                          {editingSeasonId === season.id ? (
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <Input
+                                className="w-32"
+                                inputMode="numeric"
+                                onChange={(event) => setEditingSeasonYear(event.target.value)}
+                                value={editingSeasonYear}
+                              />
+                              <Button
+                                disabled={isSubmitting || !canManageLeague || !editingSeasonYear.trim()}
+                                onClick={() => void handleUpdateSeasonYear(season.id)}
+                                type="button"
+                              >
+                                Save Year
+                              </Button>
+                              <Button
+                                disabled={isSubmitting}
+                                onClick={cancelSeasonYearEdit}
+                                type="button"
+                                variant="outline"
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              Need to correct the season year? Use Edit Year before relying on standings or draft order.
+                            </p>
+                          )}
                         </div>
-                        <Button
-                          disabled={isSubmitting || season.status === "ACTIVE" || !canManageLeague}
-                          onClick={() => void handleSetActiveSeason(season.id)}
-                          type="button"
-                          variant={season.status === "ACTIVE" ? "secondary" : "outline"}
-                        >
-                          {season.status === "ACTIVE" ? "Active Season" : "Set Active"}
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {editingSeasonId !== season.id ? (
+                            <Button
+                              disabled={isSubmitting || !canManageLeague}
+                              onClick={() => startSeasonYearEdit(season.id, season.year)}
+                              type="button"
+                              variant="outline"
+                            >
+                              Edit Year
+                            </Button>
+                          ) : null}
+                          <Button
+                            disabled={isSubmitting || season.status === "ACTIVE" || !canManageLeague}
+                            onClick={() => void handleSetActiveSeason(season.id)}
+                            type="button"
+                            variant={season.status === "ACTIVE" ? "secondary" : "outline"}
+                          >
+                            {season.status === "ACTIVE" ? "Active Season" : "Set Active"}
+                          </Button>
+                        </div>
                       </div>
                     ))
                   )}
@@ -918,12 +1035,19 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
               </div>
             </div>
 
-            <LeagueHistoryPanel leagueId={leagueId} />
-            <SeasonResultsPanel
+            <CommissionerToolsPanel
               activeSeason={activeSeason}
               accessMessage={commissionerAccessMessage}
-              canManageStandings={canManageLeague}
+              canManageLeague={canManageLeague}
+              draftState={draftState}
+              members={members}
+              onError={(message) => setErrorMessage(message || null)}
+              onRefresh={() => refreshLeagueDashboard(leagueId)}
+              onSuccess={(message) => setSuccessMessage(message || null)}
+              seasonOwnership={seasonOwnership}
+              seasons={seasons}
             />
+            <LeagueHistoryPanel leagueId={leagueId} />
           </>
         )}
       </div>

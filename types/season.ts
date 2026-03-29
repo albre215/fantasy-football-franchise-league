@@ -44,6 +44,12 @@ export interface SetActiveSeasonInput {
   actingUserId: string;
 }
 
+export interface UpdateSeasonYearInput {
+  seasonId: string;
+  year: number;
+  actingUserId: string;
+}
+
 export interface CreateSeasonResponse {
   season: SeasonSummary;
 }
@@ -75,5 +81,9 @@ export interface SeasonActorInput {
 }
 
 export interface UnlockSeasonResponse {
+  season: SeasonSummary;
+}
+
+export interface UpdateSeasonYearResponse {
   season: SeasonSummary;
 }

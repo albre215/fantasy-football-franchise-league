@@ -6,7 +6,8 @@ import type {
   SeasonSetupStatus,
   SeasonActorInput,
   SeasonSummary,
-  SetActiveSeasonInput
+  SetActiveSeasonInput,
+  UpdateSeasonYearInput
 } from "@/types/season";
 
 class SeasonServiceError extends Error {
@@ -120,6 +121,7 @@ async function assertActingCommissionerForSeason(
     select: {
       id: true,
       leagueId: true,
+      year: true,
       isLocked: true
     }
   });
@@ -419,6 +421,45 @@ export const seasonService = {
       });
 
       return mapSeason(unlockedSeason);
+    });
+  },
+
+  async updateSeasonYear(input: UpdateSeasonYearInput) {
+    const normalizedSeasonId = input.seasonId.trim();
+
+    if (!normalizedSeasonId) {
+      throw new SeasonServiceError("seasonId is required.", 400);
+    }
+
+    if (!Number.isInteger(input.year) || input.year < 2000 || input.year > 3000) {
+      throw new SeasonServiceError("A valid season year is required.", 400);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const { season } = await assertActingCommissionerForSeason(tx, normalizedSeasonId, input.actingUserId);
+
+      if (season.year === input.year) {
+        throw new SeasonServiceError("Season is already using that year.", 409);
+      }
+
+      try {
+        const updatedSeason = await tx.season.update({
+          where: {
+            id: season.id
+          },
+          data: {
+            year: input.year
+          }
+        });
+
+        return mapSeason(updatedSeason);
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+          throw new SeasonServiceError("A season for that league year already exists.", 409);
+        }
+
+        throw error;
+      }
     });
   }
 };

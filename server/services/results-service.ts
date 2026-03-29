@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { seasonService } from "@/server/services/season-service";
 import type {
+  OverwriteManualSeasonStandingsInput,
   RecommendedDraftOrderEntry,
   SaveManualSeasonStandingsInput,
   SeasonResultsSummary,
@@ -286,6 +287,120 @@ function validateOrderedStandings(
   }
 }
 
+async function saveManualSeasonStandingsInternal(
+  input: SaveManualSeasonStandingsInput
+): Promise<SeasonResultsSummary> {
+  const seasonId = input.seasonId.trim();
+  const orderedLeagueMemberIds = input.orderedLeagueMemberIds.map((leagueMemberId) => leagueMemberId.trim());
+
+  if (!seasonId) {
+    throw new ResultsServiceError("seasonId is required.", 400);
+  }
+
+  await seasonService.assertCommissionerAccess(seasonId, input.actingUserId);
+
+  return prisma.$transaction(async (tx) => {
+    const season = await tx.season.findUnique({
+      where: {
+        id: seasonId
+      },
+      include: {
+        league: {
+          include: {
+            members: {
+              include: {
+                user: true
+              },
+              orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
+            }
+          }
+        }
+      }
+    });
+
+    if (!season) {
+      throw new ResultsServiceError("Season not found.", 404);
+    }
+
+    validateOrderedStandings(
+      season.league.members.map((member) => member.id),
+      orderedLeagueMemberIds
+    );
+
+    await tx.seasonStanding.deleteMany({
+      where: {
+        seasonId
+      }
+    });
+
+    await tx.seasonStanding.createMany({
+      data: orderedLeagueMemberIds.map((leagueMemberId, index) => ({
+        seasonId,
+        leagueMemberId,
+        provider: "MANUAL",
+        rank: index + 1,
+        wins: null,
+        losses: null,
+        ties: null,
+        pointsFor: null,
+        pointsAgainst: null,
+        playoffFinish: null,
+        isChampion: index === 0,
+        externalEntityId: null,
+        externalDisplayName: null,
+        ingestionRunId: null,
+        metadata: {
+          source: "MANUAL_FINAL_STANDINGS"
+        }
+      }))
+    });
+
+    const refreshedSeason = await tx.season.findUnique({
+      where: {
+        id: seasonId
+      },
+      include: {
+        league: {
+          include: {
+            members: {
+              include: {
+                user: true
+              },
+              orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
+            }
+          }
+        },
+        seasonStandings: {
+          include: {
+            leagueMember: {
+              include: {
+                user: true
+              }
+            }
+          },
+          orderBy: [{ rank: "asc" }, { leagueMember: { joinedAt: "asc" } }]
+        }
+      }
+    });
+
+    if (!refreshedSeason) {
+      throw new ResultsServiceError("Season not found after saving final standings.", 404);
+    }
+
+    return buildResultsSummary(refreshedSeason);
+  });
+}
+
+async function seasonHasSavedStandings(seasonId: string) {
+  const standingCount = await prisma.seasonStanding.count({
+    where: {
+      seasonId
+    }
+  });
+
+  return standingCount > 0;
+}
+
 export const resultsService = {
   async getSeasonResults(seasonId: string): Promise<SeasonResultsSummary> {
     const season = await getSeasonResultsContext(seasonId);
@@ -324,105 +439,22 @@ export const resultsService = {
   },
 
   async saveManualSeasonStandings(input: SaveManualSeasonStandingsInput): Promise<SeasonResultsSummary> {
-    const seasonId = input.seasonId.trim();
-    const orderedLeagueMemberIds = input.orderedLeagueMemberIds.map((leagueMemberId) => leagueMemberId.trim());
-
-    if (!seasonId) {
-      throw new ResultsServiceError("seasonId is required.", 400);
+    if (await seasonHasSavedStandings(input.seasonId.trim())) {
+      throw new ResultsServiceError(
+        "Final standings already exist for this season. Use the overwrite workflow to replace them.",
+        409
+      );
     }
 
-    await seasonService.assertCommissionerAccess(seasonId, input.actingUserId);
+    return saveManualSeasonStandingsInternal(input);
+  },
 
-    return prisma.$transaction(async (tx) => {
-      const season = await tx.season.findUnique({
-        where: {
-          id: seasonId
-        },
-        include: {
-          league: {
-            include: {
-              members: {
-                include: {
-                  user: true
-                },
-                orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
-              }
-            }
-          }
-        }
-      });
+  async overwriteManualSeasonStandings(input: OverwriteManualSeasonStandingsInput): Promise<SeasonResultsSummary> {
+    if (!input.confirmOverwrite) {
+      throw new ResultsServiceError("Standings overwrite must be explicitly confirmed.", 400);
+    }
 
-      if (!season) {
-        throw new ResultsServiceError("Season not found.", 404);
-      }
-
-      validateOrderedStandings(
-        season.league.members.map((member) => member.id),
-        orderedLeagueMemberIds
-      );
-
-      await tx.seasonStanding.deleteMany({
-        where: {
-          seasonId
-        }
-      });
-
-      await tx.seasonStanding.createMany({
-        data: orderedLeagueMemberIds.map((leagueMemberId, index) => ({
-          seasonId,
-          leagueMemberId,
-          provider: "MANUAL",
-          rank: index + 1,
-          wins: null,
-          losses: null,
-          ties: null,
-          pointsFor: null,
-          pointsAgainst: null,
-          playoffFinish: null,
-          isChampion: index === 0,
-          externalEntityId: null,
-          externalDisplayName: null,
-          ingestionRunId: null,
-          metadata: {
-            source: "MANUAL_FINAL_STANDINGS"
-          }
-        }))
-      });
-
-      const refreshedSeason = await tx.season.findUnique({
-        where: {
-          id: seasonId
-        },
-        include: {
-          league: {
-            include: {
-              members: {
-                include: {
-                  user: true
-                },
-                orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
-              }
-            }
-          },
-          seasonStandings: {
-            include: {
-              leagueMember: {
-                include: {
-                  user: true
-                }
-              }
-            },
-            orderBy: [{ rank: "asc" }, { leagueMember: { joinedAt: "asc" } }]
-          }
-        }
-      });
-
-      if (!refreshedSeason) {
-        throw new ResultsServiceError("Season not found after saving final standings.", 404);
-      }
-
-      return buildResultsSummary(refreshedSeason);
-    });
+    return saveManualSeasonStandingsInternal(input);
   }
 };
 

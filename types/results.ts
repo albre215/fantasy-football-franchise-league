@@ -56,10 +56,18 @@ export interface SaveManualSeasonStandingsInput {
   orderedLeagueMemberIds: string[];
 }
 
+export interface OverwriteManualSeasonStandingsInput extends SaveManualSeasonStandingsInput {
+  confirmOverwrite: boolean;
+}
+
 export interface SeasonResultsResponse {
   results: SeasonResultsSummary;
 }
 
 export interface SaveManualSeasonStandingsResponse {
+  results: SeasonResultsSummary;
+}
+
+export interface OverwriteManualSeasonStandingsResponse {
   results: SeasonResultsSummary;
 }

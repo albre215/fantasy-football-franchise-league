@@ -2,6 +2,7 @@ import { DraftStatus, Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { resultsService } from "@/server/services/results-service";
+import { seasonService } from "@/server/services/season-service";
 import type {
   DraftKeeperSelection,
   DraftMemberSummary,
@@ -12,6 +13,9 @@ import type {
   FinalizeDraftInput,
   InitializeDraftInput,
   MakeDraftPickInput,
+  OverrideDraftOrderInput,
+  ResetDraftInput,
+  ResetDraftResponse,
   SaveKeepersInput,
   StartDraftInput
 } from "@/types/draft";
@@ -282,6 +286,48 @@ async function assertCommissionerAccessForDraft(tx: PrismaClientLike, draftId: s
 
   if (!commissioner || commissioner.role !== "COMMISSIONER") {
     throw new DraftServiceError("Only the commissioner can perform this draft action.", 403);
+  }
+
+  return draft;
+}
+
+async function getDraftByTargetSeasonOrThrow(tx: PrismaClientLike, targetSeasonId: string) {
+  const draft = await tx.draft.findUnique({
+    where: {
+      targetSeasonId
+    },
+    select: {
+      id: true,
+      leagueId: true,
+      targetSeasonId: true,
+      sourceSeasonId: true,
+      status: true,
+      targetSeason: {
+        select: {
+          id: true,
+          isLocked: true,
+          teamOwnerships: {
+            select: {
+              id: true
+            }
+          },
+          league: {
+            select: {
+              members: {
+                include: {
+                  user: true
+                },
+                orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+
+  if (!draft) {
+    throw new DraftServiceError("Draft not found for this target season.", 404);
   }
 
   return draft;
@@ -752,6 +798,131 @@ export const draftService = {
       });
 
       return buildDraftState(tx, draft.id);
+    });
+  },
+
+  async overrideDraftOrder(input: OverrideDraftOrderInput): Promise<DraftState> {
+    const targetSeasonId = input.targetSeasonId.trim();
+    const normalizedOrderLeagueMemberIds = input.orderLeagueMemberIds.map((id) => id.trim()).filter(Boolean);
+
+    if (!targetSeasonId) {
+      throw new DraftServiceError("targetSeasonId is required.", 400);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      await seasonService.assertCommissionerAccess(targetSeasonId, input.actingUserId);
+      const draft = await getDraftByTargetSeasonOrThrow(tx, targetSeasonId);
+
+      if (draft.status !== "PLANNING") {
+        throw new DraftServiceError("Draft order can only be overridden while the draft is still planning.", 409);
+      }
+
+      assertSeasonIsEditable(draft.targetSeason.isLocked);
+
+      const validLeagueMemberIds = new Set(draft.targetSeason.league.members.map((member) => member.id));
+
+      if (normalizedOrderLeagueMemberIds.length !== DRAFT_OWNER_COUNT) {
+        throw new DraftServiceError("Draft order must include all 10 league members exactly once.", 400);
+      }
+
+      if (new Set(normalizedOrderLeagueMemberIds).size !== DRAFT_OWNER_COUNT) {
+        throw new DraftServiceError("Draft order contains duplicate league members.", 400);
+      }
+
+      if (normalizedOrderLeagueMemberIds.some((leagueMemberId) => !validLeagueMemberIds.has(leagueMemberId))) {
+        throw new DraftServiceError("Draft order contains a member who does not belong to this league.", 400);
+      }
+
+      const picks = await tx.draftPick.findMany({
+        where: {
+          draftId: draft.id
+        },
+        orderBy: {
+          overallPickNumber: "asc"
+        },
+        select: {
+          id: true,
+          selectedNflTeamId: true
+        }
+      });
+
+      if (picks.length !== OFFSEASON_DRAFT_PICK_COUNT) {
+        throw new DraftServiceError("Draft order override requires all 10 draft picks to exist.", 409);
+      }
+
+      if (picks.some((pick) => pick.selectedNflTeamId)) {
+        throw new DraftServiceError("Draft order cannot be overridden after picks have been recorded.", 409);
+      }
+
+      await Promise.all(
+        picks.map((pick, index) =>
+          tx.draftPick.update({
+            where: {
+              id: pick.id
+            },
+            data: {
+              selectingLeagueMemberId: normalizedOrderLeagueMemberIds[index]
+            }
+          })
+        )
+      );
+
+      await tx.draft.update({
+        where: {
+          id: draft.id
+        },
+        data: {
+          currentPick: 1
+        }
+      });
+
+      return buildDraftState(tx, draft.id);
+    });
+  },
+
+  async resetDraft(input: ResetDraftInput): Promise<ResetDraftResponse> {
+    const targetSeasonId = input.targetSeasonId.trim();
+
+    if (!targetSeasonId) {
+      throw new DraftServiceError("targetSeasonId is required.", 400);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      await seasonService.assertCommissionerAccess(targetSeasonId, input.actingUserId);
+      const draft = await getDraftByTargetSeasonOrThrow(tx, targetSeasonId);
+
+      const targetSeasonOwnershipCount = draft.targetSeason.teamOwnerships.length;
+      const requiresForce = draft.status === "COMPLETED" || targetSeasonOwnershipCount > 0;
+
+      if (requiresForce && !input.force) {
+        throw new DraftServiceError(
+          "This draft has already been finalized into target-season ownership. Force reset confirmation is required.",
+          409
+        );
+      }
+
+      if (!requiresForce) {
+        assertSeasonIsEditable(draft.targetSeason.isLocked);
+      }
+
+      if (input.force && targetSeasonOwnershipCount > 0) {
+        await tx.teamOwnership.deleteMany({
+          where: {
+            seasonId: targetSeasonId
+          }
+        });
+      }
+
+      await tx.draft.delete({
+        where: {
+          id: draft.id
+        }
+      });
+
+      return {
+        removedDraftId: draft.id,
+        removedTargetSeasonOwnershipCount: input.force ? targetSeasonOwnershipCount : 0
+      };
     });
   },
 
