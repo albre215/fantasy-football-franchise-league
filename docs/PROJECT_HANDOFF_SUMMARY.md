@@ -1,7 +1,7 @@
 # Project Handoff Summary
 
 ## What This App Is
-Fantasy Franchise League is a commissioner-first web app for managing a long-running fantasy football league where owners control NFL franchises instead of fantasy players.
+GM Fantasy is a commissioner-first web app for managing a long-running fantasy football league where owners control NFL franchises instead of fantasy players.
 
 ## Current Stack
 - Next.js 14 App Router

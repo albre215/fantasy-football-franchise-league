@@ -1,10 +1,10 @@
-# Fantasy Franchise League
+# GM Fantasy
 
 ## Project Name
-Fantasy Franchise League
+GM Fantasy
 
 ## What This App Is For
-Fantasy Franchise League is a commissioner-first web application for running a long-lived fantasy football league where owners control NFL franchises instead of fantasy player rosters.
+GM Fantasy is a commissioner-first web application for running a long-lived fantasy football league where owners control NFL franchises instead of fantasy player rosters.
 
 The application is built around preserving historical league state over many years:
 - which owner controlled which NFL teams in each season

@@ -17,7 +17,7 @@ export default async function HomePage() {
           </span>
           <div className="space-y-3">
             <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-              Fantasy Franchise League
+              GM Fantasy
             </h1>
             <p className={`text-lg text-muted-foreground ${isAuthenticated ? "max-w-2xl" : "mx-auto max-w-lg"}`}>
               {isAuthenticated

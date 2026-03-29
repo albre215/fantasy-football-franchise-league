@@ -11,7 +11,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Fantasy Franchise League",
+  title: "GM Fantasy",
   description: "Production-ready platform foundation for multi-year NFL franchise fantasy leagues."
 };
 
