@@ -37,6 +37,7 @@ export function LeagueControlPanel() {
   const [registerDisplayName, setRegisterDisplayName] = useState("");
   const [registerEmail, setRegisterEmail] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
+  const [showRegistration, setShowRegistration] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -266,7 +267,13 @@ export function LeagueControlPanel() {
   const isAuthenticated = status === "authenticated" && Boolean(session?.user?.id);
 
   return (
-    <section className="mt-14 grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+    <section
+      className={
+        isAuthenticated
+          ? "mt-14 grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"
+          : "mt-10 w-full max-w-xl"
+      }
+    >
       <div className="space-y-6">
         {status === "loading" ? (
           <Card className="border-border/70 bg-card/90">
@@ -276,44 +283,8 @@ export function LeagueControlPanel() {
           <>
             <Card className="border-border/70 bg-card/90">
               <CardHeader>
-                <CardTitle>Create Account</CardTitle>
-                <CardDescription>
-                  Register a real account to replace the old mock-user workflow. If a commissioner already added your
-                  email to a league, registration will claim that existing user record.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form className="space-y-4" onSubmit={handleRegister}>
-                  <Input
-                    onChange={(event) => setRegisterDisplayName(event.target.value)}
-                    placeholder="Display name"
-                    value={registerDisplayName}
-                  />
-                  <Input
-                    onChange={(event) => setRegisterEmail(event.target.value)}
-                    placeholder="Email"
-                    type="email"
-                    value={registerEmail}
-                  />
-                  <Input
-                    onChange={(event) => setRegisterPassword(event.target.value)}
-                    placeholder="Password"
-                    type="password"
-                    value={registerPassword}
-                  />
-                  <Button
-                    disabled={isSubmitting || !registerDisplayName.trim() || !registerEmail.trim() || !registerPassword}
-                    type="submit"
-                  >
-                    Create Account
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-            <Card className="border-border/70 bg-card/90">
-              <CardHeader>
                 <CardTitle>Sign In</CardTitle>
-                <CardDescription>Use your existing league account email and password.</CardDescription>
+                <CardDescription>Use your email and password to access your league workspace.</CardDescription>
               </CardHeader>
               <CardContent>
                 <form className="space-y-4" onSubmit={handleLogin}>
@@ -329,12 +300,64 @@ export function LeagueControlPanel() {
                     type="password"
                     value={loginPassword}
                   />
-                  <Button disabled={isSubmitting || !loginEmail.trim() || !loginPassword} type="submit" variant="secondary">
+                  <Button disabled={isSubmitting || !loginEmail.trim() || !loginPassword} type="submit">
                     Sign In
                   </Button>
                 </form>
               </CardContent>
+              <CardFooter className="flex flex-col items-start gap-3 border-t border-border/60 pt-5">
+                <button
+                  className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                  onClick={() => setShowRegistration((current) => !current)}
+                  type="button"
+                >
+                  {showRegistration ? "Hide account creation" : "Create an account"}
+                </button>
+                <p className="text-sm text-muted-foreground">
+                  New to the league? Create an account and then sign in with it here.
+                </p>
+              </CardFooter>
             </Card>
+
+            {showRegistration ? (
+              <Card className="border-border/70 bg-card/90">
+                <CardHeader>
+                  <CardTitle>Create Account</CardTitle>
+                  <CardDescription>
+                    Register a real account. If a commissioner already added your email to a league, registration will
+                    claim that existing user record.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form className="space-y-4" onSubmit={handleRegister}>
+                    <Input
+                      onChange={(event) => setRegisterDisplayName(event.target.value)}
+                      placeholder="Display name"
+                      value={registerDisplayName}
+                    />
+                    <Input
+                      onChange={(event) => setRegisterEmail(event.target.value)}
+                      placeholder="Email"
+                      type="email"
+                      value={registerEmail}
+                    />
+                    <Input
+                      onChange={(event) => setRegisterPassword(event.target.value)}
+                      placeholder="Password"
+                      type="password"
+                      value={registerPassword}
+                    />
+                    <Button
+                      disabled={isSubmitting || !registerDisplayName.trim() || !registerEmail.trim() || !registerPassword}
+                      type="submit"
+                      variant="secondary"
+                    >
+                      Create Account
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            ) : null}
           </>
         ) : (
           <>
@@ -400,37 +423,37 @@ export function LeagueControlPanel() {
           </Card>
         )}
       </div>
-      <Card className="border-border/70 bg-card/90">
-        <CardHeader>
-          <CardTitle>Leagues</CardTitle>
-          <CardDescription>League records currently available in the system.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {isLoading ? (
-            <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
-              Loading leagues...
-            </div>
-          ) : sortedLeagues.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
-              No leagues exist yet.
-            </div>
-          ) : (
-            sortedLeagues.map((league) => (
-              <Card key={league.id} className="border-border/70 shadow-none">
-                <CardHeader>
-                  <CardTitle className="text-lg">{league.name}</CardTitle>
-                  <CardDescription>{league.description ?? "No description provided yet."}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm text-muted-foreground">
-                  <p>League ID: {league.id}</p>
-                  <p>Members: {league.memberCount} / 10</p>
-                  <p>Seasons: {league.seasonCount}</p>
-                </CardContent>
-                <CardFooter className="gap-3">
-                  <Link className={buttonVariants({ variant: "outline" })} href={`/league?leagueId=${league.id}`}>
-                    View Dashboard
-                  </Link>
-                  {isAuthenticated ? (
+      {isAuthenticated ? (
+        <Card className="border-border/70 bg-card/90">
+          <CardHeader>
+            <CardTitle>Leagues</CardTitle>
+            <CardDescription>League records currently available in the system.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {isLoading ? (
+              <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
+                Loading leagues...
+              </div>
+            ) : sortedLeagues.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
+                No leagues exist yet.
+              </div>
+            ) : (
+              sortedLeagues.map((league) => (
+                <Card key={league.id} className="border-border/70 shadow-none">
+                  <CardHeader>
+                    <CardTitle className="text-lg">{league.name}</CardTitle>
+                    <CardDescription>{league.description ?? "No description provided yet."}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm text-muted-foreground">
+                    <p>League ID: {league.id}</p>
+                    <p>Members: {league.memberCount} / 10</p>
+                    <p>Seasons: {league.seasonCount}</p>
+                  </CardContent>
+                  <CardFooter className="gap-3">
+                    <Link className={buttonVariants({ variant: "outline" })} href={`/league?leagueId=${league.id}`}>
+                      View Dashboard
+                    </Link>
                     <Button
                       disabled={isSubmitting}
                       onClick={() => void handleJoinLeague(league.id)}
@@ -439,13 +462,13 @@ export function LeagueControlPanel() {
                     >
                       Join League
                     </Button>
-                  ) : null}
-                </CardFooter>
-              </Card>
-            ))
-          )}
-        </CardContent>
-      </Card>
+                  </CardFooter>
+                </Card>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
     </section>
   );
 }
