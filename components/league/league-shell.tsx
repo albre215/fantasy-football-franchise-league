@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { BrandMasthead } from "@/components/brand/brand-masthead";
 
 const leagueDomains = [
   "Season timeline and configuration",
@@ -10,12 +11,11 @@ const leagueDomains = [
 export function LeagueShell() {
   return (
     <main className="container py-12">
-      <div className="max-w-3xl space-y-4">
-        <h1 className="text-3xl font-semibold tracking-tight">League Hub</h1>
-        <p className="text-muted-foreground">
-          This route is prepared for league-wide administration, history, and ownership management.
-        </p>
-      </div>
+      <BrandMasthead
+        description="This route is prepared for league-wide administration, history, and ownership management."
+        eyebrow="League Hub"
+        title="League Hub"
+      />
       <div className="mt-8 grid gap-6 md:grid-cols-2">
         {leagueDomains.map((item) => (
           <Card key={item}>

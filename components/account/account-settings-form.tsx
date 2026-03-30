@@ -64,7 +64,7 @@ export function AccountSettingsForm({ account }: { account: AccountProfile }) {
   }
 
   return (
-    <Card className="border-border/70 bg-card/90">
+    <Card className="brand-surface">
       <CardHeader>
         <CardTitle>Account Settings</CardTitle>
         <CardDescription>Review and update the account details currently stored for your profile.</CardDescription>

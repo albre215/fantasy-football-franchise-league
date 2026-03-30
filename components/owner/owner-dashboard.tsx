@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { BrandMasthead } from "@/components/brand/brand-masthead";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -30,31 +31,28 @@ function ordinal(value: number) {
 
 export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary }) {
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
+    <main className="min-h-screen py-10 sm:py-12">
       <div className="container py-12">
-        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-2">
-            <span className="inline-flex rounded-full bg-accent/15 px-3 py-1 text-sm font-medium text-foreground">
-              Owner Dashboard
-            </span>
-            <h1 className="text-4xl font-semibold tracking-tight">Welcome back, {dashboard.user.displayName}</h1>
-            <p className="text-muted-foreground">
-              Review your current teams, historical portfolio, offseason draft context, and league memberships.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link className={buttonVariants({ variant: "outline" })} href="/">
-              Home
-            </Link>
-            <Link className={buttonVariants()} href="/league">
-              Commissioner Hub
-            </Link>
-          </div>
-        </div>
+        <BrandMasthead
+          actions={
+            <>
+              <Link className={buttonVariants({ variant: "outline" })} href="/">
+                Home
+              </Link>
+              <Link className={buttonVariants()} href="/league">
+                Commissioner Hub
+              </Link>
+            </>
+          }
+          className="mb-8"
+          description="Review your current teams, historical portfolio, offseason draft context, and league memberships."
+          eyebrow="Owner Dashboard"
+          title={`Welcome back, ${dashboard.user.displayName}`}
+        />
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
           <section className="space-y-6">
-            <Card className="border-border/70 bg-card/90">
+            <Card className="brand-surface">
               <CardHeader>
                 <CardTitle>Current Season</CardTitle>
                 <CardDescription>
@@ -68,7 +66,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
                   </div>
                 ) : (
                   dashboard.currentTeams.map((entry) => (
-                    <Card key={entry.season.seasonId} className="border-border/70 shadow-none">
+                    <Card key={entry.season.seasonId} className="brand-muted-panel shadow-none">
                       <CardHeader>
                         <CardTitle className="text-xl">{entry.leagueName}</CardTitle>
                         <CardDescription>
@@ -104,7 +102,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
               </CardContent>
             </Card>
 
-            <Card className="border-border/70 bg-card/90">
+            <Card className="brand-surface">
               <CardHeader>
                 <CardTitle>History</CardTitle>
                 <CardDescription>Your season-by-season franchise portfolio, sorted newest to oldest.</CardDescription>
@@ -116,7 +114,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
                   </div>
                 ) : (
                   dashboard.history.map((entry) => (
-                    <Card key={entry.seasonId} className="border-border/70 shadow-none">
+                    <Card key={entry.seasonId} className="brand-muted-panel shadow-none">
                       <CardHeader>
                         <CardTitle className="text-lg">
                           {entry.leagueName} | {seasonLabel(entry.seasonName, entry.seasonYear)}
@@ -158,7 +156,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
           </section>
 
           <section className="space-y-6">
-            <Card className="border-border/70 bg-card/90">
+            <Card className="brand-surface">
               <CardHeader>
                 <CardTitle>Offseason Context</CardTitle>
                 <CardDescription>
@@ -172,7 +170,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
                   </div>
                 ) : (
                   dashboard.offseasonContext.map((entry) => (
-                    <Card key={entry.targetSeasonId} className="border-border/70 shadow-none">
+                    <Card key={entry.targetSeasonId} className="brand-muted-panel shadow-none">
                       <CardHeader>
                         <CardTitle className="text-lg">
                           {entry.leagueName} | {seasonLabel(entry.targetSeasonName, entry.targetSeasonYear)}
@@ -272,7 +270,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
               </CardContent>
             </Card>
 
-            <Card className="border-border/70 bg-card/90">
+            <Card className="brand-surface">
               <CardHeader>
                 <CardTitle>League Membership</CardTitle>
                 <CardDescription>Your memberships and roles across all leagues in the system.</CardDescription>

@@ -331,7 +331,7 @@ export function LeagueControlPanel() {
     >
       {status === "loading" ? (
         <div className="space-y-6">
-          <Card className="border-border/70 bg-card/90">
+          <Card className="brand-surface">
             <CardContent className="p-6 text-sm text-muted-foreground">Loading authentication state...</CardContent>
           </Card>
         </div>
@@ -516,14 +516,14 @@ export function LeagueControlPanel() {
             </CardFooter>
           </Card>
           {(errorMessage || successMessage) ? (
-            <Card className={cn("border-border/70", errorMessage ? "bg-red-50" : "bg-emerald-50")}>
+            <Card className={cn("brand-surface", errorMessage ? "bg-red-50" : "bg-emerald-50")}>
               <CardContent className="p-4 text-sm">{errorMessage ?? successMessage}</CardContent>
             </Card>
           ) : null}
         </div>
       ) : (
         <div className="space-y-6">
-          <Card className="border-border/70 bg-card/90">
+          <Card className="brand-surface">
             <CardHeader className="space-y-2">
               <CardTitle>My Leagues</CardTitle>
             </CardHeader>
@@ -539,7 +539,7 @@ export function LeagueControlPanel() {
               ) : (
                 <div className="space-y-4">
                   {sortedLeagues.map((league) => (
-                    <Card key={league.id} className="border-border/70 shadow-none">
+                    <Card key={league.id} className="brand-muted-panel shadow-none">
                       <CardContent className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:justify-between">
                         <div className="min-w-0 flex-1 space-y-3">
                           <div className="flex min-h-10 flex-wrap items-center gap-2">
@@ -571,7 +571,7 @@ export function LeagueControlPanel() {
             </CardContent>
           </Card>
           <div className="grid gap-6 lg:grid-cols-2">
-            <Card className="border-border/70 bg-card/90">
+            <Card className="brand-surface">
               <CardHeader>
                 <CardTitle>Create League</CardTitle>
                 <CardDescription>Create a league and make your authenticated user the commissioner.</CardDescription>
@@ -591,7 +591,7 @@ export function LeagueControlPanel() {
                 </form>
               </CardContent>
             </Card>
-            <Card className="border-border/70 bg-card/90">
+            <Card className="brand-surface">
               <CardHeader>
                 <CardTitle>Join League</CardTitle>
                 <CardDescription>Use a league code to join an existing league with your authenticated user.</CardDescription>
@@ -615,7 +615,7 @@ export function LeagueControlPanel() {
               </CardContent>
             </Card>
           </div>
-          <Card className="border-border/70 bg-card/90">
+          <Card className="brand-surface">
             <CardHeader>
               <CardTitle className="text-base">Owner Links</CardTitle>
               <CardDescription>Lower-priority shortcuts for owner-specific pages.</CardDescription>
@@ -630,7 +630,7 @@ export function LeagueControlPanel() {
             </CardContent>
           </Card>
           {(errorMessage || successMessage) ? (
-            <Card className={cn("border-border/70", errorMessage ? "bg-red-50" : "bg-emerald-50")}>
+            <Card className={cn("brand-surface", errorMessage ? "bg-red-50" : "bg-emerald-50")}>
               <CardContent className="p-4 text-sm">{errorMessage ?? successMessage}</CardContent>
             </Card>
           ) : null}

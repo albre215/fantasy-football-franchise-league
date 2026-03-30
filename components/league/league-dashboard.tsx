@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { BrandMasthead } from "@/components/brand/brand-masthead";
 import { CommissionerToolsPanel } from "@/components/league/commissioner-tools-panel";
 import { LeagueHistoryPanel } from "@/components/league/league-history-panel";
 import { OffseasonDraftPanel } from "@/components/league/offseason-draft-panel";
@@ -547,10 +548,12 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   if (!leagueId) {
     return (
       <main className="container py-12">
-        <div className="max-w-3xl space-y-4">
-          <h1 className="text-3xl font-semibold tracking-tight">League Dashboard</h1>
-          <p className="text-muted-foreground">Select a league to open the commissioner bootstrap console.</p>
-        </div>
+        <BrandMasthead
+          className="mb-8"
+          description="Select a league to open the commissioner bootstrap console."
+          eyebrow="Commissioner Console"
+          title="League Dashboard"
+        />
         <div className="mt-8 grid gap-4 md:grid-cols-2">
           {leagueOptions.length === 0 ? (
             <Card>
@@ -630,17 +633,16 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   return (
     <main className="container py-12">
       <div className="max-w-6xl space-y-6">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="space-y-2">
-            <h1 className="text-3xl font-semibold tracking-tight">League Bootstrap Console</h1>
-            <p className="text-muted-foreground">
-              Set up the real current season from an already-completed offseason draft.
-            </p>
-          </div>
-          <Link className={buttonVariants({ variant: "outline" })} href="/">
-            Back to Home
-          </Link>
-        </div>
+        <BrandMasthead
+          actions={
+            <Link className={buttonVariants({ variant: "outline" })} href="/">
+              Back to Home
+            </Link>
+          }
+          description="Set up the real current season from an already-completed offseason draft."
+          eyebrow="Commissioner Console"
+          title="League Bootstrap Console"
+        />
 
         {(errorMessage || successMessage) && (
           <div className="pointer-events-none fixed right-6 top-6 z-50 w-full max-w-md">
@@ -668,7 +670,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
               </Card>
             ) : null}
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 rounded-2xl border border-border/80 bg-white/72 p-2 shadow-[0_20px_48px_-34px_rgba(6,32,18,0.35)] backdrop-blur-sm">
               {[
                 { id: "overview", label: "Overview" },
                 { id: "seasons", label: "Seasons" },
