@@ -8,6 +8,7 @@ import { BrandMasthead } from "@/components/brand/brand-masthead";
 import { CommissionerToolsPanel } from "@/components/league/commissioner-tools-panel";
 import { LeagueHistoryPanel } from "@/components/league/league-history-panel";
 import { OffseasonDraftPanel } from "@/components/league/offseason-draft-panel";
+import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -1084,7 +1085,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                                     Current team count: {selectedOwner?.teamCount ?? 0}/3
                                   </p>
                                   <p>
-                                    {isLocked
+                                  {isLocked
                                       ? "Season is locked. Unlock it before making ownership corrections."
                                       : !selectedOwnerId
                                       ? "Choose an owner to assign or remove teams."
@@ -1096,6 +1097,15 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                                   </p>
                                 </div>
 
+                                {selectedTeamId ? (
+                                  <div className="rounded-lg border border-border bg-background px-3 py-2 text-foreground">
+                                    <NFLTeamLabel
+                                      size="default"
+                                      team={availableTeams.find((team) => team.id === selectedTeamId)!}
+                                    />
+                                  </div>
+                                ) : null}
+
                                 <div className="space-y-2">
                                   <p className="font-medium text-foreground">Selected owner's teams</p>
                                   {selectedOwner?.teams.length ? (
@@ -1105,9 +1115,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                                           className="flex items-center gap-2 rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground"
                                           key={entry.ownershipId}
                                         >
-                                          <span>
-                                            {entry.team.abbreviation} - {entry.team.name}
-                                          </span>
+                                          <NFLTeamLabel size="compact" team={entry.team} />
                                           <Button
                                             className="h-7 px-2"
                                             disabled={isSubmitting || isLocked || !canManageLeague}
@@ -1142,7 +1150,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                                           onClick={() => setSelectedTeamId(team.id)}
                                           type="button"
                                         >
-                                          {team.abbreviation} - {team.name}
+                                          <NFLTeamLabel size="compact" team={team} />
                                         </button>
                                       ))}
                                     </div>
@@ -1196,7 +1204,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                                     className="rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground"
                                     key={entry.ownershipId}
                                   >
-                                    {entry.team.abbreviation} - {entry.team.name}
+                                    <NFLTeamLabel size="compact" team={entry.team} />
                                   </span>
                                 ))
                               ) : (

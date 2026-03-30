@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { BrandMasthead } from "@/components/brand/brand-masthead";
+import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -86,7 +87,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
                                 className="rounded-lg border border-border bg-background px-4 py-3 text-sm"
                               >
                                 <div className="font-medium">
-                                  {team.abbreviation} - {team.name}
+                                  <NFLTeamLabel size="detail" team={team} />
                                 </div>
                                 <div className="text-muted-foreground">
                                   {team.conference} | {team.division}
@@ -138,7 +139,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
                                 className="rounded-lg border border-border bg-background px-4 py-3 text-sm"
                               >
                                 <div className="font-medium">
-                                  {team.abbreviation} - {team.name}
+                                  <NFLTeamLabel size="detail" team={team} />
                                 </div>
                                 <div className="text-muted-foreground">
                                   {team.conference} | {team.division}
@@ -224,7 +225,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
                                   key={`${entry.targetSeasonId}-previous-${team.id}`}
                                   className="rounded-full border border-border bg-background px-3 py-1 text-sm"
                                 >
-                                  {team.abbreviation} - {team.name}
+                                  <NFLTeamLabel size="compact" team={team} />
                                 </span>
                               ))}
                             </div>
@@ -244,7 +245,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
                                   key={`${entry.targetSeasonId}-keeper-${team.id}`}
                                   className="rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-sm text-emerald-900"
                                 >
-                                  {team.abbreviation} - {team.name}
+                                  <NFLTeamLabel size="compact" team={team} />
                                 </span>
                               ))}
                             </div>
@@ -255,7 +256,7 @@ export function OwnerDashboard({ dashboard }: { dashboard: OwnerDashboardSummary
                           <div className="text-sm font-medium">Drafted Team</div>
                           {entry.draftedTeam ? (
                             <div className="rounded-lg border border-border bg-background px-4 py-3">
-                              {entry.draftedTeam.abbreviation} - {entry.draftedTeam.name}
+                              <NFLTeamLabel size="detail" team={entry.draftedTeam} />
                             </div>
                           ) : (
                             <div className="rounded-lg border border-dashed border-border p-3 text-muted-foreground">

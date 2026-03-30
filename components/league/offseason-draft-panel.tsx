@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type {
@@ -842,7 +843,7 @@ export function OffseasonDraftPanel({
                                   onClick={() => toggleKeeperSelection(member.leagueMemberId, team.id)}
                                   type="button"
                                 >
-                                  {team.abbreviation} - {team.name}
+                                  <NFLTeamLabel size="compact" team={team} />
                                 </button>
                               );
                             })}
@@ -881,11 +882,16 @@ export function OffseasonDraftPanel({
                           </p>
                           <p className="text-muted-foreground">
                             {pick.selectedNflTeam
-                              ? `${pick.selectedNflTeam.abbreviation} - ${pick.selectedNflTeam.name}`
+                              ? ""
                               : draftState.draft.status === "PLANNING"
                               ? "Waiting for draft start"
                               : "Waiting for selection"}
                           </p>
+                          {pick.selectedNflTeam ? (
+                            <div className="mt-2 text-muted-foreground">
+                              <NFLTeamLabel size="default" team={pick.selectedNflTeam} />
+                            </div>
+                          ) : null}
                         </div>
                       ))}
                     </CardContent>
@@ -917,7 +923,7 @@ export function OffseasonDraftPanel({
                     ) : (
                       draftState.draftPool.map((team) => (
                         <div className="rounded-lg border border-border p-3 text-sm" key={team.id}>
-                          {team.abbreviation} - {team.name}
+                          <NFLTeamLabel size="default" team={team} />
                         </div>
                       ))
                     )}
@@ -953,6 +959,14 @@ export function OffseasonDraftPanel({
                             </option>
                           ))}
                         </select>
+                        {currentPickTeamId ? (
+                          <div className="rounded-lg border border-border bg-background px-3 py-2 text-foreground">
+                            <NFLTeamLabel
+                              size="default"
+                              team={draftState.draftPool.find((team) => team.id === currentPickTeamId)!}
+                            />
+                          </div>
+                        ) : null}
                         <Button
                           className="w-full"
                           disabled={isSubmitting || !currentPickTeamId}

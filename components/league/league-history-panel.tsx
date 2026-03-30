@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { NFLTeamLabel, NFLTeamLogo } from "@/components/shared/nfl-team-label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type {
   DraftHistoryResponse,
@@ -28,6 +29,33 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
 
 function seasonLabel(name: string | null, year: number) {
   return name ?? `${year} Season`;
+}
+
+function renderLeaderboardLabel(
+  label: string,
+  teams: LeagueHistoryOverviewResponse["overview"]["franchiseOptions"]
+) {
+  const [left, right] = label.split(" - ");
+  const leadingTeam = teams.find((team) => team.abbreviation === left) ?? null;
+  const trailingTeam = teams.find((team) => team.abbreviation === right) ?? null;
+
+  if (leadingTeam) {
+    return <NFLTeamLabel size="compact" team={leadingTeam} />;
+  }
+
+  if (trailingTeam) {
+    return (
+      <span className="inline-flex flex-wrap items-center gap-2">
+        <span>{left}</span>
+        <span className="inline-flex items-center gap-2 text-muted-foreground">
+          <NFLTeamLogo abbreviation={trailingTeam.abbreviation} name={trailingTeam.name} size="compact" />
+          <span>{trailingTeam.abbreviation}</span>
+        </span>
+      </span>
+    );
+  }
+
+  return label;
 }
 
 export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
@@ -183,19 +211,50 @@ export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
                 <p>
                   Longest streak:{" "}
                   {overview.continuitySummary.longestOwnershipStreak
-                    ? `${overview.continuitySummary.longestOwnershipStreak.ownerDisplayName} with ${overview.continuitySummary.longestOwnershipStreak.teamAbbreviation} (${overview.continuitySummary.longestOwnershipStreak.streakLength} seasons)`
+                    ? <>
+                        {overview.continuitySummary.longestOwnershipStreak.ownerDisplayName} with{" "}
+                        <span className="inline-flex items-center gap-2 align-middle">
+                          <NFLTeamLogo
+                            abbreviation={overview.continuitySummary.longestOwnershipStreak.teamAbbreviation}
+                            name={overview.continuitySummary.longestOwnershipStreak.teamAbbreviation}
+                            size="compact"
+                          />
+                          <span>{overview.continuitySummary.longestOwnershipStreak.teamAbbreviation}</span>
+                        </span>{" "}
+                        ({overview.continuitySummary.longestOwnershipStreak.streakLength} seasons)
+                      </>
                     : "Not available yet"}
                 </p>
                 <p>
                   Most frequently owned:{" "}
                   {overview.continuitySummary.mostFrequentlyOwnedTeam
-                    ? `${overview.continuitySummary.mostFrequentlyOwnedTeam.teamAbbreviation} (${overview.continuitySummary.mostFrequentlyOwnedTeam.ownershipCount} seasons)`
+                    ? <>
+                        <span className="inline-flex items-center gap-2 align-middle">
+                          <NFLTeamLogo
+                            abbreviation={overview.continuitySummary.mostFrequentlyOwnedTeam.teamAbbreviation}
+                            name={overview.continuitySummary.mostFrequentlyOwnedTeam.teamAbbreviation}
+                            size="compact"
+                          />
+                          <span>{overview.continuitySummary.mostFrequentlyOwnedTeam.teamAbbreviation}</span>
+                        </span>{" "}
+                        ({overview.continuitySummary.mostFrequentlyOwnedTeam.ownershipCount} seasons)
+                      </>
                     : "Not available yet"}
                 </p>
                 <p>
                   Most frequently changing:{" "}
                   {overview.continuitySummary.mostFrequentlyChangingTeam
-                    ? `${overview.continuitySummary.mostFrequentlyChangingTeam.teamAbbreviation} (${overview.continuitySummary.mostFrequentlyChangingTeam.transitionCount} transitions)`
+                    ? <>
+                        <span className="inline-flex items-center gap-2 align-middle">
+                          <NFLTeamLogo
+                            abbreviation={overview.continuitySummary.mostFrequentlyChangingTeam.teamAbbreviation}
+                            name={overview.continuitySummary.mostFrequentlyChangingTeam.teamAbbreviation}
+                            size="compact"
+                          />
+                          <span>{overview.continuitySummary.mostFrequentlyChangingTeam.teamAbbreviation}</span>
+                        </span>{" "}
+                        ({overview.continuitySummary.mostFrequentlyChangingTeam.transitionCount} transitions)
+                      </>
                     : "Not available yet"}
                 </p>
               </CardContent>
@@ -290,7 +349,7 @@ export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
                       ) : (
                         leaderboard.rows.slice(0, 3).map((row) => (
                           <div className="rounded-lg border border-border p-3 text-sm" key={`${leaderboard.title}-${row.label}`}>
-                            <p className="font-medium text-foreground">{row.label}</p>
+                            <p className="font-medium text-foreground">{renderLeaderboardLabel(row.label, overview.franchiseOptions)}</p>
                             <p className="text-muted-foreground">{row.value}</p>
                             <p className="text-muted-foreground">{row.supportingText}</p>
                           </div>
@@ -324,6 +383,16 @@ export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
                     </option>
                   ))}
                 </select>
+
+                {(() => {
+                  const selectedTeam = overview.franchiseOptions.find((option) => option.nflTeamId === selectedFranchiseId);
+
+                  return selectedTeam ? (
+                    <div className="rounded-lg border border-border bg-background px-3 py-2 text-foreground">
+                      <NFLTeamLabel size="detail" team={selectedTeam} />
+                    </div>
+                  ) : null;
+                })()}
 
                 {detailError ? (
                   <p className="text-sm text-red-600">{detailError}</p>
@@ -407,7 +476,16 @@ export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
                           <div className="mt-2 flex flex-wrap gap-2">
                             {row.teams.map((entry) => (
                               <span className="rounded-full bg-secondary px-3 py-1 text-secondary-foreground" key={`${row.seasonId}-${entry.team.id}`}>
-                                {entry.team.abbreviation} ({entry.acquisitionType})
+                                <span className="inline-flex items-center gap-2">
+                                  <NFLTeamLogo
+                                    abbreviation={entry.team.abbreviation}
+                                    name={entry.team.name}
+                                    size="compact"
+                                  />
+                                  <span>
+                                    {entry.team.abbreviation} ({entry.acquisitionType})
+                                  </span>
+                                </span>
                               </span>
                             ))}
                           </div>
@@ -459,7 +537,8 @@ export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
                         {draft.picks.map((pick) => (
                           <p key={`${draft.draftId}-${pick.overallPickNumber}`}>
                             Pick {pick.overallPickNumber}: {pick.ownerDisplayName}{" "}
-                            {pick.team ? `-> ${pick.team.abbreviation} - ${pick.team.name}` : "-> Waiting for selection"}
+                            {pick.team ? "-> " : "-> Waiting for selection"}
+                            {pick.team ? <NFLTeamLabel size="compact" team={pick.team} /> : null}
                           </p>
                         ))}
                       </div>

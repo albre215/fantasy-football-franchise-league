@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type {
@@ -699,6 +700,15 @@ export function CommissionerToolsPanel({
                   </Button>
                 </div>
 
+                {selectedAssignTeamId ? (
+                  <div className="rounded-lg border border-border bg-background px-3 py-2 text-foreground">
+                    <NFLTeamLabel
+                      size="default"
+                      team={availableTeams.find((team) => team.id === selectedAssignTeamId)!}
+                    />
+                  </div>
+                ) : null}
+
                 <div className="space-y-3">
                   {ownershipOwners.map((owner) => (
                     <div className="rounded-lg border border-border p-4" key={owner.leagueMemberId}>
@@ -717,9 +727,7 @@ export function CommissionerToolsPanel({
                               className="flex items-center gap-2 rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground"
                               key={entry.ownershipId}
                             >
-                              <span>
-                                {entry.team.abbreviation} - {entry.team.name}
-                              </span>
+                              <NFLTeamLabel size="compact" team={entry.team} />
                               <Button
                                 className="h-7 px-2"
                                 disabled={isMutating || !canManageLeague}
