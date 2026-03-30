@@ -6,5 +6,6 @@ export type ServiceModule =
   | "draft"
   | "owner"
   | "history"
+  | "analytics"
   | "ingestion"
   | "results";
