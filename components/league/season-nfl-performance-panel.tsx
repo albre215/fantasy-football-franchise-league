@@ -147,6 +147,7 @@ export function SeasonNflPerformancePanel({
         setSelectedWeekKey(data.nfl.availableWeeks[0]?.key ?? "");
         setFormPhase(data.nfl.availableWeeks[0]?.phase ?? "REGULAR_SEASON");
         setSummaryError(null);
+        onError(null);
       } catch (error) {
         if ((error as Error).name === "AbortError") {
           return;
@@ -233,6 +234,7 @@ export function SeasonNflPerformancePanel({
 
     const summaryData = await parseJsonResponse<SeasonNflOverviewResponse>(summaryResponse);
     setSummary(summaryData.nfl);
+    onError(null);
 
     const resolvedWeek = nextWeekKey
       ? summaryData.nfl.availableWeeks.find((week) => week.key === nextWeekKey) ?? null

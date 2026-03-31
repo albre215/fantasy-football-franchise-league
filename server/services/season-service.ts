@@ -93,6 +93,17 @@ async function getSeasonOrThrow(tx: Prisma.TransactionClient | typeof prisma, se
   const season = await tx.season.findUnique({
     where: {
       id: seasonId
+    },
+    select: {
+      id: true,
+      leagueId: true,
+      year: true,
+      name: true,
+      status: true,
+      isLocked: true,
+      startsAt: true,
+      endsAt: true,
+      createdAt: true
     }
   });
 
@@ -161,26 +172,39 @@ async function getSeasonSetupStatusInternal(
     where: {
       id: seasonId
     },
-    include: {
+    select: {
+      id: true,
+      leagueId: true,
       league: {
-        include: {
+        select: {
           members: {
-            include: {
-              user: true,
+            select: {
+              id: true,
+              userId: true,
+              role: true,
+              user: {
+                select: {
+                  displayName: true
+                }
+              },
               teamOwnerships: {
                 where: {
                   seasonId
+                },
+                select: {
+                  id: true
                 }
               }
             },
-            orderBy: [
-              { role: "asc" },
-              { joinedAt: "asc" }
-            ]
+            orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
           }
         }
       },
-      teamOwnerships: true
+      teamOwnerships: {
+        select: {
+          id: true
+        }
+      }
     }
   });
 
@@ -275,6 +299,17 @@ export const seasonService = {
       where: {
         leagueId: normalizedLeagueId
       },
+      select: {
+        id: true,
+        leagueId: true,
+        year: true,
+        name: true,
+        status: true,
+        isLocked: true,
+        startsAt: true,
+        endsAt: true,
+        createdAt: true
+      },
       orderBy: [{ year: "desc" }, { createdAt: "desc" }]
     });
 
@@ -294,6 +329,17 @@ export const seasonService = {
       where: {
         leagueId: normalizedLeagueId,
         status: "ACTIVE"
+      },
+      select: {
+        id: true,
+        leagueId: true,
+        year: true,
+        name: true,
+        status: true,
+        isLocked: true,
+        startsAt: true,
+        endsAt: true,
+        createdAt: true
       },
       orderBy: {
         year: "desc"
