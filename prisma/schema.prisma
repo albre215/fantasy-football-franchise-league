@@ -50,6 +50,14 @@ enum IngestionRunStatus {
   FAILED
 }
 
+enum LedgerEntryCategory {
+  MANUAL_ADJUSTMENT
+  FANTASY_PAYOUT
+  NFL_REGULAR_SEASON
+  NFL_PLAYOFF
+  UNUSED_TEAM_ALLOCATION
+}
+
 model User {
   id            String         @id @default(cuid())
   email         String         @unique
@@ -72,6 +80,7 @@ model League {
   members     LeagueMember[]
   seasons     Season[]
   drafts      Draft[]
+  ledgerEntries LedgerEntry[]
 }
 
 model LeagueMember {
@@ -90,6 +99,7 @@ model LeagueMember {
   seasonStandings SeasonStanding[]
   weeklyStandings WeeklyStanding[]
   sourceMappings SeasonMemberSourceMapping[]
+  ledgerEntries   LedgerEntry[]
 
   @@unique([leagueId, userId])
   @@index([userId])
@@ -115,6 +125,7 @@ model Season {
   ingestionRuns  IngestionRun[]
   seasonStandings SeasonStanding[]
   weeklyStandings WeeklyStanding[]
+  ledgerEntries   LedgerEntry[]
 
   @@unique([leagueId, year])
   @@index([leagueId, status])
@@ -326,4 +337,26 @@ model WeeklyStanding {
 
   @@unique([seasonId, weekNumber, leagueMemberId])
   @@index([seasonId, weekNumber, rank])
+}
+
+model LedgerEntry {
+  id             String              @id @default(cuid())
+  leagueId       String
+  seasonId       String
+  leagueMemberId String
+  category       LedgerEntryCategory
+  amount         Decimal             @db.Decimal(12, 2)
+  description    String
+  metadata       Json?
+  actingUserId   String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  league         League              @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  season         Season              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  leagueMember   LeagueMember        @relation(fields: [leagueMemberId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, createdAt])
+  @@index([seasonId, createdAt])
+  @@index([seasonId, leagueMemberId, createdAt])
+  @@index([seasonId, category])
 }

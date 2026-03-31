@@ -8,6 +8,7 @@ import { BrandMasthead } from "@/components/brand/brand-masthead";
 import { CommissionerToolsPanel } from "@/components/league/commissioner-tools-panel";
 import { LeagueHistoryPanel } from "@/components/league/league-history-panel";
 import { OffseasonDraftPanel } from "@/components/league/offseason-draft-panel";
+import { SeasonLedgerPanel } from "@/components/league/season-ledger-panel";
 import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,7 +39,7 @@ interface LeagueDashboardProps {
   leagueId?: string;
 }
 
-type DashboardTab = "overview" | "seasons" | "members" | "ownership" | "results-draft" | "history-analytics";
+type DashboardTab = "overview" | "seasons" | "members" | "ownership" | "results-draft" | "ledger" | "history-analytics";
 type ResultsDraftTab = "final-standings" | "offseason-draft" | "commissioner-overrides";
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
@@ -678,6 +679,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                 { id: "members", label: "Members" },
                 { id: "ownership", label: "Ownership" },
                 { id: "results-draft", label: "Results & Draft" },
+                { id: "ledger", label: "Ledger" },
                 { id: "history-analytics", label: "History & Analytics" }
               ].map((tab) => (
                 <Button
@@ -1301,6 +1303,17 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                   />
                 ) : null}
               </div>
+            ) : null}
+
+            {activeTab === "ledger" ? (
+              <SeasonLedgerPanel
+                accessMessage={commissionerAccessMessage}
+                activeSeason={activeSeason}
+                canManageLedger={canManageLeague}
+                members={members}
+                onError={(message) => setErrorMessage(message || null)}
+                onSuccess={(message) => setSuccessMessage(message || null)}
+              />
             ) : null}
 
             {activeTab === "history-analytics" ? <LeagueHistoryPanel leagueId={leagueId} /> : null}
