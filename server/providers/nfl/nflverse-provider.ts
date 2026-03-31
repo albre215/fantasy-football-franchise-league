@@ -1,7 +1,7 @@
 import type { NflResultsProviderAdapter, LoadNflResultsOptions, LoadNflResultsResult, NormalizedNflTeamResultRecord } from "@/server/providers/nfl/types";
 import type { SeasonNflGameResult, SeasonNflResultPhase } from "@/types/nfl-performance";
 import { normalizeNflTeamAbbreviation } from "@/lib/nfl-team-aliases";
-import { validateSeasonWeekPhase } from "@/server/services/nfl-performance-helpers";
+import { getExpectedWeekForPhase, validateSeasonWeekPhase } from "@/server/services/nfl-performance-helpers";
 
 const NFLVERSE_GAMES_CSV_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv";
 
@@ -122,6 +122,9 @@ function mapGameRowToRecords(row: Record<string, string>, seasonYear: number): N
     return [];
   }
 
+  const normalizedWeekNumber =
+    phase === "REGULAR_SEASON" ? weekNumber : (getExpectedWeekForPhase(seasonYear, phase) ?? weekNumber);
+
   const homeTeam = normalizeNflTeamAbbreviation(row.home_team ?? "");
   const awayTeam = normalizeNflTeamAbbreviation(row.away_team ?? "");
   const homeScore = parseInteger(row.home_score);
@@ -133,18 +136,19 @@ function mapGameRowToRecords(row: Record<string, string>, seasonYear: number): N
     return [];
   }
 
-  validateSeasonWeekPhase(seasonYear, weekNumber, phase);
+  validateSeasonWeekPhase(seasonYear, normalizedWeekNumber, phase);
 
   const metadata = {
     gameId: row.game_id?.trim() || null,
     gameDate: row.gameday?.trim() || null,
-    seasonType: row.game_type?.trim() || null
+    seasonType: row.game_type?.trim() || null,
+    providerWeekNumber: weekNumber
   };
 
   return [
     {
       seasonYear,
-      weekNumber,
+      weekNumber: normalizedWeekNumber,
       phase,
       teamAbbreviation: homeTeam,
       opponentAbbreviation: awayTeam,
@@ -155,7 +159,7 @@ function mapGameRowToRecords(row: Record<string, string>, seasonYear: number): N
     },
     {
       seasonYear,
-      weekNumber,
+      weekNumber: normalizedWeekNumber,
       phase,
       teamAbbreviation: awayTeam,
       opponentAbbreviation: homeTeam,

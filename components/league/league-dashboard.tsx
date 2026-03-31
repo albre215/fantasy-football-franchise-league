@@ -105,6 +105,19 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
     [ownershipOwners]
   );
 
+  useEffect(() => {
+    if (!errorMessage && !successMessage) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setErrorMessage(null);
+      setSuccessMessage(null);
+    }, 4000);
+
+    return () => window.clearTimeout(timer);
+  }, [errorMessage, successMessage]);
+
   async function refreshLeagueDashboard(currentLeagueId: string) {
     setIsLoading(true);
 
@@ -356,7 +369,17 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       });
       const data = await parseJsonResponse<UpdateSeasonYearResponse>(response);
 
-      setSuccessMessage(`Updated season year to ${data.season.year}.`);
+      if (data.nflImport?.status === "FAILED") {
+        setSuccessMessage(`Updated season year to ${data.season.year}.`);
+        setErrorMessage(
+          `Season year updated, but automatic NFL re-import failed. ${data.nflImport.message ?? ""}`.trim()
+        );
+      } else if (data.nflImport?.status === "COMPLETED") {
+        setSuccessMessage(`Updated season year to ${data.season.year}. ${data.nflImport.message ?? ""}`.trim());
+      } else {
+        setSuccessMessage(`Updated season year to ${data.season.year}.`);
+      }
+
       cancelSeasonYearEdit();
       await refreshLeagueDashboard(leagueId);
     } catch (error) {

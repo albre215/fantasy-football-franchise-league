@@ -489,6 +489,18 @@ export const seasonService = {
       }
 
       try {
+        await tx.seasonNflTeamResult.deleteMany({
+          where: {
+            seasonId: season.id
+          }
+        });
+
+        await tx.seasonNflImportRun.deleteMany({
+          where: {
+            seasonId: season.id
+          }
+        });
+
         const updatedSeason = await tx.season.update({
           where: {
             id: season.id

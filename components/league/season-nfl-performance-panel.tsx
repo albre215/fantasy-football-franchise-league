@@ -76,6 +76,14 @@ function describeCoverageStatus(
   return `This season is only partially imported right now. Imported regular-season weeks: ${importState.importedRegularSeasonWeekNumbers.join(", ") || "none yet"}. Imported playoff phases: ${importState.importedPlayoffPhases.map(formatPhase).join(", ") || "none yet"}.`;
 }
 
+function getInitialWeekKey(summary: SeasonNflOverviewResponse["nfl"]) {
+  return summary.availableWeeks[0]?.key ?? "";
+}
+
+function getInitialWeekPhase(summary: SeasonNflOverviewResponse["nfl"]) {
+  return summary.availableWeeks[0]?.phase ?? "REGULAR_SEASON";
+}
+
 export function SeasonNflPerformancePanel({
   activeSeason,
   canManageNfl,
@@ -145,8 +153,8 @@ export function SeasonNflPerformancePanel({
         });
         const data = await parseJsonResponse<SeasonNflOverviewResponse>(response);
         setSummary(data.nfl);
-        setSelectedWeekKey(data.nfl.availableWeeks[0]?.key ?? "");
-        setFormPhase(data.nfl.availableWeeks[0]?.phase ?? "REGULAR_SEASON");
+        setSelectedWeekKey(getInitialWeekKey(data.nfl));
+        setFormPhase(getInitialWeekPhase(data.nfl));
         setSummaryError(null);
         onError(null);
       } catch (error) {

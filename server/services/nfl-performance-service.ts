@@ -103,6 +103,14 @@ function comparePhase(left: SeasonNflResultPhaseType, right: SeasonNflResultPhas
   return order[left] - order[right];
 }
 
+function compareWeekOption(left: SeasonNflWeekOption, right: SeasonNflWeekOption) {
+  if (left.weekNumber !== right.weekNumber) {
+    return left.weekNumber - right.weekNumber;
+  }
+
+  return comparePhase(left.phase, right.phase);
+}
+
 function mapOwner(member: {
   id: string;
   userId: string;
@@ -234,9 +242,12 @@ async function assertViewerMembershipForSeason(tx: PrismaClientLike, seasonId: s
   return { season, membership };
 }
 
-async function getSeasonResults(tx: PrismaClientLike, seasonId: string) {
+async function getSeasonResults(tx: PrismaClientLike, seasonId: string, seasonYear: number) {
   return tx.seasonNflTeamResult.findMany({
-    where: { seasonId },
+    where: {
+      seasonId,
+      seasonYear
+    },
     include: {
       nflTeam: true,
       opponentNflTeam: true,
@@ -248,9 +259,12 @@ async function getSeasonResults(tx: PrismaClientLike, seasonId: string) {
   });
 }
 
-async function getSeasonImportRuns(tx: PrismaClientLike, seasonId: string) {
+async function getSeasonImportRuns(tx: PrismaClientLike, seasonId: string, seasonYear: number) {
   return tx.seasonNflImportRun.findMany({
-    where: { seasonId },
+    where: {
+      seasonId,
+      seasonYear
+    },
     orderBy: [{ startedAt: "desc" }, { id: "desc" }],
     take: 8
   });
@@ -442,10 +456,7 @@ function buildAvailableWeeks(
   }
 
   return Array.from(grouped.values()).sort((left, right) => {
-    if (right.weekNumber !== left.weekNumber) {
-      return right.weekNumber - left.weekNumber;
-    }
-    return comparePhase(right.phase, left.phase);
+    return compareWeekOption(left, right);
   });
 }
 
@@ -650,7 +661,10 @@ async function runTransactionsInChunks(operations: Prisma.PrismaPromise<unknown>
 export const nflPerformanceService = {
   async getSeasonNflOverview(seasonId: string, actingUserId: string): Promise<SeasonNflOverview> {
     const { season } = await assertViewerMembershipForSeason(prisma, seasonId, actingUserId);
-    const [results, importRuns] = await Promise.all([getSeasonResults(prisma, season.id), getSeasonImportRuns(prisma, season.id)]);
+    const [results, importRuns] = await Promise.all([
+      getSeasonResults(prisma, season.id, season.year),
+      getSeasonImportRuns(prisma, season.id, season.year)
+    ]);
 
     return buildSeasonOverviewFromContext(season, results, importRuns);
   },
@@ -669,7 +683,10 @@ export const nflPerformanceService = {
       validateSeasonWeekPhase(season.year, normalizedWeekNumber, normalizedPhase);
     }
 
-    const [results, importRuns] = await Promise.all([getSeasonResults(prisma, season.id), getSeasonImportRuns(prisma, season.id)]);
+    const [results, importRuns] = await Promise.all([
+      getSeasonResults(prisma, season.id, season.year),
+      getSeasonImportRuns(prisma, season.id, season.year)
+    ]);
 
     return buildWeekResults(season, results, importRuns, normalizedWeekNumber, normalizedPhase);
   },

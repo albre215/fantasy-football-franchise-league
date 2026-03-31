@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { requireAuthenticatedUserId, RouteAuthError } from "@/lib/auth-session";
-import { SeasonServiceError, seasonService } from "@/server/services/season-service";
+import { seasonActivationService } from "@/server/services/season-activation-service";
+import { SeasonServiceError } from "@/server/services/season-service";
 import type { UpdateSeasonYearResponse } from "@/types/season";
 
 export const dynamic = "force-dynamic";
@@ -18,13 +19,13 @@ export async function POST(request: Request, { params }: RouteContext) {
       year?: number | string;
     };
     const actingUserId = await requireAuthenticatedUserId();
-    const season = await seasonService.updateSeasonYear({
+    const result = await seasonActivationService.updateSeasonYearAndSyncNflResults({
       seasonId: params.seasonId,
       actingUserId,
       year: Number(body.year)
     });
 
-    return NextResponse.json<UpdateSeasonYearResponse>({ season });
+    return NextResponse.json<UpdateSeasonYearResponse>(result);
   } catch (error) {
     if (error instanceof RouteAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
