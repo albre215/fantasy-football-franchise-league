@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireAuthenticatedUserId, RouteAuthError } from "@/lib/auth-session";
 import { resultsService, ResultsServiceError } from "@/server/services/results-service";
 import type {
+  FantasyPayoutConfigEntry,
   SaveManualSeasonStandingsResponse,
   SeasonResultsResponse
 } from "@/types/results";
@@ -33,13 +34,15 @@ export async function POST(request: Request, { params }: RouteContext) {
   try {
     const body = (await request.json()) as {
       orderedLeagueMemberIds?: string[];
+      payoutConfig?: FantasyPayoutConfigEntry[];
     };
     const actingUserId = await requireAuthenticatedUserId();
 
     const results = await resultsService.saveManualSeasonStandings({
       seasonId: params.seasonId,
       actingUserId,
-      orderedLeagueMemberIds: Array.isArray(body.orderedLeagueMemberIds) ? body.orderedLeagueMemberIds : []
+      orderedLeagueMemberIds: Array.isArray(body.orderedLeagueMemberIds) ? body.orderedLeagueMemberIds : [],
+      payoutConfig: Array.isArray(body.payoutConfig) ? body.payoutConfig : undefined
     });
 
     return NextResponse.json<SaveManualSeasonStandingsResponse>({ results });

@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { seasonService } from "@/server/services/season-service";
+import type { FantasyPayoutConfigEntry } from "@/types/results";
 import type {
   CreateManualAdjustmentInput,
   LedgerEntrySummary,
@@ -22,6 +23,18 @@ class LedgerServiceError extends Error {
 }
 
 type PrismaClientLike = Prisma.TransactionClient | typeof prisma;
+
+interface ReplaceFantasyPayoutEntriesInput {
+  seasonId: string;
+  leagueId: string;
+  actingUserId: string;
+  payoutConfig: FantasyPayoutConfigEntry[];
+  standings: Array<{
+    leagueMemberId: string;
+    rank: number;
+    displayName: string;
+  }>;
+}
 
 function decimalToNumber(value: Prisma.Decimal | number | string) {
   return Number(new Prisma.Decimal(value).toFixed(2));
@@ -269,6 +282,50 @@ function buildSeasonTotals(entries: Awaited<ReturnType<typeof getSeasonEntries>>
   );
 }
 
+async function replaceFantasyPayoutEntriesForSeasonTx(
+  tx: PrismaClientLike,
+  input: ReplaceFantasyPayoutEntriesInput
+) {
+  await tx.ledgerEntry.deleteMany({
+    where: {
+      seasonId: input.seasonId,
+      category: "FANTASY_PAYOUT"
+    }
+  });
+
+  const payoutsByRank = new Map(input.payoutConfig.map((entry) => [entry.rank, entry.amount] as const));
+  const entriesToCreate = input.standings
+    .map((standing) => {
+      const configuredAmount = payoutsByRank.get(standing.rank) ?? 0;
+      const amount = Number(configuredAmount.toFixed(2));
+
+      if (amount === 0) {
+        return null;
+      }
+
+      return {
+        leagueId: input.leagueId,
+        seasonId: input.seasonId,
+        leagueMemberId: standing.leagueMemberId,
+        category: "FANTASY_PAYOUT" as const,
+        amount: new Prisma.Decimal(amount.toFixed(2)),
+        description: `Fantasy payout for ${standing.rank}${standing.rank === 1 ? "st" : standing.rank === 2 ? "nd" : standing.rank === 3 ? "rd" : "th"} place`,
+        metadata: {
+          source: "FINAL_FANTASY_STANDINGS",
+          rank: standing.rank
+        } as Prisma.InputJsonValue,
+        actingUserId: input.actingUserId
+      };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+  if (entriesToCreate.length > 0) {
+    await tx.ledgerEntry.createMany({
+      data: entriesToCreate
+    });
+  }
+}
+
 export const ledgerService = {
   async getSeasonLedgerSummary(seasonId: string, actingUserId: string): Promise<SeasonLedgerSummary> {
     const { season } = await assertViewerMembershipForSeason(prisma, seasonId, actingUserId);
@@ -370,7 +427,27 @@ export const ledgerService = {
         }
       };
     });
+  },
+
+  async replaceFantasyPayoutEntriesForSeason(input: ReplaceFantasyPayoutEntriesInput) {
+    const normalizedSeasonId = input.seasonId.trim();
+    const normalizedLeagueId = input.leagueId.trim();
+    const normalizedActingUserId = input.actingUserId.trim();
+
+    if (!normalizedSeasonId || !normalizedLeagueId || !normalizedActingUserId) {
+      throw new LedgerServiceError("seasonId, leagueId, and actingUserId are required.", 400);
+    }
+
+    return prisma.$transaction(async (tx) =>
+      replaceFantasyPayoutEntriesForSeasonTx(tx, {
+        ...input,
+        seasonId: normalizedSeasonId,
+        leagueId: normalizedLeagueId,
+        actingUserId: normalizedActingUserId
+      })
+    );
   }
 };
 
+export { replaceFantasyPayoutEntriesForSeasonTx };
 export { LedgerServiceError };

@@ -1,6 +1,11 @@
+import { Prisma } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
+import { replaceFantasyPayoutEntriesForSeasonTx } from "@/server/services/ledger-service";
 import { seasonService } from "@/server/services/season-service";
 import type {
+  FantasyPayoutConfigEntry,
+  FantasyPayoutPublishedEntry,
   OverwriteManualSeasonStandingsInput,
   RecommendedDraftOrderEntry,
   SaveManualSeasonStandingsInput,
@@ -16,6 +21,35 @@ class ResultsServiceError extends Error {
     super(message);
     this.name = "ResultsServiceError";
   }
+}
+
+const DEFAULT_FANTASY_PAYOUT_CONFIG: FantasyPayoutConfigEntry[] = [
+  { rank: 1, amount: 100 },
+  { rank: 2, amount: 50 },
+  { rank: 3, amount: 25 },
+  { rank: 4, amount: 0 },
+  { rank: 5, amount: 0 },
+  { rank: 6, amount: 0 },
+  { rank: 7, amount: 0 },
+  { rank: 8, amount: 0 },
+  { rank: 9, amount: 0 },
+  { rank: 10, amount: 0 }
+];
+
+function formatPlacement(rank: number) {
+  if (rank === 1) {
+    return "1st";
+  }
+
+  if (rank === 2) {
+    return "2nd";
+  }
+
+  if (rank === 3) {
+    return "3rd";
+  }
+
+  return `${rank}th`;
 }
 
 function mapSeasonStanding(standing: {
@@ -60,6 +94,87 @@ function mapSeasonStanding(standing: {
   };
 }
 
+function normalizePayoutConfigValue(
+  value: Prisma.JsonValue | null | undefined
+): { config: FantasyPayoutConfigEntry[]; configSource: "DEFAULT" | "SEASON" } {
+  if (!Array.isArray(value)) {
+    return {
+      config: DEFAULT_FANTASY_PAYOUT_CONFIG,
+      configSource: "DEFAULT"
+    };
+  }
+
+  const candidateEntries = value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        return null;
+      }
+
+      const rank = typeof entry.rank === "number" ? entry.rank : null;
+      const amount = typeof entry.amount === "number" ? entry.amount : null;
+
+      if (rank === null || amount === null) {
+        return null;
+      }
+
+      return {
+        rank,
+        amount
+      };
+    })
+    .filter((entry): entry is FantasyPayoutConfigEntry => entry !== null);
+
+  if (candidateEntries.length !== 10) {
+    return {
+      config: DEFAULT_FANTASY_PAYOUT_CONFIG,
+      configSource: "DEFAULT"
+    };
+  }
+
+  try {
+    return {
+      config: validateFantasyPayoutConfig(candidateEntries),
+      configSource: "SEASON"
+    };
+  } catch {
+    return {
+      config: DEFAULT_FANTASY_PAYOUT_CONFIG,
+      configSource: "DEFAULT"
+    };
+  }
+}
+
+function validateFantasyPayoutConfig(config: FantasyPayoutConfigEntry[]) {
+  if (config.length !== 10) {
+    throw new ResultsServiceError("Fantasy payout configuration must include ranks 1 through 10.", 400);
+  }
+
+  const normalized = config.map((entry) => {
+    if (!Number.isInteger(entry.rank) || entry.rank < 1 || entry.rank > 10) {
+      throw new ResultsServiceError("Fantasy payout configuration contains an invalid rank.", 400);
+    }
+
+    if (!Number.isFinite(entry.amount)) {
+      throw new ResultsServiceError("Fantasy payout configuration contains an invalid amount.", 400);
+    }
+
+    if (entry.amount < 0) {
+      throw new ResultsServiceError("Fantasy payout amounts cannot be negative.", 400);
+    }
+
+    return {
+      rank: entry.rank,
+      amount: Number(entry.amount.toFixed(2))
+    };
+  });
+
+  if (new Set(normalized.map((entry) => entry.rank)).size !== 10) {
+    throw new ResultsServiceError("Fantasy payout configuration must define each placement exactly once.", 400);
+  }
+
+  return [...normalized].sort((left, right) => left.rank - right.rank);
+}
+
 async function getSeasonResultsContext(seasonId: string) {
   const normalizedSeasonId = seasonId.trim();
 
@@ -91,6 +206,19 @@ async function getSeasonResultsContext(seasonId: string) {
           }
         },
         orderBy: [{ rank: "asc" }, { leagueMember: { joinedAt: "asc" } }]
+      },
+      ledgerEntries: {
+        where: {
+          category: "FANTASY_PAYOUT"
+        },
+        include: {
+          leagueMember: {
+            include: {
+              user: true
+            }
+          }
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }]
       }
     }
   });
@@ -121,11 +249,47 @@ function buildResultsSummary(
       userId: standing.userId,
       displayName: standing.displayName,
       email: standing.email,
-      role: standing.role
-,
+      role: standing.role,
       sourceSeasonRank: standing.rank ?? index + 1,
       draftSlot: index + 1
     }));
+
+  const { config: fantasyPayoutConfig, configSource } = normalizePayoutConfigValue(season.fantasyPayoutConfig);
+  const publishedEntries = season.ledgerEntries
+    .map((entry) => {
+      const metadata =
+        entry.metadata && typeof entry.metadata === "object" && !Array.isArray(entry.metadata)
+          ? (entry.metadata as Record<string, unknown>)
+          : null;
+      const rank = typeof metadata?.rank === "number" ? metadata.rank : null;
+
+      if (rank === null) {
+        return null;
+      }
+
+      const published: FantasyPayoutPublishedEntry = {
+        leagueMemberId: entry.leagueMemberId,
+        userId: entry.leagueMember.userId,
+        displayName: entry.leagueMember.user.displayName,
+        email: entry.leagueMember.user.email,
+        role: entry.leagueMember.role,
+        amount: Number(entry.amount.toFixed(2)),
+        rank,
+        description: entry.description,
+        createdAt: entry.createdAt.toISOString()
+      };
+
+      return published;
+    })
+    .filter((entry): entry is FantasyPayoutPublishedEntry => entry !== null)
+    .sort((left, right) => left.rank - right.rank || left.displayName.localeCompare(right.displayName));
+
+  const publishedAt =
+    season.ledgerEntries.length > 0
+      ? [...season.ledgerEntries]
+          .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())[0]
+          ?.updatedAt.toISOString() ?? null
+      : null;
 
   return {
     season: {
@@ -140,11 +304,21 @@ function buildResultsSummary(
       hasChampionData: seasonStandings.some((standing) => standing.isChampion === true),
       isReadyForDraftOrderAutomation:
         seasonStandings.length === eligibleMembers.length &&
-        seasonStandings.every((standing) => standing.rank !== null)
+        seasonStandings.every((standing) => standing.rank !== null),
+      hasFantasyPayoutsPublished: season.ledgerEntries.length > 0
     },
     eligibleMembers,
     seasonStandings,
-    recommendedReverseDraftOrder
+    recommendedReverseDraftOrder,
+    fantasyPayouts: {
+      config: fantasyPayoutConfig,
+      configSource,
+      publishedEntries,
+      publishedAt,
+      totalPublishedAmount: Number(
+        publishedEntries.reduce((total, entry) => total + entry.amount, 0).toFixed(2)
+      )
+    }
   };
 }
 
@@ -327,6 +501,18 @@ async function saveManualSeasonStandingsInternal(
       orderedLeagueMemberIds
     );
 
+    const existingConfig = normalizePayoutConfigValue(season.fantasyPayoutConfig).config;
+    const resolvedPayoutConfig = validateFantasyPayoutConfig(input.payoutConfig ?? existingConfig);
+
+    await tx.season.update({
+      where: {
+        id: seasonId
+      },
+      data: {
+        fantasyPayoutConfig: resolvedPayoutConfig as Prisma.InputJsonValue
+      }
+    });
+
     await tx.seasonStanding.deleteMany({
       where: {
         seasonId
@@ -355,6 +541,26 @@ async function saveManualSeasonStandingsInternal(
       }))
     });
 
+    await replaceFantasyPayoutEntriesForSeasonTx(tx, {
+      seasonId,
+      leagueId: season.leagueId,
+      actingUserId: input.actingUserId.trim(),
+      payoutConfig: resolvedPayoutConfig,
+      standings: orderedLeagueMemberIds.map((leagueMemberId, index) => {
+        const member = season.league.members.find((entry) => entry.id === leagueMemberId);
+
+        if (!member) {
+          throw new ResultsServiceError("Final standings contain an invalid owner.", 400);
+        }
+
+        return {
+          leagueMemberId,
+          rank: index + 1,
+          displayName: member.user.displayName
+        };
+      })
+    });
+
     const refreshedSeason = await tx.season.findUnique({
       where: {
         id: seasonId
@@ -379,6 +585,19 @@ async function saveManualSeasonStandingsInternal(
             }
           },
           orderBy: [{ rank: "asc" }, { leagueMember: { joinedAt: "asc" } }]
+        },
+        ledgerEntries: {
+          where: {
+            category: "FANTASY_PAYOUT"
+          },
+          include: {
+            leagueMember: {
+              include: {
+                user: true
+              }
+            }
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }]
         }
       }
     });
@@ -424,16 +643,22 @@ export const resultsService = {
       sourceSeasonId: sourceSeason.id,
       sourceSeasonName: sourceSeason.name,
       sourceSeasonYear: sourceSeason.year,
-      champion: recommended.length > 0 ? {
-        leagueMemberId: recommended[recommended.length - 1].leagueMemberId,
-        userId: recommended[recommended.length - 1].userId,
-        displayName: recommended[recommended.length - 1].displayName
-      } : null,
-      lastPlace: recommended.length > 0 ? {
-        leagueMemberId: recommended[0].leagueMemberId,
-        userId: recommended[0].userId,
-        displayName: recommended[0].displayName
-      } : null,
+      champion:
+        recommended.length > 0
+          ? {
+              leagueMemberId: recommended[recommended.length - 1].leagueMemberId,
+              userId: recommended[recommended.length - 1].userId,
+              displayName: recommended[recommended.length - 1].displayName
+            }
+          : null,
+      lastPlace:
+        recommended.length > 0
+          ? {
+              leagueMemberId: recommended[0].leagueMemberId,
+              userId: recommended[0].userId,
+              displayName: recommended[0].displayName
+            }
+          : null,
       entries: recommended
     };
   },
@@ -458,4 +683,5 @@ export const resultsService = {
   }
 };
 
+export { DEFAULT_FANTASY_PAYOUT_CONFIG };
 export { ResultsServiceError };

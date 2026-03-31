@@ -141,6 +141,7 @@ model Season {
   leagueId          String
   year              Int
   name              String?
+  fantasyPayoutConfig Json?
   status            SeasonStatus         @default(PLANNING)
   isLocked          Boolean              @default(false)
   startsAt          DateTime?

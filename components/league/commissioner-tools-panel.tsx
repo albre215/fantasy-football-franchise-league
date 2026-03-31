@@ -13,6 +13,7 @@ import type {
 } from "@/types/draft";
 import type { LeagueBootstrapMember } from "@/types/league";
 import type {
+  FantasyPayoutConfigEntry,
   OverwriteManualSeasonStandingsResponse,
   SeasonResultsResponse
 } from "@/types/results";
@@ -80,6 +81,16 @@ function formatPlacement(rank: number) {
   return `${rank}th Place`;
 }
 
+function normalizePayoutInput(value: string) {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return 0;
+  }
+
+  return Number(numericValue.toFixed(2));
+}
+
 export function CommissionerToolsPanel({
   activeSeason,
   seasons,
@@ -108,6 +119,7 @@ export function CommissionerToolsPanel({
   const [selectedAssignUserId, setSelectedAssignUserId] = useState("");
   const [selectedAssignTeamId, setSelectedAssignTeamId] = useState("");
   const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null);
+  const [payoutConfig, setPayoutConfig] = useState<FantasyPayoutConfigEntry[]>([]);
 
   const previousSeason = useMemo(() => {
     if (!activeSeason) {
@@ -157,6 +169,7 @@ export function CommissionerToolsPanel({
   useEffect(() => {
     if (!activeSeason) {
       setResults(null);
+      setPayoutConfig([]);
       setOrderedLeagueMemberIds([]);
       setResultsError(null);
       return;
@@ -170,6 +183,7 @@ export function CommissionerToolsPanel({
         const response = await fetch(`/api/season/${activeSeason.id}/results`, { cache: "no-store" });
         const data = await parseJsonResponse<SeasonResultsResponse>(response);
         setResults(data.results);
+        setPayoutConfig(data.results.fantasyPayouts.config);
         setOrderedLeagueMemberIds(
           data.results.seasonStandings.length > 0
             ? data.results.seasonStandings
@@ -179,6 +193,7 @@ export function CommissionerToolsPanel({
         );
       } catch (error) {
         setResults(null);
+        setPayoutConfig([]);
         setOrderedLeagueMemberIds([]);
         setResultsError(error instanceof Error ? error.message : "Unable to load season standings.");
       } finally {
@@ -240,6 +255,12 @@ export function CommissionerToolsPanel({
     });
   }
 
+  function updatePayout(rank: number, value: string) {
+    setPayoutConfig((current) =>
+      current.map((entry) => (entry.rank === rank ? { ...entry, amount: normalizePayoutInput(value) } : entry))
+    );
+  }
+
   function updateDraftOrder(index: number, leagueMemberId: string) {
     setDraftOrderLeagueMemberIds((current) => {
       const next = [...current];
@@ -275,9 +296,10 @@ export function CommissionerToolsPanel({
     }
 
     openConfirmation({
-      title: "Overwrite final standings?",
-      message: "This will overwrite the recorded final standings for this season and update future draft-order logic.",
-      confirmLabel: "Overwrite Standings",
+      title: results?.availability.hasFinalStandings ? "Overwrite final standings?" : "Save final standings?",
+      message:
+        "This will overwrite the recorded final standings for this season, regenerate fantasy payout ledger entries, and update future draft-order logic.",
+      confirmLabel: results?.availability.hasFinalStandings ? "Overwrite Standings" : "Save Standings",
       onConfirm: async () =>
         runMutation(async () => {
           const response = await fetch(`/api/season/${activeSeason.id}/results/overwrite`, {
@@ -287,14 +309,16 @@ export function CommissionerToolsPanel({
             },
             body: JSON.stringify({
               orderedLeagueMemberIds,
-              confirmOverwrite: true
+              confirmOverwrite: true,
+              payoutConfig
             })
           });
 
           const data = await parseJsonResponse<OverwriteManualSeasonStandingsResponse>(response);
           setResults(data.results);
+          setPayoutConfig(data.results.fantasyPayouts.config);
           setOrderedLeagueMemberIds(data.results.seasonStandings.map((standing) => standing.leagueMemberId));
-        }, "Final standings overwritten.")
+        }, results?.availability.hasFinalStandings ? "Final standings overwritten and fantasy payouts regenerated." : "Final standings saved and fantasy payouts published.")
     });
   }
 
@@ -445,6 +469,7 @@ export function CommissionerToolsPanel({
         <CardContent className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
           <p>Assigned teams: {assignedTeamCount} / 30</p>
           <p>Final standings saved: {results?.availability.hasFinalStandings ? "Yes" : "No"}</p>
+          <p>Fantasy payouts published: {results?.availability.hasFantasyPayoutsPublished ? "Yes" : "No"}</p>
           <p>Draft exists: {draftState ? "Yes" : "No"}</p>
           <p>Draft status: {draftState?.draft.status ?? "No draft"}</p>
           <p>Target season locked: {activeSeason?.isLocked ? "Yes" : "No"}</p>
@@ -459,9 +484,9 @@ export function CommissionerToolsPanel({
         {showStandingsSection ? (
         <Card>
           <CardHeader>
-            <CardTitle>Final Standings Correction</CardTitle>
+            <CardTitle>Final Standings & Fantasy Payouts</CardTitle>
             <CardDescription>
-              Edit and overwrite the recorded final standings for the active season with explicit confirmation.
+              Save or correct the recorded final standings for the active season and keep fantasy payout ledger entries in sync.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -475,6 +500,34 @@ export function CommissionerToolsPanel({
               <p className="text-sm text-muted-foreground">No standings data is available yet.</p>
             ) : (
               <>
+                <div className="space-y-3 rounded-lg border border-dashed border-border p-4">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Fantasy payout mapping</p>
+                    <p className="text-sm text-muted-foreground">
+                      These season-scoped amounts will be posted to the ledger whenever final standings are saved or corrected.
+                    </p>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {payoutConfig.map((entry) => (
+                      <label className="space-y-1 text-sm" key={`commissioner-payout-${entry.rank}`}>
+                        <span>{formatPlacement(entry.rank)}</span>
+                        <input
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          min="0"
+                          onChange={(event) => updatePayout(entry.rank, event.target.value)}
+                          step="0.01"
+                          type="number"
+                          value={entry.amount}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Config source:{" "}
+                    {results.fantasyPayouts.configSource === "SEASON" ? "Season override" : "Default starting config"}
+                  </p>
+                </div>
+
                 <div className="grid gap-3 md:grid-cols-2">
                   {Array.from({ length: totalPlacements }).map((_, index) => (
                     <label className="space-y-1 text-sm" key={`commissioner-placement-${index + 1}`}>
@@ -502,7 +555,7 @@ export function CommissionerToolsPanel({
                 </div>
 
                 <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                  This will overwrite the recorded final standings for {seasonLabel(activeSeason)}.
+                  This will overwrite the recorded final standings for {seasonLabel(activeSeason)} and replace the season's fantasy payout ledger entries so balances reflect the latest standings.
                 </div>
 
                 <Button
@@ -510,8 +563,19 @@ export function CommissionerToolsPanel({
                   onClick={() => void handleOverwriteStandings()}
                   type="button"
                 >
-                  Overwrite Final Standings
+                  {results.availability.hasFinalStandings ? "Overwrite Final Standings" : "Save Final Standings"}
                 </Button>
+
+                <div className="rounded-lg border border-border bg-background/70 p-4 text-sm text-muted-foreground">
+                  <p>Published fantasy payouts: {results.fantasyPayouts.publishedEntries.length > 0 ? "Yes" : "No"}</p>
+                  <p>Total fantasy payouts: ${results.fantasyPayouts.totalPublishedAmount.toFixed(2)}</p>
+                  <p>
+                    Last published:{" "}
+                    {results.fantasyPayouts.publishedAt
+                      ? new Date(results.fantasyPayouts.publishedAt).toLocaleString()
+                      : "Not published yet"}
+                  </p>
+                </div>
               </>
                 )}
               </CardContent>
