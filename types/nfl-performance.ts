@@ -19,12 +19,15 @@ export interface NflPerformanceOwnerSummary {
 }
 
 export interface SeasonNflWeekOption {
+  key: string;
   weekNumber: number;
   phase: SeasonNflResultPhase;
   label: string;
   gameCount: number;
   importedAt: string | null;
 }
+
+export type NflImportCoverageStatus = "EMPTY" | "PARTIAL" | "FULL_SEASON_IMPORTED";
 
 export interface SeasonNflImportRunSummary {
   id: string;
@@ -91,6 +94,10 @@ export interface SeasonNflOverview {
     importedWeekCount: number;
     importedRegularSeasonWeeks: number;
     importedPlayoffWeeks: number;
+    importedRegularSeasonWeekNumbers: number[];
+    importedPlayoffPhases: SeasonNflResultPhase[];
+    coverageStatus: NflImportCoverageStatus;
+    hasCompletedFullSeasonImport: boolean;
     latestCompletedImport: SeasonNflImportRunSummary | null;
     recentImports: SeasonNflImportRunSummary[];
   };
@@ -107,6 +114,7 @@ export interface SeasonNflOverview {
 export interface SeasonWeekNflResults {
   season: SeasonNflOverview["season"];
   selectedWeek: SeasonNflWeekOption | null;
+  selectedPhase: SeasonNflResultPhase | null;
   ownerResults: OwnerWeekPerformanceSummary[];
   unassignedTeamResults: TeamWeekPerformanceSummary[];
   allTeamResults: TeamWeekPerformanceSummary[];

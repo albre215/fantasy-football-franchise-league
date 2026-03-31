@@ -1,8 +1,15 @@
 import { NflImportStatus, NflResultProvider, Prisma, SeasonNflGameResult, SeasonNflResultPhase } from "@prisma/client";
 
+import { normalizeNflTeamAbbreviation } from "@/lib/nfl-team-aliases";
 import { prisma } from "@/lib/prisma";
 import { nflResultsProviders } from "@/server/providers/nfl";
 import type { NormalizedNflTeamResultRecord } from "@/server/providers/nfl/types";
+import { NflPerformanceServiceError } from "@/server/services/nfl-performance-errors";
+import {
+  createSeasonWeekKey,
+  getRegularSeasonWeekLimit,
+  validateSeasonWeekPhase
+} from "@/server/services/nfl-performance-helpers";
 import { seasonService } from "@/server/services/season-service";
 import type {
   ImportSeasonNflResultsInput,
@@ -12,24 +19,12 @@ import type {
   OwnerWeekPerformanceSummary,
   SeasonNflImportRunSummary,
   SeasonNflOverview,
-  SeasonNflOverviewResponse,
   SeasonNflWeekOption,
   SeasonWeekNflResults,
-  SeasonNflGameResult as SeasonNflGameResultType,
   SeasonNflResultPhase as SeasonNflResultPhaseType,
   TeamWeekPerformanceSummary,
   UpsertSeasonWeekTeamResultInput
 } from "@/types/nfl-performance";
-
-class NflPerformanceServiceError extends Error {
-  constructor(
-    message: string,
-    public readonly statusCode: number
-  ) {
-    super(message);
-    this.name = "NflPerformanceServiceError";
-  }
-}
 
 type PrismaClientLike = Prisma.TransactionClient | typeof prisma;
 
@@ -380,26 +375,34 @@ function buildAvailableWeeks(
   results: Awaited<ReturnType<typeof getSeasonResults>>,
   importRuns: Awaited<ReturnType<typeof getSeasonImportRuns>>
 ) {
-  const latestImportByWeek = new Map<number, string>();
+  const latestImportByWeekKey = new Map<string, string>();
 
   for (const run of importRuns) {
-    if (run.completedAt && typeof run.weekNumber === "number" && !latestImportByWeek.has(run.weekNumber)) {
-      latestImportByWeek.set(run.weekNumber, run.completedAt.toISOString());
+    if (run.completedAt) {
+      const warningPayload = (run.warnings as { importedKeys?: string[] } | null) ?? null;
+      const importedKeys = Array.isArray(warningPayload?.importedKeys) ? warningPayload.importedKeys : [];
+
+      for (const key of importedKeys) {
+        if (!latestImportByWeekKey.has(key)) {
+          latestImportByWeekKey.set(key, run.completedAt.toISOString());
+        }
+      }
     }
   }
 
   const grouped = new Map<string, SeasonNflWeekOption>();
 
   for (const result of results) {
-    const key = `${result.weekNumber}:${result.phase}`;
+    const key = createSeasonWeekKey(result.weekNumber, result.phase);
 
     if (!grouped.has(key)) {
       grouped.set(key, {
+        key,
         weekNumber: result.weekNumber,
         phase: result.phase,
         label: mapPhaseLabel(result.phase, result.weekNumber),
         gameCount: 0,
-        importedAt: latestImportByWeek.get(result.weekNumber) ?? null
+        importedAt: latestImportByWeekKey.get(key) ?? null
       });
     }
 
@@ -455,6 +458,11 @@ function buildSeasonOverviewFromContext(
   const completedRuns = importRuns.filter((run) => run.status === "COMPLETED");
   const regularSeasonWeeks = new Set(availableWeeks.filter((week) => week.phase === "REGULAR_SEASON").map((week) => week.weekNumber));
   const playoffWeeks = new Set(availableWeeks.filter((week) => week.phase !== "REGULAR_SEASON").map((week) => week.weekNumber));
+  const playoffPhases = Array.from(
+    new Set(availableWeeks.filter((week) => week.phase !== "REGULAR_SEASON").map((week) => week.phase))
+  ).sort(comparePhase);
+  const hasCompletedFullSeasonImport = completedRuns.some((run) => run.mode === "FULL_SEASON");
+  const coverageStatus = results.length === 0 ? "EMPTY" : hasCompletedFullSeasonImport ? "FULL_SEASON_IMPORTED" : "PARTIAL";
 
   return {
     season: {
@@ -470,6 +478,10 @@ function buildSeasonOverviewFromContext(
       importedWeekCount: availableWeeks.length,
       importedRegularSeasonWeeks: regularSeasonWeeks.size,
       importedPlayoffWeeks: playoffWeeks.size,
+      importedRegularSeasonWeekNumbers: Array.from(regularSeasonWeeks).sort((left, right) => left - right),
+      importedPlayoffPhases: playoffPhases,
+      coverageStatus,
+      hasCompletedFullSeasonImport,
       latestCompletedImport: completedRuns[0] ? mapImportRun(completedRuns[0]) : null,
       recentImports: importRuns.map(mapImportRun)
     },
@@ -490,15 +502,19 @@ function buildWeekResults(
   season: Awaited<ReturnType<typeof getSeasonContextOrThrow>>,
   allResults: Awaited<ReturnType<typeof getSeasonResults>>,
   importRuns: Awaited<ReturnType<typeof getSeasonImportRuns>>,
-  weekNumber: number
+  weekNumber: number,
+  phase?: SeasonNflResultPhaseType
 ): SeasonWeekNflResults {
   const seasonOverview = buildSeasonOverviewFromContext(season, allResults, importRuns);
   const { ownerByTeamId } = buildOwnershipMaps(season);
-  const weekResults = allResults.filter((result) => result.weekNumber === weekNumber);
+  const weekResults = allResults.filter(
+    (result) => result.weekNumber === weekNumber && (phase ? result.phase === phase : true)
+  );
   const selectedWeek =
-    seasonOverview.availableWeeks.find((option) => option.weekNumber === weekNumber) ??
+    seasonOverview.availableWeeks.find((option) => option.weekNumber === weekNumber && (phase ? option.phase === phase : true)) ??
     (weekResults[0]
       ? {
+          key: createSeasonWeekKey(weekNumber, weekResults[0].phase),
           weekNumber,
           phase: weekResults[0].phase,
           label: mapPhaseLabel(weekResults[0].phase, weekNumber),
@@ -559,6 +575,7 @@ function buildWeekResults(
   return {
     season: seasonOverview.season,
     selectedWeek,
+    selectedPhase: selectedWeek?.phase ?? phase ?? null,
     ownerResults,
     unassignedTeamResults: weekResults
       .filter((result) => !ownerByTeamId.has(result.nflTeamId))
@@ -574,13 +591,19 @@ function buildWeekResults(
 }
 
 function ensureValidTeamResultRecord(record: NormalizedNflTeamResultRecord) {
-  if (!record.teamAbbreviation.trim()) {
+  const teamAbbreviation = normalizeNflTeamAbbreviation(record.teamAbbreviation);
+  const opponentAbbreviation =
+    record.opponentAbbreviation === null ? null : normalizeNflTeamAbbreviation(record.opponentAbbreviation);
+
+  if (!teamAbbreviation.trim()) {
     throw new NflPerformanceServiceError("NFL provider returned a team result without a team abbreviation.", 502);
   }
 
-  if (record.opponentAbbreviation !== null && !record.opponentAbbreviation.trim()) {
+  if (opponentAbbreviation !== null && !opponentAbbreviation.trim()) {
     throw new NflPerformanceServiceError("NFL provider returned an opponent abbreviation in an invalid format.", 502);
   }
+
+  validateSeasonWeekPhase(record.seasonYear, record.weekNumber, record.phase);
 }
 
 export const nflPerformanceService = {
@@ -591,12 +614,23 @@ export const nflPerformanceService = {
     return buildSeasonOverviewFromContext(season, results, importRuns);
   },
 
-  async getSeasonWeekNflResults(seasonId: string, weekNumber: number, actingUserId: string): Promise<SeasonWeekNflResults> {
+  async getSeasonWeekNflResults(
+    seasonId: string,
+    weekNumber: number,
+    actingUserId: string,
+    phase?: SeasonNflResultPhaseType
+  ): Promise<SeasonWeekNflResults> {
     const normalizedWeekNumber = normalizeWeekNumber(weekNumber);
     const { season } = await assertViewerMembershipForSeason(prisma, seasonId, actingUserId);
+    const normalizedPhase = phase ?? undefined;
+
+    if (normalizedPhase) {
+      validateSeasonWeekPhase(season.year, normalizedWeekNumber, normalizedPhase);
+    }
+
     const [results, importRuns] = await Promise.all([getSeasonResults(prisma, season.id), getSeasonImportRuns(prisma, season.id)]);
 
-    return buildWeekResults(season, results, importRuns, normalizedWeekNumber);
+    return buildWeekResults(season, results, importRuns, normalizedWeekNumber, normalizedPhase);
   },
 
   async importSeasonNflResults(input: ImportSeasonNflResultsInput): Promise<SeasonNflOverview> {
@@ -644,22 +678,29 @@ export const nflPerformanceService = {
         const ownershipByTeamId = new Map(season.teamOwnerships.map((ownership) => [ownership.nflTeamId, ownership.leagueMemberId] as const));
 
         let importedResultCount = 0;
+        let createdCount = 0;
+        let updatedCount = 0;
+        let preservedManualCount = 0;
         const warnings: string[] = [];
+        const importedKeys: string[] = [];
 
         for (const record of loaded.records) {
           ensureValidTeamResultRecord(record);
-          const nflTeamId = teamIdByAbbreviation.get(record.teamAbbreviation);
+          const normalizedTeamAbbreviation = normalizeNflTeamAbbreviation(record.teamAbbreviation);
+          const normalizedOpponentAbbreviation =
+            record.opponentAbbreviation === null ? null : normalizeNflTeamAbbreviation(record.opponentAbbreviation);
+          const nflTeamId = teamIdByAbbreviation.get(normalizedTeamAbbreviation);
 
           if (!nflTeamId) {
-            warnings.push(`Skipped unsupported NFL team abbreviation ${record.teamAbbreviation}.`);
+            warnings.push(`Skipped unsupported NFL team abbreviation ${normalizedTeamAbbreviation}.`);
             continue;
           }
 
-          const opponentNflTeamId = record.opponentAbbreviation
-            ? teamIdByAbbreviation.get(record.opponentAbbreviation) ?? null
+          const opponentNflTeamId = normalizedOpponentAbbreviation
+            ? teamIdByAbbreviation.get(normalizedOpponentAbbreviation) ?? null
             : null;
 
-          await tx.seasonNflTeamResult.upsert({
+          const existing = await tx.seasonNflTeamResult.findUnique({
             where: {
               seasonId_weekNumber_phase_nflTeamId: {
                 seasonId: season.id,
@@ -668,37 +709,53 @@ export const nflPerformanceService = {
                 nflTeamId
               }
             },
-            update: {
-              seasonYear: season.year,
-              opponentNflTeamId,
-              leagueMemberId: ownershipByTeamId.get(nflTeamId) ?? null,
-              result: record.result,
-              pointsFor: record.pointsFor,
-              pointsAgainst: record.pointsAgainst,
-              sourceProvider: "NFLVERSE",
-              importRunId: run.id,
-              actingUserId,
-              metadata: toNullableJsonInput(record.metadata)
-            },
-            create: {
-              seasonId: season.id,
-              seasonYear: season.year,
-              weekNumber: record.weekNumber,
-              phase: record.phase,
-              nflTeamId,
-              opponentNflTeamId,
-              leagueMemberId: ownershipByTeamId.get(nflTeamId) ?? null,
-              result: record.result,
-              pointsFor: record.pointsFor,
-              pointsAgainst: record.pointsAgainst,
-              sourceProvider: "NFLVERSE",
-              importRunId: run.id,
-              actingUserId,
-              metadata: toNullableJsonInput(record.metadata)
+            select: {
+              id: true,
+              sourceProvider: true
             }
           });
+          const resultData = {
+            seasonYear: season.year,
+            opponentNflTeamId,
+            leagueMemberId: ownershipByTeamId.get(nflTeamId) ?? null,
+            result: record.result,
+            pointsFor: record.pointsFor,
+            pointsAgainst: record.pointsAgainst,
+            sourceProvider: "NFLVERSE" as const,
+            importRunId: run.id,
+            actingUserId,
+            metadata: toNullableJsonInput(record.metadata)
+          };
+          const weekKey = createSeasonWeekKey(record.weekNumber, record.phase);
+
+          if (existing?.sourceProvider === "MANUAL") {
+            preservedManualCount += 1;
+            warnings.push(`Preserved manual correction for ${normalizedTeamAbbreviation} ${weekKey}.`);
+            importedKeys.push(weekKey);
+            continue;
+          }
+
+          if (existing) {
+            await tx.seasonNflTeamResult.update({
+              where: { id: existing.id },
+              data: resultData
+            });
+            updatedCount += 1;
+          } else {
+            await tx.seasonNflTeamResult.create({
+              data: {
+                seasonId: season.id,
+                weekNumber: record.weekNumber,
+                phase: record.phase,
+                nflTeamId,
+                ...resultData
+              }
+            });
+            createdCount += 1;
+          }
 
           importedResultCount += 1;
+          importedKeys.push(weekKey);
         }
 
         await tx.seasonNflImportRun.update({
@@ -706,7 +763,16 @@ export const nflPerformanceService = {
           data: {
             status: "COMPLETED",
             importedResultCount,
-            warnings: warnings.length ? { messages: warnings } : Prisma.JsonNull,
+            warnings:
+              warnings.length || importedKeys.length
+                ? {
+                    messages: warnings,
+                    importedKeys,
+                    createdCount,
+                    updatedCount,
+                    preservedManualCount
+                  }
+                : Prisma.JsonNull,
             completedAt: new Date()
           }
         });
@@ -760,6 +826,7 @@ export const nflPerformanceService = {
 
     await prisma.$transaction(async (tx) => {
       const season = await getSeasonContextOrThrow(tx, seasonId);
+      validateSeasonWeekPhase(season.year, weekNumber, input.phase);
       const nflTeam = await tx.nFLTeam.findUnique({ where: { id: nflTeamId } });
 
       if (!nflTeam) {
@@ -818,7 +885,7 @@ export const nflPerformanceService = {
       });
     });
 
-    return this.getSeasonWeekNflResults(seasonId, weekNumber, actingUserId);
+    return this.getSeasonWeekNflResults(seasonId, weekNumber, actingUserId, input.phase);
   }
 };
 

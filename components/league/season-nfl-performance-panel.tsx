@@ -61,6 +61,21 @@ function formatResult(result: SeasonNflGameResult) {
   }
 }
 
+function describeCoverageStatus(
+  importState: SeasonNflOverviewResponse["nfl"]["importState"],
+  seasonYear: number
+) {
+  if (importState.coverageStatus === "EMPTY") {
+    return `No NFL results have been imported for ${seasonYear} yet.`;
+  }
+
+  if (importState.coverageStatus === "FULL_SEASON_IMPORTED") {
+    return `A full-season import has been completed for the ${seasonYear} NFL season.`;
+  }
+
+  return `This season is only partially imported right now. Imported regular-season weeks: ${importState.importedRegularSeasonWeekNumbers.join(", ") || "none yet"}. Imported playoff phases: ${importState.importedPlayoffPhases.map(formatPhase).join(", ") || "none yet"}.`;
+}
+
 export function SeasonNflPerformancePanel({
   activeSeason,
   canManageNfl,
@@ -71,7 +86,7 @@ export function SeasonNflPerformancePanel({
 }: SeasonNflPerformancePanelProps) {
   const [summary, setSummary] = useState<SeasonNflOverviewResponse["nfl"] | null>(null);
   const [weekDetails, setWeekDetails] = useState<SeasonWeekNflResultsResponse["nfl"] | null>(null);
-  const [selectedWeek, setSelectedWeek] = useState<number | "">("");
+  const [selectedWeekKey, setSelectedWeekKey] = useState<string>("");
   const [formTeamId, setFormTeamId] = useState("");
   const [formOpponentId, setFormOpponentId] = useState("");
   const [formPhase, setFormPhase] = useState<SeasonNflResultPhase>("REGULAR_SEASON");
@@ -97,14 +112,20 @@ export function SeasonNflPerformancePanel({
     ].sort((left, right) => left.name.localeCompare(right.name));
   }, [seasonOwnership]);
 
+  const currentSelectedWeekOption = useMemo(
+    () => summary?.availableWeeks.find((week) => week.key === selectedWeekKey) ?? null,
+    [selectedWeekKey, summary]
+  );
+
   useEffect(() => {
     setSummary(null);
     setWeekDetails(null);
-    setSelectedWeek("");
+    setSelectedWeekKey("");
     setSummaryError(null);
     setWeekError(null);
     setFormTeamId(teamOptions[0]?.id ?? "");
     setFormOpponentId("");
+    setFormPhase("REGULAR_SEASON");
 
     if (!activeSeason) {
       return;
@@ -123,7 +144,8 @@ export function SeasonNflPerformancePanel({
         });
         const data = await parseJsonResponse<SeasonNflOverviewResponse>(response);
         setSummary(data.nfl);
-        setSelectedWeek(data.nfl.availableWeeks[0]?.weekNumber ?? "");
+        setSelectedWeekKey(data.nfl.availableWeeks[0]?.key ?? "");
+        setFormPhase(data.nfl.availableWeeks[0]?.phase ?? "REGULAR_SEASON");
         setSummaryError(null);
       } catch (error) {
         if ((error as Error).name === "AbortError") {
@@ -143,19 +165,33 @@ export function SeasonNflPerformancePanel({
   }, [activeSeason, teamOptions]);
 
   useEffect(() => {
-    if (!activeSeason || selectedWeek === "") {
+    if (currentSelectedWeekOption) {
+      setFormPhase(currentSelectedWeekOption.phase);
+    }
+  }, [currentSelectedWeekOption]);
+
+  useEffect(() => {
+    if (!activeSeason || !selectedWeekKey) {
       setWeekDetails(null);
       return;
     }
 
     const seasonId = activeSeason.id;
     const controller = new AbortController();
+    const selectedOption = currentSelectedWeekOption;
+
+    if (!selectedOption) {
+      setWeekDetails(null);
+      return;
+    }
+    const selectedWeekNumber = selectedOption.weekNumber;
+    const selectedPhase = selectedOption.phase;
 
     async function loadWeek() {
       setIsLoadingWeek(true);
 
       try {
-        const response = await fetch(`/api/season/${seasonId}/nfl/week/${selectedWeek}`, {
+        const response = await fetch(`/api/season/${seasonId}/nfl/week/${selectedWeekNumber}?phase=${selectedPhase}`, {
           cache: "no-store",
           signal: controller.signal
         });
@@ -177,33 +213,40 @@ export function SeasonNflPerformancePanel({
     void loadWeek();
 
     return () => controller.abort();
-  }, [activeSeason, selectedWeek]);
+  }, [activeSeason, selectedWeekKey, summary]);
 
-  async function refreshSummaryAndWeek(nextWeek?: number) {
+  async function refreshSummaryAndWeek(nextWeekKey?: string) {
     if (!activeSeason) {
       return;
     }
 
     const seasonId = activeSeason.id;
+    const requestedWeek = summary?.availableWeeks.find((week) => week.key === nextWeekKey) ?? null;
     const [summaryResponse, weekResponse] = await Promise.all([
       fetch(`/api/season/${seasonId}/nfl`, { cache: "no-store" }),
-      typeof nextWeek === "number"
-        ? fetch(`/api/season/${seasonId}/nfl/week/${nextWeek}`, { cache: "no-store" })
+      requestedWeek
+        ? fetch(`/api/season/${seasonId}/nfl/week/${requestedWeek.weekNumber}?phase=${requestedWeek.phase}`, {
+            cache: "no-store"
+          })
         : Promise.resolve(null)
     ]);
 
     const summaryData = await parseJsonResponse<SeasonNflOverviewResponse>(summaryResponse);
     setSummary(summaryData.nfl);
 
-    const resolvedWeek: number | null = nextWeek ?? summaryData.nfl.availableWeeks[0]?.weekNumber ?? null;
-    setSelectedWeek(resolvedWeek ?? "");
+    const resolvedWeek = nextWeekKey
+      ? summaryData.nfl.availableWeeks.find((week) => week.key === nextWeekKey) ?? null
+      : summaryData.nfl.availableWeeks[0] ?? null;
+    setSelectedWeekKey(resolvedWeek?.key ?? "");
 
     if (weekResponse) {
       const weekData = await parseJsonResponse<SeasonWeekNflResultsResponse>(weekResponse);
       setWeekDetails(weekData.nfl);
-    } else if (resolvedWeek !== null) {
+    } else if (resolvedWeek) {
       const weekData = await parseJsonResponse<SeasonWeekNflResultsResponse>(
-        await fetch(`/api/season/${seasonId}/nfl/week/${resolvedWeek}`, { cache: "no-store" })
+        await fetch(`/api/season/${seasonId}/nfl/week/${resolvedWeek.weekNumber}?phase=${resolvedWeek.phase}`, {
+          cache: "no-store"
+        })
       );
       setWeekDetails(weekData.nfl);
     } else {
@@ -230,12 +273,14 @@ export function SeasonNflPerformancePanel({
       });
       const data = await parseJsonResponse<ImportSeasonNflResultsResponse>(response);
       setSummary(data.nfl);
-      const nextWeek = data.nfl.availableWeeks[0]?.weekNumber ?? null;
-      setSelectedWeek(nextWeek ?? "");
+      const nextWeek = data.nfl.availableWeeks[0] ?? null;
+      setSelectedWeekKey(nextWeek?.key ?? "");
       onSuccess(`Imported NFL results for the ${seasonYear} season.`);
 
       if (nextWeek !== null) {
-        const weekResponse = await fetch(`/api/season/${seasonId}/nfl/week/${nextWeek}`, { cache: "no-store" });
+        const weekResponse = await fetch(`/api/season/${seasonId}/nfl/week/${nextWeek.weekNumber}?phase=${nextWeek.phase}`, {
+          cache: "no-store"
+        });
         const weekData = await parseJsonResponse<SeasonWeekNflResultsResponse>(weekResponse);
         setWeekDetails(weekData.nfl);
       } else {
@@ -249,23 +294,28 @@ export function SeasonNflPerformancePanel({
   }
 
   async function handleImportWeek() {
-    if (!activeSeason || selectedWeek === "") {
+    if (!activeSeason || !selectedWeekKey) {
       return;
     }
 
     const seasonId = activeSeason.id;
     const seasonYear = activeSeason.year;
+    const selectedOption = currentSelectedWeekOption;
+
+    if (!selectedOption) {
+      return;
+    }
     onError(null);
     onSuccess(null);
     setIsImportingWeek(true);
 
     try {
-      const response = await fetch(`/api/season/${seasonId}/nfl/week/${selectedWeek}/import`, {
+      const response = await fetch(`/api/season/${seasonId}/nfl/week/${selectedOption.weekNumber}/import`, {
         method: "POST"
       });
       await parseJsonResponse<ImportSeasonNflResultsResponse>(response);
-      await refreshSummaryAndWeek(selectedWeek);
-      onSuccess(`Imported NFL results for ${seasonYear} ${weekDetails?.selectedWeek?.label ?? `week ${selectedWeek}`}.`);
+      await refreshSummaryAndWeek(selectedOption.key);
+      onSuccess(`Imported NFL results for ${seasonYear} ${selectedOption.label}.`);
     } catch (error) {
       onError(error instanceof Error ? error.message : "Unable to import that NFL week.");
     } finally {
@@ -276,17 +326,22 @@ export function SeasonNflPerformancePanel({
   async function handleManualSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!activeSeason || selectedWeek === "") {
+    if (!activeSeason || !selectedWeekKey) {
       return;
     }
 
     const seasonId = activeSeason.id;
+    const selectedOption = currentSelectedWeekOption;
+
+    if (!selectedOption) {
+      return;
+    }
     onError(null);
     onSuccess(null);
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`/api/season/${seasonId}/nfl/week/${selectedWeek}`, {
+      const response = await fetch(`/api/season/${seasonId}/nfl/week/${selectedOption.weekNumber}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -301,7 +356,7 @@ export function SeasonNflPerformancePanel({
 
       const data = await parseJsonResponse<UpsertSeasonWeekTeamResultResponse>(response);
       setWeekDetails(data.nfl);
-      await refreshSummaryAndWeek(selectedWeek);
+      await refreshSummaryAndWeek(selectedOption.key);
       onSuccess("Saved the weekly NFL team result.");
     } catch (error) {
       onError(error instanceof Error ? error.message : "Unable to save the weekly NFL team result.");
@@ -351,8 +406,12 @@ export function SeasonNflPerformancePanel({
               <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
                 {summaryError}
               </div>
-            ) : summary ? (
+                ) : summary ? (
               <>
+                <div className="rounded-lg border border-border bg-background p-4 text-sm text-muted-foreground">
+                  {describeCoverageStatus(summary.importState, activeSeason.year)}
+                </div>
+
                 <div className="grid gap-3 md:grid-cols-4">
                   <div className="rounded-lg border border-border bg-background p-4">
                     <p className="text-sm text-muted-foreground">Results Imported</p>
@@ -414,16 +473,16 @@ export function SeasonNflPerformancePanel({
                   {isImportingSeason ? "Importing Season..." : `Import ${activeSeason.year} Season`}
                 </Button>
                 <Button
-                  disabled={isImportingWeek || selectedWeek === ""}
+                  disabled={isImportingWeek || !selectedWeekKey}
                   onClick={handleImportWeek}
                   type="button"
                   variant="outline"
                 >
                   {isImportingWeek
                     ? "Importing Week..."
-                    : selectedWeek === ""
+                    : !selectedWeekKey
                       ? "Import Selected Week"
-                      : `Import ${summary?.availableWeeks.find((week) => week.weekNumber === selectedWeek)?.label ?? `Week ${selectedWeek}`}`}
+                      : `Import ${summary?.availableWeeks.find((week) => week.key === selectedWeekKey)?.label ?? "Selected week"}`}
                 </Button>
               </div>
             ) : accessMessage ? (
@@ -485,12 +544,12 @@ export function SeasonNflPerformancePanel({
               <select
                 className="h-10 min-w-[220px] rounded-md border border-border bg-background px-3 text-sm"
                 id="nfl-week-select"
-                onChange={(event) => setSelectedWeek(event.target.value ? Number(event.target.value) : "")}
-                value={selectedWeek}
+                onChange={(event) => setSelectedWeekKey(event.target.value)}
+                value={selectedWeekKey}
               >
                 <option value="">Select a week</option>
                 {summary?.availableWeeks.map((week) => (
-                  <option key={`${week.weekNumber}-${week.phase}`} value={week.weekNumber}>
+                  <option key={week.key} value={week.key}>
                     {week.label}
                   </option>
                 ))}
@@ -507,7 +566,7 @@ export function SeasonNflPerformancePanel({
               <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
                 {weekError}
               </div>
-            ) : weekDetails?.ownerResults.length ? (
+            ) : weekDetails?.allTeamResults.length ? (
               <div className="space-y-4">
                 <div className="grid gap-3">
                   {weekDetails.ownerResults.map((owner) => (
@@ -516,7 +575,7 @@ export function SeasonNflPerformancePanel({
                         <div>
                           <p className="font-medium text-foreground">{owner.displayName}</p>
                           <p className="text-sm text-muted-foreground">
-                            {weekDetails.selectedWeek?.label ?? `Week ${selectedWeek}`} - {formatRecord(owner.wins, owner.losses, owner.ties)}
+                            {weekDetails.selectedWeek?.label ?? "Selected week"} - {formatRecord(owner.wins, owner.losses, owner.ties)}
                           </p>
                         </div>
                         <div className="text-right text-sm text-muted-foreground">
@@ -579,7 +638,7 @@ export function SeasonNflPerformancePanel({
               <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                 {accessMessage ?? "Only the commissioner can import or correct NFL results."}
               </div>
-            ) : selectedWeek === "" ? (
+            ) : !selectedWeekKey ? (
               <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                 Select a week first, then you can correct a team result for that week.
               </div>
@@ -637,11 +696,9 @@ export function SeasonNflPerformancePanel({
                         onChange={(event) => setFormPhase(event.target.value as SeasonNflResultPhase)}
                         value={formPhase}
                       >
-                        {["REGULAR_SEASON", "WILD_CARD", "DIVISIONAL", "CONFERENCE", "SUPER_BOWL"].map((phase) => (
-                          <option key={phase} value={phase}>
-                            {formatPhase(phase)}
-                          </option>
-                        ))}
+                        <option value={currentSelectedWeekOption?.phase ?? formPhase}>
+                          {formatPhase(currentSelectedWeekOption?.phase ?? formPhase)}
+                        </option>
                       </select>
                     </div>
 
@@ -693,7 +750,7 @@ export function SeasonNflPerformancePanel({
                 </div>
 
                 <Button disabled={isSubmitting || !formTeamId} type="submit">
-                  {isSubmitting ? "Saving Result..." : `Save ${weekDetails?.selectedWeek?.label ?? `Week ${selectedWeek}`} Result`}
+                  {isSubmitting ? "Saving Result..." : `Save ${weekDetails?.selectedWeek?.label ?? "Selected Week"} Result`}
                 </Button>
               </form>
             )}

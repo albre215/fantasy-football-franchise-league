@@ -24,10 +24,13 @@ function parseWeekNumber(value: string) {
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
     const actingUserId = await requireAuthenticatedUserId();
+    const url = new URL(_request.url);
+    const phase = url.searchParams.get("phase");
     const nfl = await nflPerformanceService.getSeasonWeekNflResults(
       params.seasonId,
       parseWeekNumber(params.weekNumber),
-      actingUserId
+      actingUserId,
+      phase ? (phase as UpsertSeasonWeekTeamResultInput["phase"]) : undefined
     );
 
     return NextResponse.json<SeasonWeekNflResultsResponse>({ nfl });

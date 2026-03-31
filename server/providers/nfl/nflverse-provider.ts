@@ -1,21 +1,9 @@
 import type { NflResultsProviderAdapter, LoadNflResultsOptions, LoadNflResultsResult, NormalizedNflTeamResultRecord } from "@/server/providers/nfl/types";
 import type { SeasonNflGameResult, SeasonNflResultPhase } from "@/types/nfl-performance";
+import { normalizeNflTeamAbbreviation } from "@/lib/nfl-team-aliases";
+import { validateSeasonWeekPhase } from "@/server/services/nfl-performance-helpers";
 
 const NFLVERSE_GAMES_CSV_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv";
-
-const LEGACY_TEAM_ABBREVIATIONS: Record<string, string> = {
-  JAC: "JAX",
-  LA: "LAR",
-  OAK: "LV",
-  SD: "LAC",
-  STL: "LAR",
-  WSH: "WAS"
-};
-
-function normalizeTeamAbbreviation(value: string) {
-  const normalized = value.trim().toUpperCase();
-  return LEGACY_TEAM_ABBREVIATIONS[normalized] ?? normalized;
-}
 
 function parseInteger(value: string | undefined) {
   if (!value) {
@@ -134,8 +122,8 @@ function mapGameRowToRecords(row: Record<string, string>, seasonYear: number): N
     return [];
   }
 
-  const homeTeam = normalizeTeamAbbreviation(row.home_team ?? "");
-  const awayTeam = normalizeTeamAbbreviation(row.away_team ?? "");
+  const homeTeam = normalizeNflTeamAbbreviation(row.home_team ?? "");
+  const awayTeam = normalizeNflTeamAbbreviation(row.away_team ?? "");
   const homeScore = parseInteger(row.home_score);
   const awayScore = parseInteger(row.away_score);
   const homeResult = mapScoresToResult(homeScore, awayScore);
@@ -144,6 +132,8 @@ function mapGameRowToRecords(row: Record<string, string>, seasonYear: number): N
   if (!homeTeam || !awayTeam || homeResult === null || awayResult === null) {
     return [];
   }
+
+  validateSeasonWeekPhase(seasonYear, weekNumber, phase);
 
   const metadata = {
     gameId: row.game_id?.trim() || null,
