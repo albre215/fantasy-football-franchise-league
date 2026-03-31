@@ -1,15 +1,11 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 
 import { BrandMasthead } from "@/components/brand/brand-masthead";
-import { CommissionerToolsPanel } from "@/components/league/commissioner-tools-panel";
-import { LeagueHistoryPanel } from "@/components/league/league-history-panel";
-import { OffseasonDraftPanel } from "@/components/league/offseason-draft-panel";
-import { SeasonNflPerformancePanel } from "@/components/league/season-nfl-performance-panel";
-import { SeasonLedgerPanel } from "@/components/league/season-ledger-panel";
 import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -52,6 +48,82 @@ type DashboardTab =
   | "history-analytics";
 type ResultsDraftTab = "final-standings" | "offseason-draft" | "commissioner-overrides";
 
+function TabPanelSkeleton({ title, description }: { title: string; description: string }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div className="h-20 animate-pulse rounded-lg border border-border bg-secondary/20" key={index} />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+const CommissionerToolsPanel = dynamic(
+  () => import("@/components/league/commissioner-tools-panel").then((mod) => mod.CommissionerToolsPanel),
+  {
+    loading: () => (
+      <TabPanelSkeleton
+        description="Loading commissioner controls."
+        title="Commissioner Tools"
+      />
+    )
+  }
+);
+
+const LeagueHistoryPanel = dynamic(
+  () => import("@/components/league/league-history-panel").then((mod) => mod.LeagueHistoryPanel),
+  {
+    loading: () => (
+      <TabPanelSkeleton
+        description="Loading history and analytics."
+        title="History & Analytics"
+      />
+    )
+  }
+);
+
+const OffseasonDraftPanel = dynamic(
+  () => import("@/components/league/offseason-draft-panel").then((mod) => mod.OffseasonDraftPanel),
+  {
+    loading: () => (
+      <TabPanelSkeleton
+        description="Loading offseason draft workspace."
+        title="Offseason Draft"
+      />
+    )
+  }
+);
+
+const SeasonNflPerformancePanel = dynamic(
+  () => import("@/components/league/season-nfl-performance-panel").then((mod) => mod.SeasonNflPerformancePanel),
+  {
+    loading: () => (
+      <TabPanelSkeleton
+        description="Loading NFL performance."
+        title="NFL Performance"
+      />
+    )
+  }
+);
+
+const SeasonLedgerPanel = dynamic(
+  () => import("@/components/league/season-ledger-panel").then((mod) => mod.SeasonLedgerPanel),
+  {
+    loading: () => (
+      <TabPanelSkeleton
+        description="Loading season ledger."
+        title="Season Ledger"
+      />
+    )
+  }
+);
+
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   const payload = (await response.json()) as T & { error?: string };
 
@@ -85,6 +157,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [activeResultsDraftTab, setActiveResultsDraftTab] = useState<ResultsDraftTab>("offseason-draft");
+  const [operationalDataSeasonId, setOperationalDataSeasonId] = useState<string | null>(null);
 
   const activeSeason = bootstrapState?.activeSeason ?? null;
   const members = bootstrapState?.members ?? [];
@@ -104,6 +177,8 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
     () => ownershipOwners.filter((owner) => owner.teamCount < 3),
     [ownershipOwners]
   );
+  const tabNeedsOperationalData =
+    activeTab === "ownership" || activeTab === "results-draft" || activeTab === "nfl-performance";
 
   useEffect(() => {
     if (!errorMessage && !successMessage) {
@@ -118,7 +193,77 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
     return () => window.clearTimeout(timer);
   }, [errorMessage, successMessage]);
 
-  async function refreshLeagueDashboard(currentLeagueId: string) {
+  async function loadActiveSeasonOperationalData(seasonId: string) {
+    try {
+      const [ownershipResponse, draftResponse, resultsResponse] = await Promise.all([
+        fetch(`/api/season/${seasonId}/ownership`, { cache: "no-store" }),
+        fetch(`/api/season/${seasonId}/draft`, { cache: "no-store" }),
+        fetch(`/api/season/${seasonId}/results`, { cache: "no-store" })
+      ]);
+
+      try {
+        const ownershipData = await parseJsonResponse<SeasonOwnershipResponse>(ownershipResponse);
+
+        setSeasonOwnership(ownershipData.ownership);
+        setSelectedOwnerId((current) => {
+          const ownerIds = ownershipData.ownership.owners.map((owner) => owner.userId);
+          const assignableOwnerId =
+            ownershipData.ownership.owners.find((owner) => owner.teamCount < 3)?.userId ??
+            ownershipData.ownership.owners[0]?.userId ??
+            "";
+
+          return ownerIds.includes(current) ? current : assignableOwnerId;
+        });
+        setSelectedTeamId((current) =>
+          ownershipData.ownership.availableTeams.some((team) => team.id === current)
+            ? current
+            : ownershipData.ownership.availableTeams[0]?.id ?? ""
+        );
+        setOwnershipError(null);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unable to load active-season ownership.";
+
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Active-season ownership load failed:", message);
+        }
+
+        setSeasonOwnership(null);
+        setOwnershipError(message);
+        setSelectedOwnerId("");
+        setSelectedTeamId("");
+      }
+
+      try {
+        const draftData = await parseJsonResponse<DraftStateResponse>(draftResponse);
+        setDraftState(draftData.draft);
+      } catch (error) {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Draft state load failed:", error);
+        }
+
+        setDraftState(null);
+      }
+
+      try {
+        const resultsData = await parseJsonResponse<SeasonResultsResponse>(resultsResponse);
+        setResultsAvailability(resultsData.results.availability);
+      } catch (error) {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Season results availability load failed:", error);
+        }
+
+        setResultsAvailability(null);
+      }
+
+      setOperationalDataSeasonId(seasonId);
+    } catch (error) {
+      if (process.env.NODE_ENV !== "production") {
+        console.error("Operational data load failed:", error);
+      }
+    }
+  }
+
+  async function refreshLeagueDashboard(currentLeagueId: string, options?: { includeOperationalData?: boolean }) {
     setIsLoading(true);
 
     try {
@@ -137,7 +282,6 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       setLeagueOptions(listData.leagues);
       setBootstrapState(bootstrapData.bootstrapState);
       setSeasons(seasonsData.seasons);
-      setOwnershipError(null);
 
       if (!bootstrapData.bootstrapState.activeSeason) {
         setSeasonOwnership(null);
@@ -146,63 +290,24 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
         setOwnershipError(null);
         setSelectedOwnerId("");
         setSelectedTeamId("");
+        setOperationalDataSeasonId(null);
         return;
       }
 
-      const seasonId = bootstrapData.bootstrapState.activeSeason.id;
-      try {
-        const ownershipResponse = await fetch(`/api/season/${seasonId}/ownership`, { cache: "no-store" });
-        const ownershipData = await parseJsonResponse<SeasonOwnershipResponse>(ownershipResponse);
+      const nextSeasonId = bootstrapData.bootstrapState.activeSeason.id;
 
-        setSeasonOwnership(ownershipData.ownership);
-        setSelectedOwnerId((current) => {
-          const ownerIds = ownershipData.ownership.owners.map((owner) => owner.userId);
-          const assignableOwnerId =
-            ownershipData.ownership.owners.find((owner) => owner.teamCount < 3)?.userId ?? ownershipData.ownership.owners[0]?.userId ?? "";
-
-          return ownerIds.includes(current) ? current : assignableOwnerId;
-        });
-        setSelectedTeamId((current) =>
-          ownershipData.ownership.availableTeams.some((team) => team.id === current)
-            ? current
-            : ownershipData.ownership.availableTeams[0]?.id ?? ""
-        );
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Unable to load active-season ownership.";
-
-        if (process.env.NODE_ENV !== "production") {
-          console.error("Active-season ownership load failed:", message);
-        }
-
+      if (operationalDataSeasonId !== nextSeasonId) {
         setSeasonOwnership(null);
-        setOwnershipError(message);
+        setDraftState(null);
+        setResultsAvailability(null);
+        setOwnershipError(null);
         setSelectedOwnerId("");
         setSelectedTeamId("");
+        setOperationalDataSeasonId(null);
       }
 
-      try {
-        const draftResponse = await fetch(`/api/season/${seasonId}/draft`, { cache: "no-store" });
-        const draftData = await parseJsonResponse<DraftStateResponse>(draftResponse);
-        setDraftState(draftData.draft);
-      } catch (error) {
-        if (process.env.NODE_ENV !== "production") {
-          console.error("Draft state load failed:", error);
-        }
-
-        setDraftState(null);
-      }
-
-      try {
-        const resultsResponse = await fetch(`/api/season/${seasonId}/results`, { cache: "no-store" });
-        const resultsData = await parseJsonResponse<SeasonResultsResponse>(resultsResponse);
-        setResultsAvailability(resultsData.results.availability);
-      } catch (error) {
-        if (process.env.NODE_ENV !== "production") {
-          console.error("Season results availability load failed:", error);
-        }
-
-        setResultsAvailability(null);
+      if (options?.includeOperationalData) {
+        await loadActiveSeasonOperationalData(nextSeasonId);
       }
     } finally {
       setIsLoading(false);
@@ -242,13 +347,25 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       }
 
       try {
-        await refreshLeagueDashboard(leagueId);
+      await refreshLeagueDashboard(leagueId, { includeOperationalData: tabNeedsOperationalData });
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : "Unable to load league.");
         setIsLoading(false);
       }
     })();
   }, [leagueId, sessionStatus]);
+
+  useEffect(() => {
+    if (!bootstrapState?.activeSeason || !tabNeedsOperationalData) {
+      return;
+    }
+
+    if (operationalDataSeasonId === bootstrapState.activeSeason.id) {
+      return;
+    }
+
+    void loadActiveSeasonOperationalData(bootstrapState.activeSeason.id);
+  }, [bootstrapState?.activeSeason, operationalDataSeasonId, tabNeedsOperationalData]);
 
   async function handleCreateSeason(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -276,7 +393,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
 
       setSeasonName("");
       setSuccessMessage(`Created season ${data.season.name ?? data.season.year}.`);
-      await refreshLeagueDashboard(leagueId);
+      await refreshLeagueDashboard(leagueId, { includeOperationalData: tabNeedsOperationalData });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to create season.");
     } finally {
@@ -315,7 +432,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
         setSuccessMessage("Active season updated.");
       }
 
-      await refreshLeagueDashboard(leagueId);
+      await refreshLeagueDashboard(leagueId, { includeOperationalData: tabNeedsOperationalData });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to set active season.");
     } finally {
@@ -381,7 +498,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       }
 
       cancelSeasonYearEdit();
-      await refreshLeagueDashboard(leagueId);
+      await refreshLeagueDashboard(leagueId, { includeOperationalData: tabNeedsOperationalData });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to update season year.");
     } finally {
@@ -416,7 +533,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       setMemberDisplayName("");
       setMemberEmail("");
       setSuccessMessage(`Added ${data.member.displayName} to the league.`);
-      await refreshLeagueDashboard(leagueId);
+      await refreshLeagueDashboard(leagueId, { includeOperationalData: tabNeedsOperationalData });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to add member.");
     } finally {
@@ -444,7 +561,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       const data = await parseJsonResponse<RemoveLeagueMemberResponse>(response);
 
       setSuccessMessage(`Removed member ${data.removedLeagueMemberId}.`);
-      await refreshLeagueDashboard(leagueId);
+      await refreshLeagueDashboard(leagueId, { includeOperationalData: tabNeedsOperationalData });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to remove member.");
     } finally {
@@ -491,7 +608,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       const data = await parseJsonResponse<AssignTeamResponse>(response);
 
       setSuccessMessage(`Assigned ${data.ownership.team.name} to ${data.ownership.displayName}.`);
-      await refreshLeagueDashboard(leagueId!);
+      await refreshLeagueDashboard(leagueId!, { includeOperationalData: true });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to assign team.");
     } finally {
@@ -520,7 +637,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       const data = await parseJsonResponse<LockSeasonResponse>(response);
 
       setSuccessMessage(`Locked ${data.season.name ?? data.season.year}.`);
-      await refreshLeagueDashboard(leagueId!);
+      await refreshLeagueDashboard(leagueId!, { includeOperationalData: true });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to lock season.");
     } finally {
@@ -549,7 +666,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       const data = await parseJsonResponse<UnlockSeasonResponse>(response);
 
       setSuccessMessage(`Unlocked ${data.season.name ?? data.season.year}. Fix setup issues, then relock the season.`);
-      await refreshLeagueDashboard(leagueId!);
+      await refreshLeagueDashboard(leagueId!, { includeOperationalData: true });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to unlock season.");
     } finally {
@@ -583,7 +700,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       await parseJsonResponse<RemoveTeamOwnershipResponse>(response);
 
       setSuccessMessage(`Removed ${teamName} from its owner.`);
-      await refreshLeagueDashboard(leagueId!);
+      await refreshLeagueDashboard(leagueId!, { includeOperationalData: true });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to remove team.");
     } finally {
@@ -761,7 +878,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                   hideHeading
                   members={members}
                   onError={(message) => setErrorMessage(message || null)}
-                  onRefresh={() => refreshLeagueDashboard(leagueId)}
+                  onRefresh={() => refreshLeagueDashboard(leagueId, { includeOperationalData: true })}
                   onSuccess={(message) => setSuccessMessage(message || null)}
                   seasonOwnership={seasonOwnership}
                   seasons={seasons}
@@ -1303,7 +1420,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                     hideHeading
                     members={members}
                     onError={(message) => setErrorMessage(message || null)}
-                    onRefresh={() => refreshLeagueDashboard(leagueId)}
+                    onRefresh={() => refreshLeagueDashboard(leagueId, { includeOperationalData: true })}
                     onSuccess={(message) => setSuccessMessage(message || null)}
                     seasonOwnership={seasonOwnership}
                     seasons={seasons}
@@ -1324,7 +1441,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                     members={members}
                     onEndSubmit={() => setIsSubmitting(false)}
                     onError={(message) => setErrorMessage(message || null)}
-                    onRefresh={() => refreshLeagueDashboard(leagueId)}
+                    onRefresh={() => refreshLeagueDashboard(leagueId, { includeOperationalData: true })}
                     onStartSubmit={() => setIsSubmitting(true)}
                     onSuccess={(message) => setSuccessMessage(message || null)}
                     seasons={seasons}
@@ -1340,7 +1457,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                     hideHeading
                     members={members}
                     onError={(message) => setErrorMessage(message || null)}
-                    onRefresh={() => refreshLeagueDashboard(leagueId)}
+                    onRefresh={() => refreshLeagueDashboard(leagueId, { includeOperationalData: true })}
                     onSuccess={(message) => setSuccessMessage(message || null)}
                     seasonOwnership={seasonOwnership}
                     seasons={seasons}
