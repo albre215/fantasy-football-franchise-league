@@ -8,6 +8,7 @@ import { BrandMasthead } from "@/components/brand/brand-masthead";
 import { CommissionerToolsPanel } from "@/components/league/commissioner-tools-panel";
 import { LeagueHistoryPanel } from "@/components/league/league-history-panel";
 import { OffseasonDraftPanel } from "@/components/league/offseason-draft-panel";
+import { SeasonNflPerformancePanel } from "@/components/league/season-nfl-performance-panel";
 import { SeasonLedgerPanel } from "@/components/league/season-ledger-panel";
 import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -39,7 +40,15 @@ interface LeagueDashboardProps {
   leagueId?: string;
 }
 
-type DashboardTab = "overview" | "seasons" | "members" | "ownership" | "results-draft" | "ledger" | "history-analytics";
+type DashboardTab =
+  | "overview"
+  | "seasons"
+  | "members"
+  | "ownership"
+  | "results-draft"
+  | "nfl-performance"
+  | "ledger"
+  | "history-analytics";
 type ResultsDraftTab = "final-standings" | "offseason-draft" | "commissioner-overrides";
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
@@ -679,6 +688,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                 { id: "members", label: "Members" },
                 { id: "ownership", label: "Ownership" },
                 { id: "results-draft", label: "Results & Draft" },
+                { id: "nfl-performance", label: "NFL Performance" },
                 { id: "ledger", label: "Ledger" },
                 { id: "history-analytics", label: "History & Analytics" }
               ].map((tab) => (
@@ -1303,6 +1313,17 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                   />
                 ) : null}
               </div>
+            ) : null}
+
+            {activeTab === "nfl-performance" ? (
+              <SeasonNflPerformancePanel
+                accessMessage={commissionerAccessMessage}
+                activeSeason={activeSeason}
+                canManageNfl={canManageLeague}
+                onError={(message) => setErrorMessage(message || null)}
+                onSuccess={(message) => setSuccessMessage(message || null)}
+                seasonOwnership={seasonOwnership}
+              />
             ) : null}
 
             {activeTab === "ledger" ? (
