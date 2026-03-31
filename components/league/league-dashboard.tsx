@@ -26,6 +26,7 @@ import type { SeasonResultsResponse } from "@/types/results";
 import type {
   CreateSeasonResponse,
   LockSeasonResponse,
+  SetActiveSeasonResponse,
   SeasonListResponse,
   UpdateSeasonYearResponse,
   UnlockSeasonResponse
@@ -288,8 +289,19 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
         body: JSON.stringify({ seasonId })
       });
 
-      await parseJsonResponse(response);
-      setSuccessMessage("Active season updated.");
+      const data = await parseJsonResponse<SetActiveSeasonResponse>(response);
+
+      if (data.nflImport?.status === "FAILED") {
+        setSuccessMessage("Active season updated.");
+        setErrorMessage(
+          `Active season updated, but automatic NFL import failed. ${data.nflImport.message ?? ""}`.trim()
+        );
+      } else if (data.nflImport?.status === "COMPLETED") {
+        setSuccessMessage(`Active season updated. ${data.nflImport.message ?? ""}`.trim());
+      } else {
+        setSuccessMessage("Active season updated.");
+      }
+
       await refreshLeagueDashboard(leagueId);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to set active season.");

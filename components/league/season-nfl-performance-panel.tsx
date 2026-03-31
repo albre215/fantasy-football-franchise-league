@@ -96,10 +96,10 @@ export function SeasonNflPerformancePanel({
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
   const [isLoadingWeek, setIsLoadingWeek] = useState(false);
   const [isImportingSeason, setIsImportingSeason] = useState(false);
-  const [isImportingWeek, setIsImportingWeek] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [weekError, setWeekError] = useState<string | null>(null);
+  const [autoImportSeasonId, setAutoImportSeasonId] = useState<string | null>(null);
 
   const teamOptions = useMemo(() => {
     if (!seasonOwnership) {
@@ -126,6 +126,7 @@ export function SeasonNflPerformancePanel({
     setFormTeamId(teamOptions[0]?.id ?? "");
     setFormOpponentId("");
     setFormPhase("REGULAR_SEASON");
+    setAutoImportSeasonId(null);
 
     if (!activeSeason) {
       return;
@@ -256,7 +257,7 @@ export function SeasonNflPerformancePanel({
     }
   }
 
-  async function handleImportSeason() {
+  async function runAutomaticSeasonImport() {
     if (!activeSeason) {
       return;
     }
@@ -295,35 +296,22 @@ export function SeasonNflPerformancePanel({
     }
   }
 
-  async function handleImportWeek() {
-    if (!activeSeason || !selectedWeekKey) {
+  useEffect(() => {
+    if (!activeSeason || !summary || !canManageNfl || isImportingSeason) {
       return;
     }
 
-    const seasonId = activeSeason.id;
-    const seasonYear = activeSeason.year;
-    const selectedOption = currentSelectedWeekOption;
-
-    if (!selectedOption) {
+    if (activeSeason.status !== "ACTIVE" || summary.importState.hasImportedResults) {
       return;
     }
-    onError(null);
-    onSuccess(null);
-    setIsImportingWeek(true);
 
-    try {
-      const response = await fetch(`/api/season/${seasonId}/nfl/week/${selectedOption.weekNumber}/import`, {
-        method: "POST"
-      });
-      await parseJsonResponse<ImportSeasonNflResultsResponse>(response);
-      await refreshSummaryAndWeek(selectedOption.key);
-      onSuccess(`Imported NFL results for ${seasonYear} ${selectedOption.label}.`);
-    } catch (error) {
-      onError(error instanceof Error ? error.message : "Unable to import that NFL week.");
-    } finally {
-      setIsImportingWeek(false);
+    if (autoImportSeasonId === activeSeason.id) {
+      return;
     }
-  }
+
+    setAutoImportSeasonId(activeSeason.id);
+    void runAutomaticSeasonImport();
+  }, [activeSeason, autoImportSeasonId, canManageNfl, isImportingSeason, summary]);
 
   async function handleManualSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -393,7 +381,7 @@ export function SeasonNflPerformancePanel({
             <CardTitle>Season Import & Status</CardTitle>
             <CardDescription>
               {canManageNfl
-                ? `Import historical or active NFL results using ${activeSeason.year} as the source season year.`
+                ? `NFL results for ${activeSeason.year} import automatically when this season becomes active. In-progress seasons load completed games automatically as results become available in the source data.`
                 : "You can review imported NFL results here once the commissioner loads them."}
             </CardDescription>
           </CardHeader>
@@ -470,22 +458,8 @@ export function SeasonNflPerformancePanel({
             ) : null}
 
             {canManageNfl ? (
-              <div className="flex flex-wrap gap-3">
-                <Button disabled={isImportingSeason} onClick={handleImportSeason} type="button">
-                  {isImportingSeason ? "Importing Season..." : `Import ${activeSeason.year} Season`}
-                </Button>
-                <Button
-                  disabled={isImportingWeek || !selectedWeekKey}
-                  onClick={handleImportWeek}
-                  type="button"
-                  variant="outline"
-                >
-                  {isImportingWeek
-                    ? "Importing Week..."
-                    : !selectedWeekKey
-                      ? "Import Selected Week"
-                      : `Import ${summary?.availableWeeks.find((week) => week.key === selectedWeekKey)?.label ?? "Selected week"}`}
-                </Button>
+              <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                NFL import runs automatically for the active season. Use commissioner review below only if a weekly team result needs correction.
               </div>
             ) : accessMessage ? (
               <p className="text-sm text-muted-foreground">{accessMessage}</p>
@@ -622,7 +596,7 @@ export function SeasonNflPerformancePanel({
               </div>
             ) : (
               <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                Import a week to see owner-level NFL results and team-by-team outcomes.
+                Weekly owner rollups and team-by-team outcomes will appear here as NFL results are imported automatically.
               </div>
             )}
           </CardContent>
@@ -638,7 +612,7 @@ export function SeasonNflPerformancePanel({
           <CardContent>
             {!canManageNfl ? (
               <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                {accessMessage ?? "Only the commissioner can import or correct NFL results."}
+                {accessMessage ?? "Only the commissioner can review or correct NFL results."}
               </div>
             ) : !selectedWeekKey ? (
               <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">

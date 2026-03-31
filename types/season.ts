@@ -64,6 +64,11 @@ export interface ActiveSeasonResponse {
 
 export interface SetActiveSeasonResponse {
   season: SeasonSummary;
+  nflImport: {
+    attempted: boolean;
+    status: "COMPLETED" | "FAILED";
+    message: string | null;
+  } | null;
 }
 
 export interface SeasonSetupStatusResponse {
