@@ -35,6 +35,11 @@ import type {
 
 interface LeagueDashboardProps {
   leagueId?: string;
+  initialIsAuthenticated?: boolean;
+  initialLeagueOptions?: LeagueListItem[];
+  initialBootstrapState?: LeagueBootstrapStateResponse["bootstrapState"] | null;
+  initialSeasons?: SeasonListResponse["seasons"];
+  initialErrorMessage?: string | null;
 }
 
 type DashboardTab =
@@ -134,13 +139,22 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   return payload;
 }
 
-export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
+export function LeagueDashboard({
+  leagueId,
+  initialIsAuthenticated = false,
+  initialLeagueOptions = [],
+  initialBootstrapState = null,
+  initialSeasons = [],
+  initialErrorMessage = null
+}: LeagueDashboardProps) {
   const { data: session, status: sessionStatus } = useSession();
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!initialIsAuthenticated && sessionStatus === "loading");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [leagueOptions, setLeagueOptions] = useState<LeagueListItem[]>([]);
-  const [bootstrapState, setBootstrapState] = useState<LeagueBootstrapStateResponse["bootstrapState"] | null>(null);
-  const [seasons, setSeasons] = useState<SeasonListResponse["seasons"]>([]);
+  const [leagueOptions, setLeagueOptions] = useState<LeagueListItem[]>(initialLeagueOptions);
+  const [bootstrapState, setBootstrapState] = useState<LeagueBootstrapStateResponse["bootstrapState"] | null>(
+    initialBootstrapState
+  );
+  const [seasons, setSeasons] = useState<SeasonListResponse["seasons"]>(initialSeasons);
   const [seasonOwnership, setSeasonOwnership] = useState<SeasonOwnershipResponse["ownership"] | null>(null);
   const [draftState, setDraftState] = useState<DraftState | null>(null);
   const [resultsAvailability, setResultsAvailability] = useState<SeasonResultsResponse["results"]["availability"] | null>(null);
@@ -153,11 +167,14 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   const [memberEmail, setMemberEmail] = useState("");
   const [selectedOwnerId, setSelectedOwnerId] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState("");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(initialErrorMessage);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [activeResultsDraftTab, setActiveResultsDraftTab] = useState<ResultsDraftTab>("offseason-draft");
   const [operationalDataSeasonId, setOperationalDataSeasonId] = useState<string | null>(null);
+  const [hasConsumedInitialData, setHasConsumedInitialData] = useState(
+    initialIsAuthenticated && (Boolean(leagueId) || initialLeagueOptions.length > 0 || Boolean(initialErrorMessage))
+  );
 
   const activeSeason = bootstrapState?.activeSeason ?? null;
   const members = bootstrapState?.members ?? [];
@@ -179,6 +196,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   );
   const tabNeedsOperationalData =
     activeTab === "ownership" || activeTab === "results-draft" || activeTab === "nfl-performance";
+  const isAuthenticated = initialIsAuthenticated || sessionStatus === "authenticated";
 
   useEffect(() => {
     if (!errorMessage && !successMessage) {
@@ -192,6 +210,24 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
 
     return () => window.clearTimeout(timer);
   }, [errorMessage, successMessage]);
+
+  useEffect(() => {
+    setLeagueOptions(initialLeagueOptions);
+    setBootstrapState(initialBootstrapState);
+    setSeasons(initialSeasons);
+    setErrorMessage(initialErrorMessage);
+    setIsLoading(false);
+    setHasConsumedInitialData(
+      initialIsAuthenticated && (Boolean(leagueId) || initialLeagueOptions.length > 0 || Boolean(initialErrorMessage))
+    );
+  }, [
+    initialBootstrapState,
+    initialErrorMessage,
+    initialIsAuthenticated,
+    initialLeagueOptions,
+    initialSeasons,
+    leagueId
+  ]);
 
   async function loadActiveSeasonOperationalData(seasonId: string) {
     try {
@@ -316,11 +352,11 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
 
   useEffect(() => {
     void (async () => {
-      if (sessionStatus === "loading") {
+      if (!initialIsAuthenticated && sessionStatus === "loading") {
         return;
       }
 
-      if (sessionStatus !== "authenticated") {
+      if (!isAuthenticated) {
         setIsLoading(false);
         setBootstrapState(null);
         setSeasons([]);
@@ -328,6 +364,11 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
         setDraftState(null);
         setOwnershipError(null);
         setErrorMessage("Sign in to access the league dashboard.");
+        return;
+      }
+
+      if (hasConsumedInitialData) {
+        setHasConsumedInitialData(false);
         return;
       }
 
@@ -347,13 +388,13 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       }
 
       try {
-      await refreshLeagueDashboard(leagueId, { includeOperationalData: tabNeedsOperationalData });
+        await refreshLeagueDashboard(leagueId, { includeOperationalData: tabNeedsOperationalData });
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : "Unable to load league.");
         setIsLoading(false);
       }
     })();
-  }, [leagueId, sessionStatus]);
+  }, [hasConsumedInitialData, initialIsAuthenticated, isAuthenticated, leagueId, sessionStatus]);
 
   useEffect(() => {
     if (!bootstrapState?.activeSeason || !tabNeedsOperationalData) {

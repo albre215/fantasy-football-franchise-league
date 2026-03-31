@@ -3,6 +3,7 @@ import Image from "next/image";
 import { getServerAuthSession } from "@/auth";
 import { AccountMenu } from "@/components/home/account-menu";
 import { LeagueControlPanel } from "@/components/home/league-control-panel";
+import { leagueService } from "@/server/services/league-service";
 
 function getGreetingName(displayName: string | null | undefined) {
   const trimmed = displayName?.trim();
@@ -18,6 +19,8 @@ export default async function HomePage() {
   const session = await getServerAuthSession();
   const isAuthenticated = Boolean(session?.user?.id);
   const greetingName = getGreetingName(session?.user?.displayName);
+  const initialLeagues =
+    isAuthenticated && session?.user?.id ? await leagueService.listLeaguesForUser(session.user.id) : [];
 
   return (
     <main className="min-h-screen py-10 sm:py-12">
@@ -50,7 +53,7 @@ export default async function HomePage() {
             </div>
           </section>
         </div>
-        <LeagueControlPanel />
+        <LeagueControlPanel initialIsAuthenticated={isAuthenticated} initialLeagues={initialLeagues} />
       </div>
     </main>
   );

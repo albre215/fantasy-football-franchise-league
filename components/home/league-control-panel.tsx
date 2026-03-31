@@ -10,12 +10,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type {
-  CreateLeagueResponse,
-  JoinLeagueResponse,
-  LeagueListItem,
-  ListLeaguesResponse
-} from "@/types/league";
+import type { CreateLeagueResponse, JoinLeagueResponse, LeagueListItem } from "@/types/league";
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   const payload = (await response.json()) as T & { error?: string };
@@ -27,12 +22,17 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   return payload;
 }
 
-export function LeagueControlPanel() {
+interface LeagueControlPanelProps {
+  initialIsAuthenticated: boolean;
+  initialLeagues: LeagueListItem[];
+}
+
+export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: LeagueControlPanelProps) {
   const router = useRouter();
   const { data: session, status } = useSession();
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [leagues, setLeagues] = useState<LeagueListItem[]>([]);
+  const [leagues, setLeagues] = useState<LeagueListItem[]>(initialLeagues);
   const [leagueName, setLeagueName] = useState("");
   const [joinLeagueId, setJoinLeagueId] = useState("");
   const [registerFirstName, setRegisterFirstName] = useState("");
@@ -57,7 +57,8 @@ export function LeagueControlPanel() {
   const registerPasswordsMatch = registerPassword === registerConfirmPassword;
   const registerPasswordMismatch =
     registerPassword.length > 0 && registerConfirmPassword.length > 0 && !registerPasswordsMatch;
-  const isAuthenticated = status === "authenticated" && Boolean(session?.user?.id);
+  const isAuthenticated = initialIsAuthenticated || (status === "authenticated" && Boolean(session?.user?.id));
+  const showAuthLoading = !initialIsAuthenticated && status === "loading";
 
   useEffect(() => {
     if (hasManuallyEditedDisplayName) {
@@ -71,37 +72,13 @@ export function LeagueControlPanel() {
   useEffect(() => {
     if (!isAuthenticated) {
       setLeagues([]);
-      setIsLoading(false);
-      return;
     }
-
-    let isActive = true;
-
-    void (async () => {
-      try {
-        const response = await fetch("/api/league/list", {
-          cache: "no-store"
-        });
-        const data = await parseJsonResponse<ListLeaguesResponse>(response);
-
-        if (isActive) {
-          setLeagues(data.leagues);
-        }
-      } catch (error) {
-        if (isActive) {
-          setErrorMessage(error instanceof Error ? error.message : "Unable to load leagues.");
-        }
-      } finally {
-        if (isActive) {
-          setIsLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      isActive = false;
-    };
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    setLeagues(initialLeagues);
+    setIsLoading(false);
+  }, [initialLeagues]);
 
   async function handleCreateLeague(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -329,7 +306,7 @@ export function LeagueControlPanel() {
           : "mt-10 w-full max-w-xl"
       }
     >
-      {status === "loading" ? (
+      {showAuthLoading ? (
         <div className="space-y-6">
           <Card className="brand-surface">
             <CardContent className="p-6 text-sm text-muted-foreground">Loading authentication state...</CardContent>
