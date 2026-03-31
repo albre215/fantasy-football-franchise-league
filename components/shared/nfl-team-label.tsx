@@ -26,16 +26,16 @@ interface NFLTeamLabelProps {
 
 const sizeMap: Record<TeamLabelSize, { image: number; className: string }> = {
   compact: {
-    image: 18,
-    className: "h-[18px] w-[18px]"
-  },
-  default: {
     image: 20,
     className: "h-5 w-5"
   },
+  default: {
+    image: 22,
+    className: "h-[22px] w-[22px]"
+  },
   detail: {
-    image: 24,
-    className: "h-6 w-6"
+    image: 26,
+    className: "h-[26px] w-[26px]"
   }
 };
 
