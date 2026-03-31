@@ -27,7 +27,7 @@ export function BrandMasthead({
   return (
     <section
       className={cn(
-        "relative overflow-hidden rounded-[2rem] border border-[#123222] bg-[radial-gradient(circle_at_top_left,rgba(113,255,104,0.22),transparent_28%),linear-gradient(135deg,#081a11_0%,#0d2919_52%,#143222_100%)] p-7 text-white shadow-[0_30px_90px_-42px_rgba(1,24,14,0.92)] sm:p-9",
+        "relative overflow-hidden rounded-[2rem] border border-[#1b442b] bg-[radial-gradient(circle_at_top_left,rgba(113,255,104,0.22),transparent_28%),linear-gradient(135deg,#081a11_0%,#0d2919_52%,#143222_100%)] p-7 text-white shadow-[0_18px_46px_-28px_rgba(1,24,14,0.58)] sm:p-9",
         className
       )}
     >

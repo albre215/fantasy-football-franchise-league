@@ -671,7 +671,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
               </Card>
             ) : null}
 
-            <div className="flex flex-wrap gap-2 rounded-2xl border border-border/80 bg-white/72 p-2 shadow-[0_20px_48px_-34px_rgba(6,32,18,0.35)] backdrop-blur-sm">
+            <div className="relative z-10 flex flex-wrap gap-2 rounded-2xl border border-border bg-white/90 p-2 shadow-[0_14px_28px_-24px_rgba(6,32,18,0.2),0_0_0_1px_rgba(24,54,33,0.08)] backdrop-blur-sm">
               {[
                 { id: "overview", label: "Overview" },
                 { id: "seasons", label: "Seasons" },
