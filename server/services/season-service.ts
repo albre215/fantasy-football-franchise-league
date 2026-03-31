@@ -20,6 +20,13 @@ class SeasonServiceError extends Error {
   }
 }
 
+const MIN_SUPPORTED_SEASON_YEAR = 1966;
+const MAX_SUPPORTED_SEASON_YEAR = 3000;
+
+function isValidSeasonYear(year: number) {
+  return Number.isInteger(year) && year >= MIN_SUPPORTED_SEASON_YEAR && year <= MAX_SUPPORTED_SEASON_YEAR;
+}
+
 function mapSeason(season: {
   id: string;
   leagueId: string;
@@ -257,7 +264,7 @@ export const seasonService = {
       throw new SeasonServiceError("leagueId is required.", 400);
     }
 
-    if (!Number.isInteger(input.year) || input.year < 2000 || input.year > 3000) {
+    if (!isValidSeasonYear(input.year)) {
       throw new SeasonServiceError("A valid season year is required.", 400);
     }
 
@@ -477,7 +484,7 @@ export const seasonService = {
       throw new SeasonServiceError("seasonId is required.", 400);
     }
 
-    if (!Number.isInteger(input.year) || input.year < 2000 || input.year > 3000) {
+    if (!isValidSeasonYear(input.year)) {
       throw new SeasonServiceError("A valid season year is required.", 400);
     }
 
