@@ -401,6 +401,7 @@ model SeasonNflImportRun {
   id                String            @id @default(cuid())
   seasonId          String
   seasonYear        Int
+  concurrencyKey    String?           @unique
   provider          NflResultProvider
   mode              NflImportMode
   weekNumber        Int?

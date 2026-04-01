@@ -1,4 +1,10 @@
-import { NflImportStatus, NflResultProvider, Prisma, SeasonNflGameResult, SeasonNflResultPhase } from "@prisma/client";
+import {
+  NflImportStatus,
+  NflResultProvider,
+  Prisma,
+  SeasonNflGameResult,
+  SeasonNflResultPhase
+} from "@prisma/client";
 
 import { normalizeNflTeamAbbreviation } from "@/lib/nfl-team-aliases";
 import { prisma } from "@/lib/prisma";
@@ -267,6 +273,16 @@ async function getSeasonImportRuns(tx: PrismaClientLike, seasonId: string, seaso
     },
     orderBy: [{ startedAt: "desc" }, { id: "desc" }],
     take: 8
+  });
+}
+
+async function getRunningSeasonImportRun(tx: PrismaClientLike, seasonId: string) {
+  return tx.seasonNflImportRun.findFirst({
+    where: {
+      seasonId,
+      status: "RUNNING"
+    },
+    orderBy: [{ startedAt: "desc" }, { id: "desc" }]
   });
 }
 
@@ -698,17 +714,34 @@ export const nflPerformanceService = {
 
     await seasonService.assertCommissionerAccess(seasonId, actingUserId);
     const season = await getSeasonContextOrThrow(prisma, seasonId);
-    const run = await prisma.seasonNflImportRun.create({
-      data: {
-        seasonId: season.id,
-        seasonYear: season.year,
-        provider: "NFLVERSE",
-        mode: typeof weekNumber === "number" ? "SINGLE_WEEK" : "FULL_SEASON",
-        weekNumber: weekNumber ?? null,
-        status: "RUNNING",
-        actingUserId
+    const existingRunningRun = await getRunningSeasonImportRun(prisma, season.id);
+
+    if (existingRunningRun) {
+      return this.getSeasonNflOverview(seasonId, actingUserId);
+    }
+
+    let run;
+
+    try {
+      run = await prisma.seasonNflImportRun.create({
+        data: {
+          seasonId: season.id,
+          seasonYear: season.year,
+          concurrencyKey: season.id,
+          provider: "NFLVERSE",
+          mode: typeof weekNumber === "number" ? "SINGLE_WEEK" : "FULL_SEASON",
+          weekNumber: weekNumber ?? null,
+          status: "RUNNING",
+          actingUserId
+        }
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        return this.getSeasonNflOverview(seasonId, actingUserId);
       }
-    });
+
+      throw error;
+    }
 
     try {
       const provider = nflResultsProviders.NFLVERSE;
@@ -844,6 +877,7 @@ export const nflPerformanceService = {
         where: { id: run.id },
         data: {
           status: "COMPLETED",
+          concurrencyKey: null,
           importedResultCount,
           warnings:
             warnings.length || importedKeys.length
@@ -863,6 +897,7 @@ export const nflPerformanceService = {
         where: { id: run.id },
         data: {
           status: "FAILED",
+          concurrencyKey: null,
           errorMessage: error instanceof Error ? error.message : "NFL import failed.",
           completedAt: new Date()
         }
