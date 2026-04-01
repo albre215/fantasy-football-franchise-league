@@ -89,6 +89,8 @@ export interface DraftOrderRecommendationEntry {
   sourceSeasonRank: number | null;
   ledgerTotal: number;
   draftSlot: number;
+  tieBreakReason: "LEDGER_TOTAL" | "FANTASY_RANK" | "DISPLAY_NAME";
+  mappingStatus: "MAPPED" | "MISSING_TARGET_MEMBER";
   warnings: string[];
 }
 
@@ -112,7 +114,9 @@ export interface DraftOrderRecommendation {
     hasAnyLedgerEntries: boolean;
     hasCompleteFantasyStandings: boolean;
     allTargetMappingsComplete: boolean;
+    ownersWithLedgerEntries: number;
     zeroLedgerOwnerCount: number;
+    ledgerCoverageStatus: "NONE" | "PARTIAL" | "FULL";
     isReady: boolean;
   };
   warnings: string[];

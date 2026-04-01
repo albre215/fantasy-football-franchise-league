@@ -475,6 +475,11 @@ export function CommissionerToolsPanel({
           <p>Target season locked: {activeSeason?.isLocked ? "Yes" : "No"}</p>
           <p>Ownership finalized: {ownershipFinalized ? "Yes" : "No"}</p>
           <p>Ledger-based draft order ready: {results?.availability.isReadyForDraftOrderAutomation ? "Yes" : "No"}</p>
+          <p>Ledger coverage: {results?.availability.draftOrderReadiness.ledgerCoverageStatus ?? "NONE"}</p>
+          <p>
+            Owners with ledger entries: {results?.availability.draftOrderReadiness.ownersWithLedgerEntries ?? 0} /{" "}
+            {results?.eligibleMembers.length ?? 0}
+          </p>
         </CardContent>
       </Card>
       ) : null}
@@ -663,6 +668,8 @@ export function CommissionerToolsPanel({
                         <p className="text-muted-foreground">
                           Fantasy rank tie-break: {entry.sourceSeasonRank ? `#${entry.sourceSeasonRank}` : "Unavailable"}
                         </p>
+                        <p className="text-muted-foreground">Ordering reason: {entry.tieBreakReason.replaceAll("_", " ")}</p>
+                        <p className="text-muted-foreground">Mapping: {entry.mappingStatus.replaceAll("_", " ")}</p>
                         {entry.warnings.length > 0 ? (
                           <p className="mt-1 text-destructive">{entry.warnings[0]}</p>
                         ) : null}

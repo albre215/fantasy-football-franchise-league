@@ -109,7 +109,7 @@ export function SeasonResultsPanel({
     eligibleMembers.length === 10 &&
     eligibleMembers.every((member) => orderedLeagueMemberIds.includes(member.leagueMemberId));
   const standingsReady = hasAllPlacements && allOwnersUnique && includesEveryOwner;
-  const recommendedReverseDraftOrder = results?.recommendedReverseDraftOrder ?? [];
+  const recommendedOffseasonDraftOrder = results?.recommendedOffseasonDraftOrder ?? [];
 
   function updatePlacement(index: number, leagueMemberId: string) {
     setOrderedLeagueMemberIds((current) => {
@@ -249,6 +249,14 @@ export function SeasonResultsPanel({
                 <p>All owners unique: {allOwnersUnique ? `Pass (${uniquePlacementCount}/10)` : "Fail"}</p>
                 <p>All eligible owners included: {includesEveryOwner ? "Pass" : "Fail"}</p>
                 <p>Standings ready to save: {standingsReady ? "Yes" : "No"}</p>
+                <p>Ledger coverage: {results?.availability.draftOrderReadiness.ledgerCoverageStatus ?? "NONE"}</p>
+                <p>
+                  Owners with ledger entries: {results?.availability.draftOrderReadiness.ownersWithLedgerEntries ?? 0} /{" "}
+                  {eligibleMembers.length}
+                </p>
+                <p>
+                  Zero-ledger owners: {results?.availability.draftOrderReadiness.zeroLedgerOwnerCount ?? eligibleMembers.length}
+                </p>
                 <div className="rounded-lg border border-dashed border-border p-4">
                   {results?.availability.isReadyForDraftOrderAutomation
                     ? "Season ledger entries exist, so the commissioner tools can recommend a ledger-based draft order."
@@ -298,18 +306,19 @@ export function SeasonResultsPanel({
                 <CardDescription>Ledger-total recommendation for future offseason draft order automation.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {recommendedReverseDraftOrder.length === 0 ? (
+                {recommendedOffseasonDraftOrder.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     Record season ledger activity first to derive the money-based draft sequence.
                   </p>
                 ) : (
-                  recommendedReverseDraftOrder.map((member, index) => (
+                  recommendedOffseasonDraftOrder.map((member, index) => (
                     <div className="rounded-lg border border-border p-3 text-sm" key={member.leagueMemberId}>
                       <p className="font-medium text-foreground">Pick {index + 1}: {member.displayName}</p>
                       <p className="text-muted-foreground">Ledger total: ${member.ledgerTotal.toFixed(2)}</p>
                       <p className="text-muted-foreground">
                         Fantasy rank tie-break: {member.sourceSeasonRank ? `#${member.sourceSeasonRank}` : "Unavailable"}
                       </p>
+                      <p className="text-muted-foreground">Ordering reason: {member.tieBreakReason.replaceAll("_", " ")}</p>
                     </div>
                   ))
                 )}

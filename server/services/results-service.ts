@@ -131,6 +131,31 @@ function buildLedgerTotalsByLeagueMemberId(
   return totalsByMemberId;
 }
 
+function compareDraftOrderCandidates(
+  left: { ledgerTotal: number; sourceSeasonRank: number | null; displayName: string },
+  right: { ledgerTotal: number; sourceSeasonRank: number | null; displayName: string }
+) {
+  if (left.ledgerTotal !== right.ledgerTotal) {
+    return left.ledgerTotal - right.ledgerTotal;
+  }
+
+  const leftRank = left.sourceSeasonRank;
+  const rightRank = right.sourceSeasonRank;
+  if (leftRank !== null && rightRank !== null && leftRank !== rightRank) {
+    return rightRank - leftRank;
+  }
+
+  if (leftRank === null && rightRank !== null) {
+    return 1;
+  }
+
+  if (leftRank !== null && rightRank === null) {
+    return -1;
+  }
+
+  return left.displayName.localeCompare(right.displayName);
+}
+
 function normalizePayoutConfigValue(
   value: Prisma.JsonValue | null | undefined
 ): { config: FantasyPayoutConfigEntry[]; configSource: "DEFAULT" | "SEASON" } {
@@ -279,7 +304,16 @@ function buildResultsSummary(
     seasonStandings.map((standing) => [standing.leagueMemberId, standing] as const)
   );
   const ledgerTotalsByLeagueMemberId = buildLedgerTotalsByLeagueMemberId(season.league.members, season.ledgerEntries);
-  const recommendedReverseDraftOrder = eligibleMembers
+  const ownersWithLedgerEntries = season.league.members.filter(
+    (member) => (ledgerTotalsByLeagueMemberId.get(member.id) ?? 0) !== 0
+  ).length;
+  const zeroLedgerOwnerCount = eligibleMembers.length - ownersWithLedgerEntries;
+  const ledgerCoverageStatus: "NONE" | "PARTIAL" | "FULL" =
+    ownersWithLedgerEntries === 0 ? "NONE" : ownersWithLedgerEntries === eligibleMembers.length ? "FULL" : "PARTIAL";
+  const hasCompleteFantasyStandings =
+    seasonStandings.length === eligibleMembers.length && seasonStandings.every((standing) => standing.rank !== null);
+
+  const rankedDraftOrderCandidates = eligibleMembers
     .map((member) => {
       const standing = standingsByLeagueMemberId.get(member.leagueMemberId) ?? null;
       const ledgerTotal = ledgerTotalsByLeagueMemberId.get(member.leagueMemberId) ?? 0;
@@ -297,32 +331,15 @@ function buildResultsSummary(
         ...member,
         sourceSeasonRank: standing?.rank ?? null,
         ledgerTotal,
+        tieBreakReason: "LEDGER_TOTAL" as const,
         warnings
       };
     })
-    .sort((left, right) => {
-      if (left.ledgerTotal !== right.ledgerTotal) {
-        return left.ledgerTotal - right.ledgerTotal;
-      }
+    .sort(compareDraftOrderCandidates);
 
-      const leftRank = left.sourceSeasonRank;
-      const rightRank = right.sourceSeasonRank;
-      if (leftRank !== null && rightRank !== null && leftRank !== rightRank) {
-        return rightRank - leftRank;
-      }
-
-      if (leftRank === null && rightRank !== null) {
-        return 1;
-      }
-
-      if (leftRank !== null && rightRank === null) {
-        return -1;
-      }
-
-      return left.displayName.localeCompare(right.displayName);
-    })
-    .map((member, index) => ({
+  const recommendedOffseasonDraftOrder = rankedDraftOrderCandidates.map((member, index) => ({
       ...member,
+      tieBreakReason: determineTieBreakReason(member, index > 0 ? rankedDraftOrderCandidates[index - 1] : null),
       draftSlot: index + 1
     }));
 
@@ -377,11 +394,18 @@ function buildResultsSummary(
       hasFinalStandings: seasonStandings.length > 0,
       hasChampionData: seasonStandings.some((standing) => standing.isChampion === true),
       isReadyForDraftOrderAutomation: eligibleMembers.length === 10 && hasAnyLedgerEntries,
-      hasFantasyPayoutsPublished: fantasyPayoutEntries.length > 0
+      hasFantasyPayoutsPublished: fantasyPayoutEntries.length > 0,
+      draftOrderReadiness: {
+        hasAnyLedgerEntries,
+        ownersWithLedgerEntries,
+        zeroLedgerOwnerCount,
+        ledgerCoverageStatus,
+        hasCompleteFantasyStandings
+      }
     },
     eligibleMembers,
     seasonStandings,
-    recommendedReverseDraftOrder,
+    recommendedOffseasonDraftOrder,
     fantasyPayouts: {
       config: fantasyPayoutConfig,
       configSource,
@@ -394,7 +418,22 @@ function buildResultsSummary(
   };
 }
 
-async function getReverseDraftOrderContext(sourceSeasonId: string, targetSeasonId: string) {
+function determineTieBreakReason(
+  current: { ledgerTotal: number; sourceSeasonRank: number | null; displayName: string },
+  previous: { ledgerTotal: number; sourceSeasonRank: number | null; displayName: string } | null
+): "LEDGER_TOTAL" | "FANTASY_RANK" | "DISPLAY_NAME" {
+  if (!previous || current.ledgerTotal !== previous.ledgerTotal) {
+    return "LEDGER_TOTAL";
+  }
+
+  if (current.sourceSeasonRank !== previous.sourceSeasonRank) {
+    return "FANTASY_RANK";
+  }
+
+  return "DISPLAY_NAME";
+}
+
+async function getOffseasonDraftOrderContext(sourceSeasonId: string, targetSeasonId: string) {
   const [sourceSeason, ledgerTotalsContext, targetSeason] = await Promise.all([
     prisma.season.findUnique({
       where: {
@@ -468,6 +507,9 @@ async function getReverseDraftOrderContext(sourceSeasonId: string, targetSeasonI
     sourceSeason.seasonStandings.length === sourceSeason.league.members.length &&
     sourceSeason.seasonStandings.every((standing) => standing.rank !== null);
   const zeroLedgerOwnerCount = ledgerTotalsContext.totals.filter((entry) => entry.entryCount === 0).length;
+  const ownersWithLedgerEntries = ledgerTotalsContext.totals.length - zeroLedgerOwnerCount;
+  const ledgerCoverageStatus: "NONE" | "PARTIAL" | "FULL" =
+    ownersWithLedgerEntries === 0 ? "NONE" : ownersWithLedgerEntries === ledgerTotalsContext.totals.length ? "FULL" : "PARTIAL";
   const warnings: string[] = [];
 
   if (!ledgerTotalsContext.hasAnyEntries) {
@@ -478,7 +520,7 @@ async function getReverseDraftOrderContext(sourceSeasonId: string, targetSeasonI
     warnings.push("Complete fantasy standings are not available, so ledger-total ties fall back to display name ordering.");
   }
 
-  const recommended = [...ledgerTotalsContext.totals]
+  const rankedRecommendedCandidates = [...ledgerTotalsContext.totals]
     .map((total) => {
       const standing = standingsByUserId.get(total.userId) ?? null;
       const targetMember = targetMembersByUserId.get(total.userId) ?? null;
@@ -506,32 +548,16 @@ async function getReverseDraftOrderContext(sourceSeasonId: string, targetSeasonI
         role: targetMember?.role ?? total.role,
         sourceSeasonRank: standing?.rank ?? null,
         ledgerTotal: total.ledgerTotal,
+        mappingStatus: targetMember ? ("MAPPED" as const) : ("MISSING_TARGET_MEMBER" as const),
+        tieBreakReason: "LEDGER_TOTAL" as const,
         warnings: entryWarnings
       };
     })
-    .sort((left, right) => {
-      if (left.ledgerTotal !== right.ledgerTotal) {
-        return left.ledgerTotal - right.ledgerTotal;
-      }
+    .sort(compareDraftOrderCandidates);
 
-      const leftRank = left.sourceSeasonRank;
-      const rightRank = right.sourceSeasonRank;
-      if (leftRank !== null && rightRank !== null && leftRank !== rightRank) {
-        return rightRank - leftRank;
-      }
-
-      if (leftRank === null && rightRank !== null) {
-        return 1;
-      }
-
-      if (leftRank !== null && rightRank === null) {
-        return -1;
-      }
-
-      return left.displayName.localeCompare(right.displayName);
-    })
-    .map((entry, index) => ({
+  const recommended = rankedRecommendedCandidates.map((entry, index) => ({
       ...entry,
+      tieBreakReason: determineTieBreakReason(entry, index > 0 ? rankedRecommendedCandidates[index - 1] : null),
       draftSlot: index + 1
     }));
 
@@ -541,7 +567,7 @@ async function getReverseDraftOrderContext(sourceSeasonId: string, targetSeasonI
     warnings.push("One or more source-season owners could not be mapped into the target season by userId.");
   }
 
-  if (new Set(recommended.map((entry) => entry.userId)).size !== targetSeason.league.members.length) {
+  if (new Set(recommended.map((entry) => entry.userId)).size !== sourceSeason.league.members.length) {
     throw new ResultsServiceError("Auto-generated draft order must contain all 10 owners exactly once.", 409);
   }
 
@@ -553,7 +579,9 @@ async function getReverseDraftOrderContext(sourceSeasonId: string, targetSeasonI
       hasAnyLedgerEntries: ledgerTotalsContext.hasAnyEntries,
       hasCompleteFantasyStandings,
       allTargetMappingsComplete,
+      ownersWithLedgerEntries,
       zeroLedgerOwnerCount,
+      ledgerCoverageStatus,
       isReady: ledgerTotalsContext.hasAnyEntries && allTargetMappingsComplete
     },
     warnings
@@ -758,7 +786,7 @@ export const resultsService = {
     return buildResultsSummary(season);
   },
 
-  async getRecommendedReverseDraftOrder(sourceSeasonId: string, targetSeasonId: string) {
+  async getRecommendedOffseasonDraftOrder(sourceSeasonId: string, targetSeasonId: string) {
     const normalizedSourceSeasonId = sourceSeasonId.trim();
     const normalizedTargetSeasonId = targetSeasonId.trim();
 
@@ -766,7 +794,7 @@ export const resultsService = {
       throw new ResultsServiceError("sourceSeasonId and targetSeasonId are required.", 400);
     }
 
-    const { sourceSeason, recommended, readiness, warnings } = await getReverseDraftOrderContext(
+    const { sourceSeason, recommended, readiness, warnings } = await getOffseasonDraftOrderContext(
       normalizedSourceSeasonId,
       normalizedTargetSeasonId
     );
@@ -797,6 +825,11 @@ export const resultsService = {
       warnings,
       entries: recommended
     };
+  },
+
+  async getRecommendedReverseDraftOrder(sourceSeasonId: string, targetSeasonId: string) {
+    // Backward-compatible alias for older call sites that still reference the standings-era name.
+    return this.getRecommendedOffseasonDraftOrder(sourceSeasonId, targetSeasonId);
   },
 
   async saveManualSeasonStandings(input: SaveManualSeasonStandingsInput): Promise<SeasonResultsSummary> {

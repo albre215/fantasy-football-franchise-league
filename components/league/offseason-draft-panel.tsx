@@ -664,6 +664,10 @@ export function OffseasonDraftPanel({
                         Lowest ledger total: ${recommendedOrder.lowestTotalOwner?.ledgerTotal.toFixed(2) ?? "0.00"} - Highest
                         ledger total: ${recommendedOrder.highestTotalOwner?.ledgerTotal.toFixed(2) ?? "0.00"}
                       </p>
+                      <p>
+                        Ledger coverage: {recommendedOrder.readiness.ledgerCoverageStatus} - Owners with entries:{" "}
+                        {recommendedOrder.readiness.ownersWithLedgerEntries}/10
+                      </p>
                       {recommendedOrder.warnings.map((warning) => (
                         <p className="text-destructive" key={warning}>
                           {warning}

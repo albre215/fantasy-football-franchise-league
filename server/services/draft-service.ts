@@ -581,7 +581,7 @@ async function validateDraftInitialization(
     );
   }
 
-  const recommendedOrder = await resultsService.getRecommendedReverseDraftOrder(sourceSeasonId, targetSeasonId);
+  const recommendedOrder = await resultsService.getRecommendedOffseasonDraftOrder(sourceSeasonId, targetSeasonId);
   const recommendedLeagueMemberIds = recommendedOrder.entries
     .map((entry) => entry.targetLeagueMemberId)
     .filter((leagueMemberId): leagueMemberId is string => Boolean(leagueMemberId));

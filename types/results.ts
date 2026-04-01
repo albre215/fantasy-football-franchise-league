@@ -31,6 +31,7 @@ export interface RecommendedDraftOrderEntry extends SeasonResultsMemberOption {
   sourceSeasonRank: number | null;
   ledgerTotal: number;
   draftSlot: number;
+  tieBreakReason: "LEDGER_TOTAL" | "FANTASY_RANK" | "DISPLAY_NAME";
   warnings: string[];
 }
 
@@ -59,10 +60,17 @@ export interface SeasonResultsSummary {
     hasChampionData: boolean;
     isReadyForDraftOrderAutomation: boolean;
     hasFantasyPayoutsPublished: boolean;
+    draftOrderReadiness: {
+      hasAnyLedgerEntries: boolean;
+      ownersWithLedgerEntries: number;
+      zeroLedgerOwnerCount: number;
+      ledgerCoverageStatus: "NONE" | "PARTIAL" | "FULL";
+      hasCompleteFantasyStandings: boolean;
+    };
   };
   eligibleMembers: SeasonResultsMemberOption[];
   seasonStandings: SeasonResultStanding[];
-  recommendedReverseDraftOrder: RecommendedDraftOrderEntry[];
+  recommendedOffseasonDraftOrder: RecommendedDraftOrderEntry[];
   fantasyPayouts: {
     config: FantasyPayoutConfigEntry[];
     configSource: "DEFAULT" | "SEASON";
