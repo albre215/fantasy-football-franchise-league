@@ -28,8 +28,10 @@ export interface SeasonResultsMemberOption {
 }
 
 export interface RecommendedDraftOrderEntry extends SeasonResultsMemberOption {
-  sourceSeasonRank: number;
+  sourceSeasonRank: number | null;
+  ledgerTotal: number;
   draftSlot: number;
+  warnings: string[];
 }
 
 export interface FantasyPayoutConfigEntry {

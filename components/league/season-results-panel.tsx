@@ -155,7 +155,7 @@ export function SeasonResultsPanel({
       <div className="space-y-2">
         <h2 className="text-2xl font-semibold tracking-tight">Final Standings</h2>
         <p className="text-muted-foreground">
-          Manually record the 1st through 10th place finishers for {seasonLabel(activeSeason)}. These standings become the official source of truth for future draft order and long-term analytics.
+          Manually record the 1st through 10th place finishers for {seasonLabel(activeSeason)}. These standings remain the official fantasy-history source of truth and provide tie-break transparency for money-based draft order later.
         </p>
       </div>
 
@@ -251,8 +251,8 @@ export function SeasonResultsPanel({
                 <p>Standings ready to save: {standingsReady ? "Yes" : "No"}</p>
                 <div className="rounded-lg border border-dashed border-border p-4">
                   {results?.availability.isReadyForDraftOrderAutomation
-                    ? "Saved standings are complete and can support reverse-order draft automation later."
-                    : "Save a complete 1st-through-10th order to prepare for Prompt 9 draft-order automation."}
+                    ? "Season ledger entries exist, so the commissioner tools can recommend a ledger-based draft order."
+                    : "Record ledger activity for this season before relying on money-based draft order automation."}
                 </div>
               </CardContent>
             </Card>
@@ -294,18 +294,22 @@ export function SeasonResultsPanel({
 
             <Card>
               <CardHeader>
-                <CardTitle>Prompt 9 Preview</CardTitle>
-                <CardDescription>Reverse of the saved final standings for future offseason draft order automation.</CardDescription>
+                <CardTitle>Draft Order Preview</CardTitle>
+                <CardDescription>Ledger-total recommendation for future offseason draft order automation.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {recommendedReverseDraftOrder.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    Save final standings first to derive the reverse-order draft sequence.
+                    Record season ledger activity first to derive the money-based draft sequence.
                   </p>
                 ) : (
                   recommendedReverseDraftOrder.map((member, index) => (
                     <div className="rounded-lg border border-border p-3 text-sm" key={member.leagueMemberId}>
-                      Pick {index + 1}: {member.displayName}
+                      <p className="font-medium text-foreground">Pick {index + 1}: {member.displayName}</p>
+                      <p className="text-muted-foreground">Ledger total: ${member.ledgerTotal.toFixed(2)}</p>
+                      <p className="text-muted-foreground">
+                        Fantasy rank tie-break: {member.sourceSeasonRank ? `#${member.sourceSeasonRank}` : "Unavailable"}
+                      </p>
                     </div>
                   ))
                 )}

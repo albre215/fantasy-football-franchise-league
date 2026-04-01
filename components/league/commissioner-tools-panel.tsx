@@ -151,7 +151,7 @@ export function CommissionerToolsPanel({
     Boolean(recommendedOrder) &&
     currentDraftOrderDisplay.length === recommendedDraftOrderDisplay.length &&
     currentDraftOrderDisplay.every(
-      (entry, index) => entry.leagueMemberId === recommendedDraftOrderDisplay[index]?.leagueMemberId
+      (entry, index) => entry.leagueMemberId === recommendedDraftOrderDisplay[index]?.targetLeagueMemberId
     );
   const assignedTeamCount = seasonOwnership
     ? seasonOwnership.owners.reduce((total, owner) => total + owner.teamCount, 0)
@@ -222,12 +222,12 @@ export function CommissionerToolsPanel({
         setRecommendedOrder(data.recommendation);
         setDraftOrderLeagueMemberIds(
           draftState?.picks.map((pick) => pick.selectingLeagueMemberId) ??
-            data.recommendation.entries.map((entry) => entry.leagueMemberId)
+            data.recommendation.entries.map((entry) => entry.targetLeagueMemberId ?? "")
         );
       } catch (error) {
         setRecommendedOrder(null);
         setRecommendedOrderError(
-          error instanceof Error ? error.message : "Unable to derive the standings-based draft order."
+          error instanceof Error ? error.message : "Unable to derive the ledger-based draft order."
         );
         setDraftOrderLeagueMemberIds(draftState?.picks.map((pick) => pick.selectingLeagueMemberId) ?? []);
       } finally {
@@ -474,7 +474,7 @@ export function CommissionerToolsPanel({
           <p>Draft status: {draftState?.draft.status ?? "No draft"}</p>
           <p>Target season locked: {activeSeason?.isLocked ? "Yes" : "No"}</p>
           <p>Ownership finalized: {ownershipFinalized ? "Yes" : "No"}</p>
-          <p>Recommended draft order ready: {results?.availability.isReadyForDraftOrderAutomation ? "Yes" : "No"}</p>
+          <p>Ledger-based draft order ready: {results?.availability.isReadyForDraftOrderAutomation ? "Yes" : "No"}</p>
         </CardContent>
       </Card>
       ) : null}
@@ -635,7 +635,7 @@ export function CommissionerToolsPanel({
           <CardHeader>
             <CardTitle>Draft Order Override</CardTitle>
             <CardDescription>
-              Compare the standings-derived order with the currently saved planning draft order and save an explicit override.
+              Compare the ledger-derived order with the currently saved planning draft order and save an explicit override.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -644,7 +644,7 @@ export function CommissionerToolsPanel({
             ) : recommendedOrderError ? (
               <p className="text-sm text-destructive">{recommendedOrderError}</p>
             ) : isLoadingRecommendation ? (
-              <p className="text-sm text-muted-foreground">Loading standings-derived draft order...</p>
+              <p className="text-sm text-muted-foreground">Loading ledger-derived draft order...</p>
             ) : !draftState ? (
               <p className="text-sm text-muted-foreground">Prepare the offseason draft workspace before overriding the order.</p>
             ) : draftState.draft.status !== "PLANNING" ? (
@@ -655,10 +655,17 @@ export function CommissionerToolsPanel({
               <>
                 <div className="grid gap-6 lg:grid-cols-2">
                   <div className="space-y-2">
-                    <p className="text-sm font-medium">Standings-based order</p>
+                    <p className="text-sm font-medium">Ledger-based order</p>
                     {recommendedDraftOrderDisplay.map((entry) => (
-                      <div className="rounded-lg border border-border p-3 text-sm" key={`recommended-${entry.leagueMemberId}`}>
-                        Pick {entry.draftSlot}: {entry.displayName}
+                      <div className="rounded-lg border border-border p-3 text-sm" key={`recommended-${entry.sourceLeagueMemberId}`}>
+                        <p className="font-medium text-foreground">Pick {entry.draftSlot}: {entry.displayName}</p>
+                        <p className="text-muted-foreground">Ledger total: ${entry.ledgerTotal.toFixed(2)}</p>
+                        <p className="text-muted-foreground">
+                          Fantasy rank tie-break: {entry.sourceSeasonRank ? `#${entry.sourceSeasonRank}` : "Unavailable"}
+                        </p>
+                        {entry.warnings.length > 0 ? (
+                          <p className="mt-1 text-destructive">{entry.warnings[0]}</p>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -692,9 +699,17 @@ export function CommissionerToolsPanel({
 
                 <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                   {overrideMatchesRecommended
-                    ? "The saved planning draft order currently matches the standings-derived recommendation."
-                    : "The saved planning draft order has been manually adjusted from the standings-derived recommendation."}
+                    ? "The saved planning draft order currently matches the ledger-derived recommendation."
+                    : "The saved planning draft order has been manually adjusted from the ledger-derived recommendation."}
                 </div>
+
+                {recommendedOrder && recommendedOrder.warnings.length > 0 ? (
+                  <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                    {recommendedOrder.warnings.map((warning) => (
+                      <p key={warning}>{warning}</p>
+                    ))}
+                  </div>
+                ) : null}
 
                 <Button
                   disabled={

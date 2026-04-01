@@ -345,6 +345,26 @@ export const ledgerService = {
     return summary.balances;
   },
 
+  async getSeasonLedgerTotalsForDraftOrder(seasonId: string) {
+    const season = await getSeasonContextOrThrow(prisma, seasonId);
+    const entries = await getSeasonEntries(prisma, season.id);
+    const balances = buildBalances(season.league.members, entries);
+
+    return {
+      season: mapSeason(season),
+      hasAnyEntries: entries.length > 0,
+      totals: balances.map((balance) => ({
+        leagueMemberId: balance.leagueMemberId,
+        userId: balance.userId,
+        displayName: balance.displayName,
+        email: balance.email,
+        role: balance.role,
+        ledgerTotal: balance.totalBalance,
+        entryCount: balance.entryCount
+      }))
+    };
+  },
+
   async getLeagueMemberSeasonLedger(
     seasonId: string,
     leagueMemberId: string,
