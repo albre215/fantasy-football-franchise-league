@@ -15,34 +15,32 @@ function mapNflImportMessage(error: unknown) {
       : "Unable to import NFL results automatically.";
 }
 
+function startSeasonNflImportInBackground(seasonId: string, actingUserId: string) {
+  void nflPerformanceService
+    .importSeasonNflResults({
+      seasonId,
+      actingUserId
+    })
+    .catch((error) => {
+      if (process.env.NODE_ENV !== "production") {
+        console.error("Background NFL import failed:", mapNflImportMessage(error));
+      }
+    });
+}
+
 export const seasonActivationService = {
   async setActiveSeasonAndSyncNflResults(input: SetActiveSeasonInput): Promise<SetActiveSeasonResponse> {
     const season = await seasonService.setActiveSeason(input);
+    startSeasonNflImportInBackground(season.id, input.actingUserId);
 
-    try {
-      await nflPerformanceService.importSeasonNflResults({
-        seasonId: season.id,
-        actingUserId: input.actingUserId
-      });
-
-      return {
-        season,
-        nflImport: {
-          attempted: true,
-          status: "COMPLETED",
-          message: `Imported available NFL results for the ${season.year} season automatically.`
-        }
-      };
-    } catch (error) {
-      return {
-        season,
-        nflImport: {
-          attempted: true,
-          status: "FAILED",
-          message: mapNflImportMessage(error)
-        }
-      };
-    }
+    return {
+      season,
+      nflImport: {
+        attempted: true,
+        status: "PENDING",
+        message: `Automatic NFL import started for the ${season.year} season.`
+      }
+    };
   },
 
   async updateSeasonYearAndSyncNflResults(input: UpdateSeasonYearInput): Promise<UpdateSeasonYearResponse> {
@@ -55,29 +53,15 @@ export const seasonActivationService = {
       };
     }
 
-    try {
-      await nflPerformanceService.importSeasonNflResults({
-        seasonId: season.id,
-        actingUserId: input.actingUserId
-      });
+    startSeasonNflImportInBackground(season.id, input.actingUserId);
 
-      return {
-        season,
-        nflImport: {
-          attempted: true,
-          status: "COMPLETED",
-          message: `Re-imported available NFL results for the ${season.year} season automatically.`
-        }
-      };
-    } catch (error) {
-      return {
-        season,
-        nflImport: {
-          attempted: true,
-          status: "FAILED",
-          message: mapNflImportMessage(error)
-        }
-      };
-    }
+    return {
+      season,
+      nflImport: {
+        attempted: true,
+        status: "PENDING",
+        message: `Automatic NFL re-import started for the ${season.year} season.`
+      }
+    };
   }
 };

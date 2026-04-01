@@ -131,6 +131,85 @@ async function getLeagueAnalyticsContext(leagueId: string) {
   };
 }
 
+async function getLeagueOverviewContext(leagueId: string) {
+  const normalizedLeagueId = leagueId.trim();
+
+  if (!normalizedLeagueId) {
+    throw new AnalyticsServiceError("leagueId is required.", 400);
+  }
+
+  const [league, seasons] = await Promise.all([
+    prisma.league.findUnique({
+      where: { id: normalizedLeagueId },
+      select: {
+        id: true,
+        name: true
+      }
+    }),
+    prisma.season.findMany({
+      where: { leagueId: normalizedLeagueId },
+      select: {
+        id: true,
+        year: true,
+        name: true,
+        teamOwnerships: {
+          select: {
+            nflTeamId: true,
+            nflTeam: {
+              select: {
+                id: true,
+                name: true,
+                abbreviation: true,
+                conference: true,
+                division: true
+              }
+            },
+            leagueMember: {
+              select: {
+                userId: true,
+                user: {
+                  select: {
+                    displayName: true,
+                    email: true
+                  }
+                }
+              }
+            }
+          }
+        },
+        seasonStandings: {
+          select: {
+            rank: true,
+            isChampion: true,
+            leagueMember: {
+              select: {
+                userId: true,
+                user: {
+                  select: {
+                    displayName: true,
+                    email: true
+                  }
+                }
+              }
+            }
+          },
+          orderBy: [{ rank: "asc" }, { updatedAt: "asc" }]
+        }
+      },
+      orderBy: { year: "desc" }
+    })
+  ]);
+
+  if (!league) {
+    throw new AnalyticsServiceError("League not found.", 404);
+  }
+
+  return {
+    league,
+    seasons
+  };
+}
+
 function buildDraftLookupByTargetSeasonId(
   drafts: Awaited<ReturnType<typeof getLeagueAnalyticsContext>>["drafts"]
 ) {
@@ -253,8 +332,12 @@ function toChartData<T extends { key?: string; label: string; value: number }>(r
 
 export const analyticsService = {
   async getLeagueOverview(leagueId: string): Promise<LeagueOverviewAnalytics> {
-    const { league, seasons, teams } = await getLeagueAnalyticsContext(leagueId);
-    const teamById = new Map(teams.map((team) => [team.id, team] as const));
+    const { league, seasons } = await getLeagueOverviewContext(leagueId);
+    const teamById = new Map(
+      seasons.flatMap((season) =>
+        season.teamOwnerships.map((ownership) => [ownership.nflTeamId, ownership.nflTeam] as const)
+      )
+    );
 
     const ownershipCountByTeam = new Map<string, number>();
     for (const season of seasons) {

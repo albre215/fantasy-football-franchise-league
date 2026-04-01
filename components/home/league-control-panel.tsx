@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Crown, Info } from "lucide-react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,6 +48,7 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
   const [loginPassword, setLoginPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [openingLeagueId, setOpeningLeagueId] = useState<string | null>(null);
 
   const sortedLeagues = useMemo(
     () => [...leagues].sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
@@ -79,6 +80,23 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
     setLeagues(initialLeagues);
     setIsLoading(false);
   }, [initialLeagues]);
+
+  useEffect(() => {
+    if (!isAuthenticated || initialLeagues.length === 0) {
+      return;
+    }
+
+    for (const league of initialLeagues) {
+      router.prefetch(`/league?leagueId=${league.id}`);
+    }
+  }, [initialLeagues, isAuthenticated, router]);
+
+  function handleOpenLeague(leagueId: string) {
+    setOpeningLeagueId(leagueId);
+    startTransition(() => {
+      router.push(`/league?leagueId=${leagueId}`);
+    });
+  }
 
   async function handleCreateLeague(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -536,9 +554,13 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center self-stretch sm:self-auto">
-                          <Link className={buttonVariants()} href={`/league?leagueId=${league.id}`}>
-                            Open League
-                          </Link>
+                          <Button
+                            disabled={openingLeagueId !== null}
+                            onClick={() => handleOpenLeague(league.id)}
+                            type="button"
+                          >
+                            {openingLeagueId === league.id ? "Opening League..." : "Open League"}
+                          </Button>
                         </div>
                       </CardContent>
                     </Card>

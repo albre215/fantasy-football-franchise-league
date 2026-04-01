@@ -12,7 +12,7 @@ export interface SeasonSummary {
 
 export interface SeasonNflSyncStatus {
   attempted: boolean;
-  status: "COMPLETED" | "FAILED";
+  status: "PENDING" | "COMPLETED" | "FAILED";
   message: string | null;
 }
 

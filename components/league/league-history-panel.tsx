@@ -74,10 +74,12 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
 export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
   const [activeSection, setActiveSection] = useState<AnalyticsSection>("league-overview");
   const [sectionStates, setSectionStates] = useState<SectionStateMap>(INITIAL_SECTION_STATES);
+  const [reloadToken, setReloadToken] = useState(0);
   const activeState = sectionStates[activeSection];
 
   useEffect(() => {
     setSectionStates(INITIAL_SECTION_STATES);
+    setReloadToken(0);
   }, [leagueId]);
 
   useEffect(() => {
@@ -207,7 +209,7 @@ export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
     return () => {
       controller.abort();
     };
-  }, [activeSection, activeState.status, leagueId]);
+  }, [activeSection, leagueId, reloadToken]);
 
   const activeCopy = SECTION_COPY[activeSection];
   const overviewState = sectionStates["league-overview"];
@@ -224,6 +226,7 @@ export function LeagueHistoryPanel({ leagueId }: LeagueHistoryPanelProps) {
         error: null
       }
     }));
+    setReloadToken((current) => current + 1);
   }
 
   return (

@@ -467,6 +467,8 @@ export function LeagueDashboard({
         setErrorMessage(
           `Active season updated, but automatic NFL import failed. ${data.nflImport.message ?? ""}`.trim()
         );
+      } else if (data.nflImport?.status === "PENDING") {
+        setSuccessMessage(`Active season updated. ${data.nflImport.message ?? ""}`.trim());
       } else if (data.nflImport?.status === "COMPLETED") {
         setSuccessMessage(`Active season updated. ${data.nflImport.message ?? ""}`.trim());
       } else {
@@ -532,6 +534,8 @@ export function LeagueDashboard({
         setErrorMessage(
           `Season year updated, but automatic NFL re-import failed. ${data.nflImport.message ?? ""}`.trim()
         );
+      } else if (data.nflImport?.status === "PENDING") {
+        setSuccessMessage(`Updated season year to ${data.season.year}. ${data.nflImport.message ?? ""}`.trim());
       } else if (data.nflImport?.status === "COMPLETED") {
         setSuccessMessage(`Updated season year to ${data.season.year}. ${data.nflImport.message ?? ""}`.trim());
       } else {
