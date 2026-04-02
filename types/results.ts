@@ -28,8 +28,23 @@ export interface SeasonResultsMemberOption {
 }
 
 export interface RecommendedDraftOrderEntry extends SeasonResultsMemberOption {
-  sourceSeasonRank: number;
+  sourceSeasonRank: number | null;
+  ledgerTotal: number;
   draftSlot: number;
+  tieBreakReason: "LEDGER_TOTAL" | "FANTASY_RANK" | "DISPLAY_NAME";
+  warnings: string[];
+}
+
+export interface FantasyPayoutConfigEntry {
+  rank: number;
+  amount: number;
+}
+
+export interface FantasyPayoutPublishedEntry extends SeasonResultsMemberOption {
+  amount: number;
+  rank: number;
+  description: string;
+  createdAt: string;
 }
 
 export interface SeasonResultsSummary {
@@ -44,16 +59,32 @@ export interface SeasonResultsSummary {
     hasFinalStandings: boolean;
     hasChampionData: boolean;
     isReadyForDraftOrderAutomation: boolean;
+    hasFantasyPayoutsPublished: boolean;
+    draftOrderReadiness: {
+      hasAnyLedgerEntries: boolean;
+      ownersWithLedgerEntries: number;
+      zeroLedgerOwnerCount: number;
+      ledgerCoverageStatus: "NONE" | "PARTIAL" | "FULL";
+      hasCompleteFantasyStandings: boolean;
+    };
   };
   eligibleMembers: SeasonResultsMemberOption[];
   seasonStandings: SeasonResultStanding[];
-  recommendedReverseDraftOrder: RecommendedDraftOrderEntry[];
+  recommendedOffseasonDraftOrder: RecommendedDraftOrderEntry[];
+  fantasyPayouts: {
+    config: FantasyPayoutConfigEntry[];
+    configSource: "DEFAULT" | "SEASON";
+    publishedEntries: FantasyPayoutPublishedEntry[];
+    publishedAt: string | null;
+    totalPublishedAmount: number;
+  };
 }
 
 export interface SaveManualSeasonStandingsInput {
   seasonId: string;
   actingUserId: string;
   orderedLeagueMemberIds: string[];
+  payoutConfig?: FantasyPayoutConfigEntry[];
 }
 
 export interface OverwriteManualSeasonStandingsInput extends SaveManualSeasonStandingsInput {

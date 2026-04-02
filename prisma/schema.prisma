@@ -57,10 +57,49 @@ enum IngestionRunStatus {
   FAILED
 }
 
+enum LedgerEntryCategory {
+  MANUAL_ADJUSTMENT
+  FANTASY_PAYOUT
+  NFL_REGULAR_SEASON
+  NFL_PLAYOFF
+  UNUSED_TEAM_ALLOCATION
+}
+
+enum NflResultProvider {
+  MANUAL
+  NFLVERSE
+}
+
+enum NflImportStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum NflImportMode {
+  FULL_SEASON
+  SINGLE_WEEK
+}
+
+enum SeasonNflResultPhase {
+  REGULAR_SEASON
+  WILD_CARD
+  DIVISIONAL
+  CONFERENCE
+  SUPER_BOWL
+}
+
+enum SeasonNflGameResult {
+  WIN
+  LOSS
+  TIE
+}
+
 model User {
   id            String         @id @default(cuid())
   email         String         @unique
   displayName   String
+  phoneNumber   String?
   passwordHash  String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -68,60 +107,67 @@ model User {
 }
 
 model League {
-  id          String         @id @default(cuid())
-  leagueCode  String?        @unique
-  name        String
-  slug        String         @unique
-  description String?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  members     LeagueMember[]
-  seasons     Season[]
-  drafts      Draft[]
+  id            String              @id @default(cuid())
+  leagueCode    String?             @unique
+  name          String
+  slug          String              @unique
+  description   String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  members       LeagueMember[]
+  seasons       Season[]
+  drafts        Draft[]
+  ledgerEntries LedgerEntry[]
 }
 
 model LeagueMember {
-  id             String          @id @default(cuid())
-  leagueId       String
-  userId         String
-  role           LeagueRole      @default(OWNER)
-  joinedAt       DateTime        @default(now())
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  league         League          @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  teamOwnerships TeamOwnership[]
-  draftPicks     DraftPick[]
+  id                String               @id @default(cuid())
+  leagueId          String
+  userId            String
+  role              LeagueRole           @default(OWNER)
+  joinedAt          DateTime             @default(now())
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  league            League               @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamOwnerships    TeamOwnership[]
+  draftPicks        DraftPick[]
   keeperSelections KeeperSelection[]
-  seasonStandings SeasonStanding[]
-  weeklyStandings WeeklyStanding[]
-  sourceMappings SeasonMemberSourceMapping[]
+  seasonStandings  SeasonStanding[]
+  weeklyStandings  WeeklyStanding[]
+  sourceMappings   SeasonMemberSourceMapping[]
+  ledgerEntries    LedgerEntry[]
+  nflTeamResults   SeasonNflTeamResult[]
 
   @@unique([leagueId, userId])
   @@index([userId])
 }
 
 model Season {
-  id             String          @id @default(cuid())
-  leagueId       String
-  year           Int
-  name           String?
-  status         SeasonStatus    @default(PLANNING)
-  leaguePhase    LeaguePhase     @default(IN_SEASON)
-  isLocked       Boolean         @default(false)
-  startsAt       DateTime?
-  endsAt         DateTime?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  league         League          @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  teamOwnerships TeamOwnership[]
-  targetDraft    Draft?          @relation("TargetSeasonDraft")
-  sourceDrafts   Draft[]         @relation("SourceSeasonDraft")
+  id                String               @id @default(cuid())
+  leagueId          String
+  year              Int
+  name              String?
+  fantasyPayoutConfig Json?
+  status            SeasonStatus         @default(PLANNING)
+  leaguePhase       LeaguePhase          @default(IN_SEASON)
+  isLocked          Boolean              @default(false)
+  startsAt          DateTime?
+  endsAt            DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  league            League               @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  teamOwnerships    TeamOwnership[]
+  targetDraft       Draft?               @relation("TargetSeasonDraft")
+  sourceDrafts      Draft[]              @relation("SourceSeasonDraft")
   keeperSelections KeeperSelection[] @relation("KeeperSourceSeason")
-  sourceConfigs  SeasonSourceConfig[]
-  ingestionRuns  IngestionRun[]
+  sourceConfigs     SeasonSourceConfig[]
+  ingestionRuns     IngestionRun[]
   seasonStandings SeasonStanding[]
   weeklyStandings WeeklyStanding[]
+  ledgerEntries    LedgerEntry[]
+  nflImportRuns    SeasonNflImportRun[]
+  nflTeamResults   SeasonNflTeamResult[]
 
   @@unique([leagueId, year])
   @@index([leagueId, status])
@@ -146,17 +192,19 @@ model TeamOwnership {
 }
 
 model NFLTeam {
-  id             String          @id @default(cuid())
-  name           String
-  abbreviation   String          @unique
-  conference     NFLConference
-  division       String
-  isActive       Boolean         @default(true)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  teamOwnerships TeamOwnership[]
-  draftPicks     DraftPick[]
+  id               String                @id @default(cuid())
+  name             String
+  abbreviation     String                @unique
+  conference       NFLConference
+  division         String
+  isActive         Boolean               @default(true)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  teamOwnerships   TeamOwnership[]
+  draftPicks       DraftPick[]
   keeperSelections KeeperSelection[]
+  seasonResults    SeasonNflTeamResult[] @relation("SeasonNflTeam")
+  opponentResults  SeasonNflTeamResult[] @relation("SeasonNflOpponentTeam")
 }
 
 model Draft {
@@ -333,4 +381,81 @@ model WeeklyStanding {
 
   @@unique([seasonId, weekNumber, leagueMemberId])
   @@index([seasonId, weekNumber, rank])
+}
+
+model LedgerEntry {
+  id             String              @id @default(cuid())
+  leagueId       String
+  seasonId       String
+  leagueMemberId String
+  category       LedgerEntryCategory
+  amount         Decimal             @db.Decimal(12, 2)
+  description    String
+  metadata       Json?
+  actingUserId   String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  league         League              @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  season         Season              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  leagueMember   LeagueMember        @relation(fields: [leagueMemberId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, createdAt])
+  @@index([seasonId, createdAt])
+  @@index([seasonId, leagueMemberId, createdAt])
+  @@index([seasonId, category])
+}
+
+model SeasonNflImportRun {
+  id                String            @id @default(cuid())
+  seasonId          String
+  seasonYear        Int
+  concurrencyKey    String?           @unique
+  provider          NflResultProvider
+  mode              NflImportMode
+  weekNumber        Int?
+  status            NflImportStatus   @default(RUNNING)
+  actingUserId      String?
+  importedResultCount Int             @default(0)
+  warnings          Json?
+  errorMessage      String?
+  startedAt         DateTime          @default(now())
+  completedAt       DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  season            Season            @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  results           SeasonNflTeamResult[]
+
+  @@index([seasonId, startedAt])
+  @@index([seasonId, provider, mode, weekNumber])
+}
+
+model SeasonNflTeamResult {
+  id                String               @id @default(cuid())
+  seasonId          String
+  seasonYear        Int
+  weekNumber        Int
+  phase             SeasonNflResultPhase
+  nflTeamId         String
+  opponentNflTeamId String?
+  leagueMemberId    String?
+  result            SeasonNflGameResult
+  pointsFor         Int?
+  pointsAgainst     Int?
+  sourceProvider    NflResultProvider
+  importRunId       String?
+  actingUserId      String?
+  metadata          Json?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  season            Season               @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  nflTeam           NFLTeam              @relation("SeasonNflTeam", fields: [nflTeamId], references: [id], onDelete: Restrict)
+  opponentNflTeam   NFLTeam?             @relation("SeasonNflOpponentTeam", fields: [opponentNflTeamId], references: [id], onDelete: SetNull)
+  leagueMember      LeagueMember?        @relation(fields: [leagueMemberId], references: [id], onDelete: SetNull)
+  importRun         SeasonNflImportRun?  @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
+  @@unique([seasonId, weekNumber, phase, nflTeamId])
+  @@index([seasonId, weekNumber])
+  @@index([seasonId, leagueMemberId])
+  @@index([seasonId, phase])
+  @@index([seasonId, nflTeamId])
 }

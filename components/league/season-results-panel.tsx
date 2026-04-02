@@ -109,7 +109,7 @@ export function SeasonResultsPanel({
     eligibleMembers.length === 10 &&
     eligibleMembers.every((member) => orderedLeagueMemberIds.includes(member.leagueMemberId));
   const standingsReady = hasAllPlacements && allOwnersUnique && includesEveryOwner;
-  const recommendedReverseDraftOrder = results?.recommendedReverseDraftOrder ?? [];
+  const recommendedOffseasonDraftOrder = results?.recommendedOffseasonDraftOrder ?? [];
 
   function updatePlacement(index: number, leagueMemberId: string) {
     setOrderedLeagueMemberIds((current) => {
@@ -155,7 +155,7 @@ export function SeasonResultsPanel({
       <div className="space-y-2">
         <h2 className="text-2xl font-semibold tracking-tight">Final Standings</h2>
         <p className="text-muted-foreground">
-          Manually record the 1st through 10th place finishers for {seasonLabel(activeSeason)}. These standings remain the official fantasy-placement record for long-term season history.
+          Manually record the 1st through 10th place finishers for {seasonLabel(activeSeason)}. These standings remain the official fantasy-history source of truth and provide tie-break transparency for money-based draft order later.
         </p>
       </div>
 
@@ -249,10 +249,18 @@ export function SeasonResultsPanel({
                 <p>All owners unique: {allOwnersUnique ? `Pass (${uniquePlacementCount}/10)` : "Fail"}</p>
                 <p>All eligible owners included: {includesEveryOwner ? "Pass" : "Fail"}</p>
                 <p>Standings ready to save: {standingsReady ? "Yes" : "No"}</p>
+                <p>Ledger coverage: {results?.availability.draftOrderReadiness.ledgerCoverageStatus ?? "NONE"}</p>
+                <p>
+                  Owners with ledger entries: {results?.availability.draftOrderReadiness.ownersWithLedgerEntries ?? 0} /{" "}
+                  {eligibleMembers.length}
+                </p>
+                <p>
+                  Zero-ledger owners: {results?.availability.draftOrderReadiness.zeroLedgerOwnerCount ?? eligibleMembers.length}
+                </p>
                 <div className="rounded-lg border border-dashed border-border p-4">
                   {results?.availability.isReadyForDraftOrderAutomation
-                    ? "Saved standings are complete and available for downstream review workflows."
-                    : "Save a complete 1st-through-10th order to finish the season record cleanly."}
+                    ? "Season ledger entries exist, so the commissioner tools can recommend a ledger-based draft order."
+                    : "Record ledger activity for this season before relying on money-based draft order automation."}
                 </div>
               </CardContent>
             </Card>
@@ -294,18 +302,23 @@ export function SeasonResultsPanel({
 
             <Card>
               <CardHeader>
-                <CardTitle>Offseason Recommendation Preview</CardTitle>
-                <CardDescription>Preview the current offseason recommendation output for this season context.</CardDescription>
+                <CardTitle>Draft Order Preview</CardTitle>
+                <CardDescription>Ledger-total recommendation for future offseason draft order automation.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {recommendedReverseDraftOrder.length === 0 ? (
+                {recommendedOffseasonDraftOrder.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    Save final standings first to generate the current preview.
+                    Record season ledger activity first to derive the money-based draft sequence.
                   </p>
                 ) : (
-                  recommendedReverseDraftOrder.map((member, index) => (
+                  recommendedOffseasonDraftOrder.map((member, index) => (
                     <div className="rounded-lg border border-border p-3 text-sm" key={member.leagueMemberId}>
-                      Pick {index + 1}: {member.displayName}
+                      <p className="font-medium text-foreground">Pick {index + 1}: {member.displayName}</p>
+                      <p className="text-muted-foreground">Ledger total: ${member.ledgerTotal.toFixed(2)}</p>
+                      <p className="text-muted-foreground">
+                        Fantasy rank tie-break: {member.sourceSeasonRank ? `#${member.sourceSeasonRank}` : "Unavailable"}
+                      </p>
+                      <p className="text-muted-foreground">Ordering reason: {member.tieBreakReason.replaceAll("_", " ")}</p>
                     </div>
                   ))
                 )}

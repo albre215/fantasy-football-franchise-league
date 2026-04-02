@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type {
@@ -12,6 +13,7 @@ import type {
 } from "@/types/draft";
 import type { LeagueBootstrapMember } from "@/types/league";
 import type {
+  FantasyPayoutConfigEntry,
   OverwriteManualSeasonStandingsResponse,
   SeasonResultsResponse
 } from "@/types/results";
@@ -81,6 +83,16 @@ function formatPlacement(rank: number) {
   return `${rank}th Place`;
 }
 
+function normalizePayoutInput(value: string) {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return 0;
+  }
+
+  return Number(numericValue.toFixed(2));
+}
+
 export function CommissionerToolsPanel({
   activeSeason,
   seasons,
@@ -110,6 +122,7 @@ export function CommissionerToolsPanel({
   const [selectedAssignUserId, setSelectedAssignUserId] = useState("");
   const [selectedAssignTeamId, setSelectedAssignTeamId] = useState("");
   const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null);
+  const [payoutConfig, setPayoutConfig] = useState<FantasyPayoutConfigEntry[]>([]);
 
   const previousSeason = useMemo(() => {
     if (!activeSeason) {
@@ -141,7 +154,7 @@ export function CommissionerToolsPanel({
     Boolean(recommendedOrder) &&
     currentDraftOrderDisplay.length === recommendedDraftOrderDisplay.length &&
     currentDraftOrderDisplay.every(
-      (entry, index) => entry.leagueMemberId === recommendedDraftOrderDisplay[index]?.leagueMemberId
+      (entry, index) => entry.leagueMemberId === recommendedDraftOrderDisplay[index]?.targetLeagueMemberId
     );
   const assignedTeamCount = seasonOwnership
     ? seasonOwnership.owners.reduce((total, owner) => total + owner.teamCount, 0)
@@ -159,6 +172,7 @@ export function CommissionerToolsPanel({
   useEffect(() => {
     if (!activeSeason) {
       setResults(null);
+      setPayoutConfig([]);
       setOrderedLeagueMemberIds([]);
       setResultsError(null);
       return;
@@ -172,6 +186,7 @@ export function CommissionerToolsPanel({
         const response = await fetch(`/api/season/${activeSeason.id}/results`, { cache: "no-store" });
         const data = await parseJsonResponse<SeasonResultsResponse>(response);
         setResults(data.results);
+        setPayoutConfig(data.results.fantasyPayouts.config);
         setOrderedLeagueMemberIds(
           data.results.seasonStandings.length > 0
             ? data.results.seasonStandings
@@ -181,6 +196,7 @@ export function CommissionerToolsPanel({
         );
       } catch (error) {
         setResults(null);
+        setPayoutConfig([]);
         setOrderedLeagueMemberIds([]);
         setResultsError(error instanceof Error ? error.message : "Unable to load season standings.");
       } finally {
@@ -209,12 +225,12 @@ export function CommissionerToolsPanel({
         setRecommendedOrder(data.recommendation);
         setDraftOrderLeagueMemberIds(
           draftState?.picks.map((pick) => pick.selectingLeagueMemberId) ??
-            data.recommendation.entries.map((entry) => entry.leagueMemberId)
+            data.recommendation.entries.map((entry) => entry.targetLeagueMemberId ?? "")
         );
       } catch (error) {
         setRecommendedOrder(null);
         setRecommendedOrderError(
-          error instanceof Error ? error.message : "Unable to derive the standings-based draft order."
+          error instanceof Error ? error.message : "Unable to derive the ledger-based draft order."
         );
         setDraftOrderLeagueMemberIds(draftState?.picks.map((pick) => pick.selectingLeagueMemberId) ?? []);
       } finally {
@@ -240,6 +256,12 @@ export function CommissionerToolsPanel({
       next[index] = leagueMemberId;
       return next;
     });
+  }
+
+  function updatePayout(rank: number, value: string) {
+    setPayoutConfig((current) =>
+      current.map((entry) => (entry.rank === rank ? { ...entry, amount: normalizePayoutInput(value) } : entry))
+    );
   }
 
   function updateDraftOrder(index: number, leagueMemberId: string) {
@@ -277,9 +299,10 @@ export function CommissionerToolsPanel({
     }
 
     openConfirmation({
-      title: "Overwrite final standings?",
-      message: "This will overwrite the recorded final standings for this season and update future draft-order logic.",
-      confirmLabel: "Overwrite Standings",
+      title: results?.availability.hasFinalStandings ? "Overwrite final standings?" : "Save final standings?",
+      message:
+        "This will overwrite the recorded final standings for this season, regenerate fantasy payout ledger entries, and update future draft-order logic.",
+      confirmLabel: results?.availability.hasFinalStandings ? "Overwrite Standings" : "Save Standings",
       onConfirm: async () =>
         runMutation(async () => {
           const response = await fetch(`/api/season/${activeSeason.id}/results/overwrite`, {
@@ -289,14 +312,16 @@ export function CommissionerToolsPanel({
             },
             body: JSON.stringify({
               orderedLeagueMemberIds,
-              confirmOverwrite: true
+              confirmOverwrite: true,
+              payoutConfig
             })
           });
 
           const data = await parseJsonResponse<OverwriteManualSeasonStandingsResponse>(response);
           setResults(data.results);
+          setPayoutConfig(data.results.fantasyPayouts.config);
           setOrderedLeagueMemberIds(data.results.seasonStandings.map((standing) => standing.leagueMemberId));
-        }, "Final standings overwritten.")
+        }, results?.availability.hasFinalStandings ? "Final standings overwritten and fantasy payouts regenerated." : "Final standings saved and fantasy payouts published.")
     });
   }
 
@@ -448,11 +473,17 @@ export function CommissionerToolsPanel({
           <p>League phase: {phaseContext?.season.leaguePhase ?? "Unknown"}</p>
           <p>Assigned teams: {assignedTeamCount} / 30</p>
           <p>Final standings saved: {results?.availability.hasFinalStandings ? "Yes" : "No"}</p>
+          <p>Fantasy payouts published: {results?.availability.hasFantasyPayoutsPublished ? "Yes" : "No"}</p>
           <p>Draft exists: {draftState ? "Yes" : "No"}</p>
           <p>Draft status: {draftState?.draft.status ?? "No draft"}</p>
           <p>Target season locked: {activeSeason?.isLocked ? "Yes" : "No"}</p>
           <p>Ownership finalized: {ownershipFinalized ? "Yes" : "No"}</p>
-          <p>Recommended draft order ready: {results?.availability.isReadyForDraftOrderAutomation ? "Yes" : "No"}</p>
+          <p>Ledger-based draft order ready: {results?.availability.isReadyForDraftOrderAutomation ? "Yes" : "No"}</p>
+          <p>Ledger coverage: {results?.availability.draftOrderReadiness.ledgerCoverageStatus ?? "NONE"}</p>
+          <p>
+            Owners with ledger entries: {results?.availability.draftOrderReadiness.ownersWithLedgerEntries ?? 0} /{" "}
+            {results?.eligibleMembers.length ?? 0}
+          </p>
           {phaseContext?.warnings.length ? (
             <div className="md:col-span-2 rounded-lg border border-dashed border-border p-3">
               {phaseContext.warnings.join(" ")}
@@ -467,9 +498,9 @@ export function CommissionerToolsPanel({
         {showStandingsSection ? (
         <Card>
           <CardHeader>
-            <CardTitle>Final Standings Correction</CardTitle>
+            <CardTitle>Final Standings & Fantasy Payouts</CardTitle>
             <CardDescription>
-              Edit and overwrite the recorded final standings for the active season with explicit confirmation.
+              Save or correct the recorded final standings for the active season and keep fantasy payout ledger entries in sync.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -483,6 +514,34 @@ export function CommissionerToolsPanel({
               <p className="text-sm text-muted-foreground">No standings data is available yet.</p>
             ) : (
               <>
+                <div className="space-y-3 rounded-lg border border-dashed border-border p-4">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Fantasy payout mapping</p>
+                    <p className="text-sm text-muted-foreground">
+                      These season-scoped amounts will be posted to the ledger whenever final standings are saved or corrected.
+                    </p>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {payoutConfig.map((entry) => (
+                      <label className="space-y-1 text-sm" key={`commissioner-payout-${entry.rank}`}>
+                        <span>{formatPlacement(entry.rank)}</span>
+                        <input
+                          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          min="0"
+                          onChange={(event) => updatePayout(entry.rank, event.target.value)}
+                          step="0.01"
+                          type="number"
+                          value={entry.amount}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Config source:{" "}
+                    {results.fantasyPayouts.configSource === "SEASON" ? "Season override" : "Default starting config"}
+                  </p>
+                </div>
+
                 <div className="grid gap-3 md:grid-cols-2">
                   {Array.from({ length: totalPlacements }).map((_, index) => (
                     <label className="space-y-1 text-sm" key={`commissioner-placement-${index + 1}`}>
@@ -510,7 +569,7 @@ export function CommissionerToolsPanel({
                 </div>
 
                 <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                  This will overwrite the recorded final standings for {seasonLabel(activeSeason)}.
+                  This will overwrite the recorded final standings for {seasonLabel(activeSeason)} and replace the season's fantasy payout ledger entries so balances reflect the latest standings.
                 </div>
 
                 <Button
@@ -518,8 +577,19 @@ export function CommissionerToolsPanel({
                   onClick={() => void handleOverwriteStandings()}
                   type="button"
                 >
-                  Overwrite Final Standings
+                  {results.availability.hasFinalStandings ? "Overwrite Final Standings" : "Save Final Standings"}
                 </Button>
+
+                <div className="rounded-lg border border-border bg-background/70 p-4 text-sm text-muted-foreground">
+                  <p>Published fantasy payouts: {results.fantasyPayouts.publishedEntries.length > 0 ? "Yes" : "No"}</p>
+                  <p>Total fantasy payouts: ${results.fantasyPayouts.totalPublishedAmount.toFixed(2)}</p>
+                  <p>
+                    Last published:{" "}
+                    {results.fantasyPayouts.publishedAt
+                      ? new Date(results.fantasyPayouts.publishedAt).toLocaleString()
+                      : "Not published yet"}
+                  </p>
+                </div>
               </>
                 )}
               </CardContent>
@@ -577,10 +647,10 @@ export function CommissionerToolsPanel({
         {showDraftOrderSection ? (
         <Card>
           <CardHeader>
-              <CardTitle>Draft Order Override</CardTitle>
-              <CardDescription>
-              Compare the current offseason recommendation with the saved planning draft order and save an explicit override.
-              </CardDescription>
+            <CardTitle>Draft Order Override</CardTitle>
+            <CardDescription>
+              Compare the ledger-derived order with the currently saved planning draft order and save an explicit override.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {!activeSeason ? (
@@ -588,7 +658,7 @@ export function CommissionerToolsPanel({
             ) : recommendedOrderError ? (
               <p className="text-sm text-destructive">{recommendedOrderError}</p>
             ) : isLoadingRecommendation ? (
-              <p className="text-sm text-muted-foreground">Loading offseason recommendation...</p>
+              <p className="text-sm text-muted-foreground">Loading ledger-derived draft order...</p>
             ) : phaseContext && !phaseContext.allowedActions.canEditDraft ? (
               <p className="text-sm text-muted-foreground">
                 Draft order overrides are only available during DRAFT_PHASE. Current phase: {phaseContext.season.leaguePhase}.
@@ -603,10 +673,19 @@ export function CommissionerToolsPanel({
               <>
                 <div className="grid gap-6 lg:grid-cols-2">
                   <div className="space-y-2">
-                    <p className="text-sm font-medium">Recommended order</p>
+                    <p className="text-sm font-medium">Ledger-based order</p>
                     {recommendedDraftOrderDisplay.map((entry) => (
-                      <div className="rounded-lg border border-border p-3 text-sm" key={`recommended-${entry.leagueMemberId}`}>
-                        Pick {entry.draftSlot}: {entry.displayName}
+                      <div className="rounded-lg border border-border p-3 text-sm" key={`recommended-${entry.sourceLeagueMemberId}`}>
+                        <p className="font-medium text-foreground">Pick {entry.draftSlot}: {entry.displayName}</p>
+                        <p className="text-muted-foreground">Ledger total: ${entry.ledgerTotal.toFixed(2)}</p>
+                        <p className="text-muted-foreground">
+                          Fantasy rank tie-break: {entry.sourceSeasonRank ? `#${entry.sourceSeasonRank}` : "Unavailable"}
+                        </p>
+                        <p className="text-muted-foreground">Ordering reason: {entry.tieBreakReason.replaceAll("_", " ")}</p>
+                        <p className="text-muted-foreground">Mapping: {entry.mappingStatus.replaceAll("_", " ")}</p>
+                        {entry.warnings.length > 0 ? (
+                          <p className="mt-1 text-destructive">{entry.warnings[0]}</p>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -640,9 +719,17 @@ export function CommissionerToolsPanel({
 
                 <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                   {overrideMatchesRecommended
-                    ? "The saved planning draft order currently matches the current recommendation."
-                    : "The saved planning draft order has been manually adjusted from the current recommendation."}
+                    ? "The saved planning draft order currently matches the ledger-derived recommendation."
+                    : "The saved planning draft order has been manually adjusted from the ledger-derived recommendation."}
                 </div>
+
+                {recommendedOrder && recommendedOrder.warnings.length > 0 ? (
+                  <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                    {recommendedOrder.warnings.map((warning) => (
+                      <p key={warning}>{warning}</p>
+                    ))}
+                  </div>
+                ) : null}
 
                 <Button
                   disabled={
@@ -713,6 +800,15 @@ export function CommissionerToolsPanel({
                   </Button>
                 </div>
 
+                {selectedAssignTeamId ? (
+                  <div className="rounded-lg border border-border bg-background px-3 py-2 text-foreground">
+                    <NFLTeamLabel
+                      size="default"
+                      team={availableTeams.find((team) => team.id === selectedAssignTeamId)!}
+                    />
+                  </div>
+                ) : null}
+
                 <div className="space-y-3">
                   {ownershipOwners.map((owner) => (
                     <div className="rounded-lg border border-border p-4" key={owner.leagueMemberId}>
@@ -731,9 +827,7 @@ export function CommissionerToolsPanel({
                               className="flex items-center gap-2 rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground"
                               key={entry.ownershipId}
                             >
-                              <span>
-                                {entry.team.abbreviation} - {entry.team.name}
-                              </span>
+                              <NFLTeamLabel size="compact" team={entry.team} />
                               <Button
                                 className="h-7 px-2"
                                 disabled={isMutating || !canManageLeague}

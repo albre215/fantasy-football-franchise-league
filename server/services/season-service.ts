@@ -20,6 +20,13 @@ class SeasonServiceError extends Error {
   }
 }
 
+const MIN_SUPPORTED_SEASON_YEAR = 1966;
+const MAX_SUPPORTED_SEASON_YEAR = 3000;
+
+function isValidSeasonYear(year: number) {
+  return Number.isInteger(year) && year >= MIN_SUPPORTED_SEASON_YEAR && year <= MAX_SUPPORTED_SEASON_YEAR;
+}
+
 function mapSeason(season: {
   id: string;
   leagueId: string;
@@ -95,6 +102,17 @@ async function getSeasonOrThrow(tx: Prisma.TransactionClient | typeof prisma, se
   const season = await tx.season.findUnique({
     where: {
       id: seasonId
+    },
+    select: {
+      id: true,
+      leagueId: true,
+      year: true,
+      name: true,
+      status: true,
+      isLocked: true,
+      startsAt: true,
+      endsAt: true,
+      createdAt: true
     }
   });
 
@@ -163,26 +181,39 @@ async function getSeasonSetupStatusInternal(
     where: {
       id: seasonId
     },
-    include: {
+    select: {
+      id: true,
+      leagueId: true,
       league: {
-        include: {
+        select: {
           members: {
-            include: {
-              user: true,
+            select: {
+              id: true,
+              userId: true,
+              role: true,
+              user: {
+                select: {
+                  displayName: true
+                }
+              },
               teamOwnerships: {
                 where: {
                   seasonId
+                },
+                select: {
+                  id: true
                 }
               }
             },
-            orderBy: [
-              { role: "asc" },
-              { joinedAt: "asc" }
-            ]
+            orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
           }
         }
       },
-      teamOwnerships: true
+      teamOwnerships: {
+        select: {
+          id: true
+        }
+      }
     }
   });
 
@@ -235,7 +266,7 @@ export const seasonService = {
       throw new SeasonServiceError("leagueId is required.", 400);
     }
 
-    if (!Number.isInteger(input.year) || input.year < 2000 || input.year > 3000) {
+    if (!isValidSeasonYear(input.year)) {
       throw new SeasonServiceError("A valid season year is required.", 400);
     }
 
@@ -278,6 +309,18 @@ export const seasonService = {
       where: {
         leagueId: normalizedLeagueId
       },
+      select: {
+        id: true,
+        leagueId: true,
+        year: true,
+        name: true,
+        status: true,
+        leaguePhase: true,
+        isLocked: true,
+        startsAt: true,
+        endsAt: true,
+        createdAt: true
+      },
       orderBy: [{ year: "desc" }, { createdAt: "desc" }]
     });
 
@@ -297,6 +340,18 @@ export const seasonService = {
       where: {
         leagueId: normalizedLeagueId,
         status: "ACTIVE"
+      },
+      select: {
+        id: true,
+        leagueId: true,
+        year: true,
+        name: true,
+        status: true,
+        leaguePhase: true,
+        isLocked: true,
+        startsAt: true,
+        endsAt: true,
+        createdAt: true
       },
       orderBy: {
         year: "desc"
@@ -435,7 +490,7 @@ export const seasonService = {
       throw new SeasonServiceError("seasonId is required.", 400);
     }
 
-    if (!Number.isInteger(input.year) || input.year < 2000 || input.year > 3000) {
+    if (!isValidSeasonYear(input.year)) {
       throw new SeasonServiceError("A valid season year is required.", 400);
     }
 
@@ -447,6 +502,18 @@ export const seasonService = {
       }
 
       try {
+        await tx.seasonNflTeamResult.deleteMany({
+          where: {
+            seasonId: season.id
+          }
+        });
+
+        await tx.seasonNflImportRun.deleteMany({
+          where: {
+            seasonId: season.id
+          }
+        });
+
         const updatedSeason = await tx.season.update({
           where: {
             id: season.id

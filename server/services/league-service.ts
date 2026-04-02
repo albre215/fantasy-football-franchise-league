@@ -36,6 +36,88 @@ function toSlug(input: string) {
     .slice(0, 50);
 }
 
+function formatLeagueCode(value: number) {
+  return `GMF-${value}`;
+}
+
+function parseLeagueCodeNumber(leagueCode: string | null | undefined) {
+  if (!leagueCode) {
+    return null;
+  }
+
+  const match = leagueCode.trim().toUpperCase().match(/^GMF-(\d+)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  return Number(match[1]);
+}
+
+function normalizeLeagueCodeInput(input: string) {
+  const trimmed = input.trim().toUpperCase();
+  const match = trimmed.match(/^GMF[\s-]?(\d+)$/);
+
+  if (!match) {
+    return trimmed;
+  }
+
+  return formatLeagueCode(Number(match[1]));
+}
+
+async function getNextLeagueCodeNumber(tx: Prisma.TransactionClient | typeof prisma) {
+  const existingCodes = await tx.league.findMany({
+    where: {
+      leagueCode: {
+        not: null
+      }
+    },
+    select: {
+      leagueCode: true
+    }
+  });
+
+  return (
+    existingCodes.reduce((highest, league) => {
+      const numericCode = parseLeagueCodeNumber(league.leagueCode);
+      return numericCode && numericCode > highest ? numericCode : highest;
+    }, 0) + 1
+  );
+}
+
+async function ensureLeagueCodes(tx: Prisma.TransactionClient | typeof prisma) {
+  const uncodedLeagues = await tx.league.findMany({
+    where: {
+      leagueCode: null
+    },
+    select: {
+      id: true
+    },
+    orderBy: {
+      createdAt: "asc"
+    }
+  });
+
+  if (uncodedLeagues.length === 0) {
+    return;
+  }
+
+  let nextCodeNumber = await getNextLeagueCodeNumber(tx);
+
+  for (const league of uncodedLeagues) {
+    await tx.league.update({
+      where: {
+        id: league.id
+      },
+      data: {
+        leagueCode: formatLeagueCode(nextCodeNumber)
+      }
+    });
+
+    nextCodeNumber += 1;
+  }
+}
+
 async function generateLeagueSlug(name: string) {
   const baseSlug = toSlug(name);
 
@@ -206,6 +288,7 @@ function mapSeason(season: {
 
 function mapLeagueDashboard(league: {
   id: string;
+  leagueCode: string | null;
   name: string;
   slug: string;
   description: string | null;
@@ -232,6 +315,7 @@ function mapLeagueDashboard(league: {
 }): LeagueDashboard {
   return {
     id: league.id,
+    leagueCode: league.leagueCode,
     name: league.name,
     slug: league.slug,
     description: league.description,
@@ -242,6 +326,8 @@ function mapLeagueDashboard(league: {
 }
 
 async function getLeagueDashboard(leagueId: string) {
+  await ensureLeagueCodes(prisma);
+
   const league = await prisma.league.findUnique({
     where: {
       id: leagueId
@@ -289,8 +375,12 @@ export const leagueService = {
 
     try {
       const league = await prisma.$transaction(async (tx) => {
+        await ensureLeagueCodes(tx);
+        const leagueCode = formatLeagueCode(await getNextLeagueCodeNumber(tx));
+
         const createdLeague = await tx.league.create({
           data: {
+            leagueCode,
             name,
             slug,
             description
@@ -335,6 +425,8 @@ export const leagueService = {
   },
 
   async listLeagues(): Promise<LeagueListItem[]> {
+    await ensureLeagueCodes(prisma);
+
     const leagues = await prisma.league.findMany({
       orderBy: {
         createdAt: "desc"
@@ -351,6 +443,7 @@ export const leagueService = {
 
     return leagues.map((league) => ({
       id: league.id,
+      leagueCode: league.leagueCode,
       name: league.name,
       slug: league.slug,
       description: league.description,
@@ -360,18 +453,73 @@ export const leagueService = {
     }));
   },
 
-  async joinLeague(input: JoinLeagueInput) {
-    const leagueId = input.leagueId.trim();
+  async listLeaguesForUser(userId: string): Promise<LeagueListItem[]> {
+    const normalizedUserId = userId.trim();
 
-    if (!leagueId) {
-      throw new LeagueServiceError("leagueId is required.", 400);
+    if (!normalizedUserId) {
+      throw new LeagueServiceError("A userId is required.", 400);
+    }
+
+    await ensureLeagueCodes(prisma);
+
+    const leagues = await prisma.league.findMany({
+      where: {
+        members: {
+          some: {
+            userId: normalizedUserId
+          }
+        }
+      },
+      orderBy: {
+        createdAt: "desc"
+      },
+      include: {
+        members: {
+          where: {
+            userId: normalizedUserId
+          },
+          select: {
+            role: true
+          },
+          take: 1
+        },
+        _count: {
+          select: {
+            members: true,
+            seasons: true
+          }
+        }
+      }
+    });
+
+    return leagues.map((league) => ({
+      id: league.id,
+      leagueCode: league.leagueCode,
+      name: league.name,
+      slug: league.slug,
+      description: league.description,
+      createdAt: league.createdAt.toISOString(),
+      memberCount: league._count.members,
+      seasonCount: league._count.seasons,
+      currentUserRole: league.members[0]?.role
+    }));
+  },
+
+  async joinLeague(input: JoinLeagueInput) {
+    await ensureLeagueCodes(prisma);
+
+    const leagueCodeInput = input.leagueCode.trim();
+
+    if (!leagueCodeInput) {
+      throw new LeagueServiceError("League code is required.", 400);
     }
 
     const user = await ensureExistingUser(input.userId);
+    const normalizedLeagueCode = normalizeLeagueCodeInput(leagueCodeInput);
 
-    const league = await prisma.league.findUnique({
+    const league = await prisma.league.findFirst({
       where: {
-        id: leagueId
+        leagueCode: normalizedLeagueCode
       },
       include: {
         members: true
@@ -379,11 +527,11 @@ export const leagueService = {
     });
 
     if (!league) {
-      throw new LeagueServiceError("League not found.", 404);
+      throw new LeagueServiceError("League not found. Check the league code and try again.", 404);
     }
 
     if (league.members.some((member) => member.userId === user.id)) {
-      return getLeagueDashboard(leagueId);
+      return getLeagueDashboard(league.id);
     }
 
     if (league.members.length >= MAX_LEAGUE_MEMBERS) {
@@ -393,20 +541,20 @@ export const leagueService = {
     try {
       await prisma.leagueMember.create({
         data: {
-          leagueId,
+          leagueId: league.id,
           userId: user.id,
           role: "OWNER"
         }
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        return getLeagueDashboard(leagueId);
+        return getLeagueDashboard(league.id);
       }
 
       throw error;
     }
 
-    return getLeagueDashboard(leagueId);
+    return getLeagueDashboard(league.id);
   },
 
   async getLeagueMembers(leagueId: string) {
@@ -625,6 +773,8 @@ export const leagueService = {
       throw new LeagueServiceError("leagueId is required.", 400);
     }
 
+    await ensureLeagueCodes(prisma);
+
     const [league, activeSeason, members] = await Promise.all([
       prisma.league.findUnique({
         where: {
@@ -658,6 +808,7 @@ export const leagueService = {
     return {
       league: {
         id: league.id,
+        leagueCode: league.leagueCode,
         name: league.name,
         slug: league.slug,
         description: league.description,

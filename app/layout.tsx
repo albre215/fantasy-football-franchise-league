@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 
 import "@/app/globals.css";
+import { BrandSideMarks } from "@/components/brand/brand-side-marks";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
 import { ScrollStabilityProvider } from "@/components/providers/scroll-stability-provider";
 
@@ -11,7 +12,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Fantasy Franchise League",
+  title: "GM Fantasy",
   description: "Production-ready platform foundation for multi-year NFL franchise fantasy leagues."
 };
 
@@ -22,9 +23,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={`${inter.className} relative overflow-x-hidden`}>
+        <BrandSideMarks />
         <AuthSessionProvider>
-          <ScrollStabilityProvider>{children}</ScrollStabilityProvider>
+          <ScrollStabilityProvider>
+            <div className="relative z-10">{children}</div>
+          </ScrollStabilityProvider>
         </AuthSessionProvider>
       </body>
     </html>

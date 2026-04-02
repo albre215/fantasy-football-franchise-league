@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 
 import { requireAuthenticatedUserId, RouteAuthError } from "@/lib/auth-session";
 import { resultsService, ResultsServiceError } from "@/server/services/results-service";
-import type { OverwriteManualSeasonStandingsResponse } from "@/types/results";
+import type {
+  FantasyPayoutConfigEntry,
+  OverwriteManualSeasonStandingsResponse
+} from "@/types/results";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +20,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     const body = (await request.json()) as {
       orderedLeagueMemberIds?: string[];
       confirmOverwrite?: boolean;
+      payoutConfig?: FantasyPayoutConfigEntry[];
     };
     const actingUserId = await requireAuthenticatedUserId();
 
@@ -24,7 +28,8 @@ export async function POST(request: Request, { params }: RouteContext) {
       seasonId: params.seasonId,
       actingUserId,
       orderedLeagueMemberIds: Array.isArray(body.orderedLeagueMemberIds) ? body.orderedLeagueMemberIds : [],
-      confirmOverwrite: body.confirmOverwrite === true
+      confirmOverwrite: body.confirmOverwrite === true,
+      payoutConfig: Array.isArray(body.payoutConfig) ? body.payoutConfig : undefined
     });
 
     return NextResponse.json<OverwriteManualSeasonStandingsResponse>({ results });

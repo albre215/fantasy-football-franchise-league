@@ -9,12 +9,14 @@ export async function POST(request: Request) {
     const body = (await request.json()) as {
       displayName?: string;
       email?: string;
+      phoneNumber?: string;
       password?: string;
     };
 
     const user = await authService.registerUser({
       displayName: body.displayName ?? "",
       email: body.email ?? "",
+      phoneNumber: body.phoneNumber ?? "",
       password: body.password ?? ""
     });
 

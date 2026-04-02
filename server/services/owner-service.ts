@@ -39,12 +39,14 @@ function mapLeagueMembership(member: {
   role: "COMMISSIONER" | "OWNER";
   joinedAt: Date;
   league: {
+    leagueCode: string | null;
     name: string;
     slug: string;
   };
 }): OwnerLeagueMembershipSummary {
   return {
     leagueId: member.leagueId,
+    leagueCode: member.league.leagueCode,
     leagueName: member.league.name,
     leagueSlug: member.league.slug,
     role: member.role,

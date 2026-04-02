@@ -15,7 +15,7 @@ export async function GET(request: Request, { params }: RouteContext) {
   try {
     const { searchParams } = new URL(request.url);
     const sourceSeasonId = searchParams.get("sourceSeasonId")?.trim() ?? "";
-    const recommendation = await resultsService.getRecommendedReverseDraftOrder(sourceSeasonId, params.seasonId);
+    const recommendation = await resultsService.getRecommendedOffseasonDraftOrder(sourceSeasonId, params.seasonId);
 
     return NextResponse.json<DraftOrderRecommendationResponse>({ recommendation });
   } catch (error) {

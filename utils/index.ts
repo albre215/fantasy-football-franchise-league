@@ -1,1 +1,1 @@
-export const APP_NAME = "Fantasy Franchise League";
+export const APP_NAME = "GM Fantasy";

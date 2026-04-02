@@ -21,6 +21,12 @@ export interface SeasonSummary {
   createdAt: string;
 }
 
+export interface SeasonNflSyncStatus {
+  attempted: boolean;
+  status: "PENDING" | "COMPLETED" | "FAILED";
+  message: string | null;
+}
+
 export interface SeasonSetupStatus {
   seasonId: string;
   leagueId: string;
@@ -116,6 +122,7 @@ export interface ActiveSeasonResponse {
 
 export interface SetActiveSeasonResponse {
   season: SeasonSummary;
+  nflImport: SeasonNflSyncStatus | null;
 }
 
 export interface SeasonSetupStatusResponse {
@@ -138,6 +145,7 @@ export interface UnlockSeasonResponse {
 
 export interface UpdateSeasonYearResponse {
   season: SeasonSummary;
+  nflImport: SeasonNflSyncStatus | null;
 }
 
 export interface SeasonPhaseContextResponse {

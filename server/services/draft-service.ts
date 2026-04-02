@@ -606,12 +606,22 @@ async function validateDraftInitialization(
     );
   }
 
-  const recommendedOrder = await resultsService.getRecommendedReverseDraftOrder(sourceSeasonId, targetSeasonId);
-  const recommendedLeagueMemberIds = recommendedOrder.entries.map((entry) => entry.leagueMemberId);
+  const recommendedOrder = await resultsService.getRecommendedOffseasonDraftOrder(sourceSeasonId, targetSeasonId);
+  const recommendedLeagueMemberIds = recommendedOrder.entries
+    .map((entry) => entry.targetLeagueMemberId)
+    .filter((leagueMemberId): leagueMemberId is string => Boolean(leagueMemberId));
+
+  if (!recommendedOrder.readiness.isReady) {
+    throw new DraftServiceError(
+      recommendedOrder.warnings[0] ??
+        "Source-season ledger totals are not ready to generate the offseason draft order yet.",
+      409
+    );
+  }
 
   if (recommendedLeagueMemberIds.length !== DRAFT_OWNER_COUNT) {
     throw new DraftServiceError(
-      "Source season final standings must include all 10 owners before initializing the offseason draft.",
+      "Ledger-based draft order must map all 10 owners into the target season before initializing the offseason draft.",
       409
     );
   }

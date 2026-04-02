@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type {
@@ -304,7 +305,7 @@ export function OffseasonDraftPanel({
         setRecommendedOrder(data.recommendation);
         setDraftOrderLeagueMemberIds((current) => {
           const currentHasValues = current.some(Boolean);
-          const nextOrder = data.recommendation.entries.map((entry) => entry.leagueMemberId);
+          const nextOrder = data.recommendation.entries.map((entry) => entry.targetLeagueMemberId ?? "");
 
           if (!currentHasValues) {
             return nextOrder;
@@ -317,7 +318,7 @@ export function OffseasonDraftPanel({
         setRecommendedOrderError(
           error instanceof Error
             ? error.message
-            : "Enter final standings for the source season before auto-generating draft order."
+            : "Source-season ledger totals are required before auto-generating draft order."
         );
         setDraftOrderLeagueMemberIds(Array.from({ length: members.length }, () => ""));
       } finally {
@@ -335,6 +336,7 @@ export function OffseasonDraftPanel({
       !phaseContext?.allowedActions.canPrepareDraft ||
       !setupSourceSeasonId ||
       !recommendedOrder ||
+      !recommendedOrder.readiness.isReady ||
       isLoadingRecommendedOrder ||
       isPreparingDraftWorkspace ||
       hasAttemptedWorkspacePreparation
@@ -356,7 +358,9 @@ export function OffseasonDraftPanel({
           },
           body: JSON.stringify({
             sourceSeasonId: setupSourceSeasonId,
-            orderLeagueMemberIds: recommendedOrder.entries.map((entry) => entry.leagueMemberId)
+            orderLeagueMemberIds: recommendedOrder.entries
+              .map((entry) => entry.targetLeagueMemberId)
+              .filter((leagueMemberId): leagueMemberId is string => Boolean(leagueMemberId))
           })
         });
 
@@ -395,10 +399,10 @@ export function OffseasonDraftPanel({
     allDraftOwnersUnique &&
     includesEveryEligibleOwner &&
     Boolean(setupSourceSeasonId) &&
-    Boolean(recommendedOrder);
+    Boolean(recommendedOrder?.readiness.isReady);
   const matchesRecommendedOrder =
     Boolean(recommendedOrder) &&
-    recommendedOrder!.entries.every((entry, index) => draftOrderLeagueMemberIds[index] === entry.leagueMemberId);
+    recommendedOrder!.entries.every((entry, index) => draftOrderLeagueMemberIds[index] === entry.targetLeagueMemberId);
   const hasUnsavedKeeperChanges = Object.values(dirtyKeeperOwners).some(Boolean);
   const isAnyKeeperSaveInFlight = Object.values(savingKeeperOwners).some(Boolean);
   const canStartDraftFromUi =
@@ -645,15 +649,19 @@ export function OffseasonDraftPanel({
                   ) : isPreparingDraftWorkspace ? (
                     <>
                       <p className="font-medium text-foreground">Preparing keeper workspace</p>
-                      <p>Creating the offseason planning draft from the previous season's saved standings.</p>
+                      <p>Creating the offseason planning draft from the previous season's ledger totals.</p>
                     </>
                   ) : isLoadingRecommendedOrder ? (
-                    <p>Checking previous-season standings before preparing the keeper workspace...</p>
+                    <p>Checking previous-season ledger totals before preparing the keeper workspace...</p>
                   ) : recommendedOrder ? (
                     <>
-                      <p className="font-medium text-foreground">Keeper workspace is ready to prepare</p>
+                      <p className="font-medium text-foreground">
+                        {recommendedOrder.readiness.isReady
+                          ? "Keeper workspace is ready to prepare"
+                          : "Keeper workspace is not ready yet"}
+                      </p>
                       <p>
-                        Saved final standings were found for{" "}
+                        Ledger totals were reviewed for{" "}
                         {formatSeasonLabel({
                           year: recommendedOrder.sourceSeasonYear,
                           name: recommendedOrder.sourceSeasonName
@@ -661,15 +669,32 @@ export function OffseasonDraftPanel({
                         .
                       </p>
                       <p>
-                        Champion: {recommendedOrder.champion?.displayName ?? "Not available"} - Last place:{" "}
-                        {recommendedOrder.lastPlace?.displayName ?? "Not available"}
+                        Lowest total: {recommendedOrder.lowestTotalOwner?.displayName ?? "Not available"} - Highest total:{" "}
+                        {recommendedOrder.highestTotalOwner?.displayName ?? "Not available"}
                       </p>
-                      <p>The planning draft will be prepared automatically so keeper selection can begin first.</p>
+                      <p>
+                        Lowest ledger total: ${recommendedOrder.lowestTotalOwner?.ledgerTotal.toFixed(2) ?? "0.00"} - Highest
+                        ledger total: ${recommendedOrder.highestTotalOwner?.ledgerTotal.toFixed(2) ?? "0.00"}
+                      </p>
+                      <p>
+                        Ledger coverage: {recommendedOrder.readiness.ledgerCoverageStatus} - Owners with entries:{" "}
+                        {recommendedOrder.readiness.ownersWithLedgerEntries}/10
+                      </p>
+                      {recommendedOrder.warnings.map((warning) => (
+                        <p className="text-destructive" key={warning}>
+                          {warning}
+                        </p>
+                      ))}
+                      <p>
+                        {recommendedOrder.readiness.isReady
+                          ? "The planning draft will be prepared automatically so keeper selection can begin first."
+                          : "Resolve the readiness warnings before the planning draft can be prepared automatically."}
+                      </p>
                     </>
                   ) : (
                     <p>
                       {recommendedOrderError ??
-                        "Final standings for the immediately previous season are required before generating draft order."}
+                        "Source-season ledger totals are required before generating draft order."}
                     </p>
                   )}
                 </div>
@@ -686,7 +711,7 @@ export function OffseasonDraftPanel({
               <p>Expected draft picks: 10</p>
               <p>Commissioner access: {canManageDraft ? "Pass" : "Read-only"}</p>
               <p>Previous season found: {previousSeason ? "Pass" : "Fail"}</p>
-              <p>Saved final standings found: {recommendedOrder ? "Pass" : "Fail"}</p>
+              <p>Ledger-based recommendation ready: {recommendedOrder?.readiness.isReady ? "Pass" : "Fail"}</p>
               <p>Draft phase open: {phaseContext?.allowedActions.canEditDraft ? "Pass" : "Fail"}</p>
               <p>Keeper workspace prepared: {draftState ? "Yes" : isPreparingDraftWorkspace ? "In progress" : "No"}</p>
               {phaseContext && !phaseContext.allowedActions.canEditDraft ? (
@@ -694,10 +719,17 @@ export function OffseasonDraftPanel({
                   Draft setup and execution are paused until the season reaches DRAFT_PHASE.
                 </div>
               ) : null}
-              {!recommendedOrder && (
+              {recommendedOrder && recommendedOrder.warnings.length > 0 ? (
+                <div className="rounded-lg border border-dashed border-border p-3">
+                  {recommendedOrder.warnings.map((warning) => (
+                    <p key={warning}>{warning}</p>
+                  ))}
+                </div>
+              ) : null}
+              {!recommendedOrder?.readiness.isReady && (
                 <div className="rounded-lg border border-dashed border-border p-3">
                   {previousSeason
-                    ? "Enter final standings for the immediately previous season before preparing keeper selections."
+                    ? "Complete the previous season's ledger totals and target-season mappings before preparing keeper selections."
                     : "Create the immediately previous season before preparing the offseason draft workspace."}
                 </div>
               )}
@@ -869,7 +901,7 @@ export function OffseasonDraftPanel({
                                   onClick={() => toggleKeeperSelection(member.leagueMemberId, team.id)}
                                   type="button"
                                 >
-                                  {team.abbreviation} - {team.name}
+                                  <NFLTeamLabel size="compact" team={team} />
                                 </button>
                               );
                             })}
@@ -891,7 +923,7 @@ export function OffseasonDraftPanel({
                       <CardTitle>{draftState.draft.status === "PLANNING" ? "Generated Draft Order" : "Draft Board"}</CardTitle>
                     <CardDescription>
                         {draftState.draft.status === "PLANNING"
-                          ? "Current recommended order for the upcoming offseason draft."
+                          ? "Ledger-total order for the upcoming offseason draft."
                           : "Follow the full order and current pick."}
                       </CardDescription>
                     </CardHeader>
@@ -908,11 +940,16 @@ export function OffseasonDraftPanel({
                           </p>
                           <p className="text-muted-foreground">
                             {pick.selectedNflTeam
-                              ? `${pick.selectedNflTeam.abbreviation} - ${pick.selectedNflTeam.name}`
+                              ? ""
                               : draftState.draft.status === "PLANNING"
                               ? "Waiting for draft start"
                               : "Waiting for selection"}
                           </p>
+                          {pick.selectedNflTeam ? (
+                            <div className="mt-2 text-muted-foreground">
+                              <NFLTeamLabel size="default" team={pick.selectedNflTeam} />
+                            </div>
+                          ) : null}
                         </div>
                       ))}
                     </CardContent>
@@ -944,7 +981,7 @@ export function OffseasonDraftPanel({
                     ) : (
                       draftState.draftPool.map((team) => (
                         <div className="rounded-lg border border-border p-3 text-sm" key={team.id}>
-                          {team.abbreviation} - {team.name}
+                          <NFLTeamLabel size="default" team={team} />
                         </div>
                       ))
                     )}
@@ -980,6 +1017,14 @@ export function OffseasonDraftPanel({
                             </option>
                           ))}
                         </select>
+                        {currentPickTeamId ? (
+                          <div className="rounded-lg border border-border bg-background px-3 py-2 text-foreground">
+                            <NFLTeamLabel
+                              size="default"
+                              team={draftState.draftPool.find((team) => team.id === currentPickTeamId)!}
+                            />
+                          </div>
+                        ) : null}
                         <Button
                           className="w-full"
                           disabled={isSubmitting || !currentPickTeamId || phaseBlocksDraftWork}

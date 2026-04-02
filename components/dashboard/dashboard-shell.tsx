@@ -1,3 +1,7 @@
+import Link from "next/link";
+
+import { BrandMasthead } from "@/components/brand/brand-masthead";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const dashboardDomains = [
@@ -10,12 +14,16 @@ const dashboardDomains = [
 export function DashboardShell() {
   return (
     <main className="container py-12">
-      <div className="max-w-3xl space-y-4">
-        <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          This route is prepared for authenticated owner-facing workflows and operational summaries.
-        </p>
-      </div>
+      <BrandMasthead
+        actions={
+          <Link className={buttonVariants({ variant: "outline" })} href="/">
+            Back to Home
+          </Link>
+        }
+        description="This route is prepared for future owner-facing workflows and operational summaries."
+        eyebrow="Utility Workspace"
+        title="Owner Workflows"
+      />
       <div className="mt-8 grid gap-6 md:grid-cols-2">
         {dashboardDomains.map((item) => (
           <Card key={item}>

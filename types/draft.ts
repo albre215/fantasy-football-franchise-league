@@ -79,29 +79,47 @@ export interface DraftState {
 }
 
 export interface DraftOrderRecommendationEntry {
-  leagueMemberId: string;
+  leagueMemberId: string | null;
+  sourceLeagueMemberId: string;
+  targetLeagueMemberId: string | null;
   userId: string;
   displayName: string;
   email: string;
   role: "COMMISSIONER" | "OWNER";
-  sourceSeasonRank: number;
+  sourceSeasonRank: number | null;
+  ledgerTotal: number;
   draftSlot: number;
+  tieBreakReason: "LEDGER_TOTAL" | "FANTASY_RANK" | "DISPLAY_NAME";
+  mappingStatus: "MAPPED" | "MISSING_TARGET_MEMBER";
+  warnings: string[];
 }
 
 export interface DraftOrderRecommendation {
   sourceSeasonId: string;
   sourceSeasonName: string | null;
   sourceSeasonYear: number;
-  champion: {
-    leagueMemberId: string;
+  lowestTotalOwner: {
+    leagueMemberId: string | null;
     userId: string;
     displayName: string;
+    ledgerTotal: number;
   } | null;
-  lastPlace: {
-    leagueMemberId: string;
+  highestTotalOwner: {
+    leagueMemberId: string | null;
     userId: string;
     displayName: string;
+    ledgerTotal: number;
   } | null;
+  readiness: {
+    hasAnyLedgerEntries: boolean;
+    hasCompleteFantasyStandings: boolean;
+    allTargetMappingsComplete: boolean;
+    ownersWithLedgerEntries: number;
+    zeroLedgerOwnerCount: number;
+    ledgerCoverageStatus: "NONE" | "PARTIAL" | "FULL";
+    isReady: boolean;
+  };
+  warnings: string[];
   entries: DraftOrderRecommendationEntry[];
 }
 
