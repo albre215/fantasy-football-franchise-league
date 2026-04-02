@@ -122,23 +122,61 @@ async function assertActingCommissionerForLeague(
 }
 
 async function getSeasonOrThrow(tx: Prisma.TransactionClient | typeof prisma, seasonId: string) {
-  const season = await tx.season.findUnique({
-    where: {
-      id: seasonId
-    },
-    select: {
-      id: true,
-      leagueId: true,
-      year: true,
-      name: true,
-      status: true,
-      leaguePhase: true,
-      isLocked: true,
-      startsAt: true,
-      endsAt: true,
-      createdAt: true
+  let season:
+    | {
+        id: string;
+        leagueId: string;
+        year: number;
+        name: string | null;
+        status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
+        leaguePhase?: "IN_SEASON" | "POST_SEASON" | "DROP_PHASE" | "DRAFT_PHASE" | null;
+        isLocked: boolean;
+        startsAt: Date | null;
+        endsAt: Date | null;
+        createdAt: Date;
+      }
+    | null;
+
+  try {
+    season = await tx.season.findUnique({
+      where: {
+        id: seasonId
+      },
+      select: {
+        id: true,
+        leagueId: true,
+        year: true,
+        name: true,
+        status: true,
+        leaguePhase: true,
+        isLocked: true,
+        startsAt: true,
+        endsAt: true,
+        createdAt: true
+      }
+    });
+  } catch (error) {
+    if (!isMissingLeaguePhaseColumnError(error)) {
+      throw error;
     }
-  });
+
+    season = await tx.season.findUnique({
+      where: {
+        id: seasonId
+      },
+      select: {
+        id: true,
+        leagueId: true,
+        year: true,
+        name: true,
+        status: true,
+        isLocked: true,
+        startsAt: true,
+        endsAt: true,
+        createdAt: true
+      }
+    });
+  }
 
   if (!season) {
     throw new SeasonServiceError("Season not found.", 404);
@@ -306,8 +344,21 @@ export const seasonService = {
           year: input.year,
           name,
           status: "PLANNING",
-          leaguePhase: "IN_SEASON"
+          leaguePhase: "DRAFT_PHASE"
         }
+      }).catch(async (error) => {
+        if (!isMissingLeaguePhaseColumnError(error)) {
+          throw error;
+        }
+
+        return prisma.season.create({
+          data: {
+            leagueId,
+            year: input.year,
+            name,
+            status: "PLANNING"
+          }
+        });
       });
 
       return mapSeason(season);
@@ -502,6 +553,19 @@ export const seasonService = {
           status: "ACTIVE",
           leaguePhase: "IN_SEASON"
         }
+      }).catch(async (error) => {
+        if (!isMissingLeaguePhaseColumnError(error)) {
+          throw error;
+        }
+
+        return tx.season.update({
+          where: {
+            id: seasonId
+          },
+          data: {
+            status: "ACTIVE"
+          }
+        });
       });
 
       return mapSeason(updatedSeason);

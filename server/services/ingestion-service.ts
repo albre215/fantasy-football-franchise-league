@@ -87,11 +87,18 @@ async function getSeasonContext(tx: PrismaClientLike, seasonId: string) {
     where: {
       id: seasonId
     },
-    include: {
+    select: {
+      id: true,
+      leagueId: true,
+      year: true,
+      name: true,
       league: {
-        include: {
+        select: {
           members: {
-            include: {
+            select: {
+              id: true,
+              userId: true,
+              role: true,
               user: true
             },
             orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
@@ -99,7 +106,15 @@ async function getSeasonContext(tx: PrismaClientLike, seasonId: string) {
         }
       },
       sourceConfigs: {
-        include: {
+        select: {
+          id: true,
+          seasonId: true,
+          provider: true,
+          externalLeagueId: true,
+          externalSeasonKey: true,
+          config: true,
+          createdAt: true,
+          updatedAt: true,
           mappings: true
         }
       }

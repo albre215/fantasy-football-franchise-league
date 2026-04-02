@@ -131,7 +131,13 @@ export const ownerService = {
           },
           status: "ACTIVE"
         },
-        include: {
+        select: {
+          id: true,
+          leagueId: true,
+          year: true,
+          name: true,
+          status: true,
+          isLocked: true,
           league: true,
           teamOwnerships: {
             where: {
@@ -240,11 +246,17 @@ export const ownerService = {
               }
             },
             sourceSeason: {
-              include: {
-                teamOwnerships: {
-                  where: {
-                    leagueMember: {
-                      userId: normalizedUserId
+        select: {
+          id: true,
+          leagueId: true,
+          year: true,
+          name: true,
+          status: true,
+          league: true,
+          teamOwnerships: {
+            where: {
+              leagueMember: {
+                userId: normalizedUserId
                     }
                   },
                   include: {

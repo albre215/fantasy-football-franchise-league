@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { resultsService } from "@/server/services/results-service";
 import { seasonService } from "@/server/services/season-service";
+import type { DraftStatus } from "@/types/draft";
 import type {
   LeaguePhase,
   SeasonPhaseContext,
@@ -23,6 +24,28 @@ const FORWARD_TRANSITIONS: Record<LeaguePhase, LeaguePhase[]> = {
   DROP_PHASE: ["DRAFT_PHASE"],
   DRAFT_PHASE: []
 };
+
+function deriveLeaguePhaseFromSeasonStatus(status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED"): LeaguePhase {
+  if (status === "ACTIVE") {
+    return "IN_SEASON";
+  }
+
+  if (status === "PLANNING") {
+    return "DRAFT_PHASE";
+  }
+
+  return "POST_SEASON";
+}
+
+function isMissingLeaguePhaseColumnError(error: unknown) {
+  return (
+    error instanceof Error &&
+    (error.message.includes("leaguePhase") ||
+      error.message.includes("column") ||
+      error.message.includes("does not exist") ||
+      error.message.includes("Unknown field"))
+  );
+}
 
 function mapAllowedActions(currentPhase: LeaguePhase): SeasonPhaseContext["allowedActions"] {
   return {
@@ -92,25 +115,62 @@ async function getSeasonPhaseBaseContext(seasonId: string) {
     throw new SeasonPhaseServiceError("seasonId is required.", 400);
   }
 
-  const season = await prisma.season.findUnique({
-    where: {
-      id: normalizedSeasonId
-    },
-    select: {
-      id: true,
-      leagueId: true,
-      year: true,
-      name: true,
-      status: true,
-      leaguePhase: true,
-      targetDraft: {
-        select: {
-          id: true,
-          status: true
+  let season:
+    | {
+        id: string;
+        leagueId: string;
+        year: number;
+        name: string | null;
+        status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
+        leaguePhase?: LeaguePhase | null;
+        targetDraft: { id: string; status: DraftStatus } | null;
+      }
+    | null;
+
+  try {
+    season = await prisma.season.findUnique({
+      where: {
+        id: normalizedSeasonId
+      },
+      select: {
+        id: true,
+        leagueId: true,
+        year: true,
+        name: true,
+        status: true,
+        leaguePhase: true,
+        targetDraft: {
+          select: {
+            id: true,
+            status: true
+          }
         }
       }
+    });
+  } catch (error) {
+    if (!isMissingLeaguePhaseColumnError(error)) {
+      throw error;
     }
-  });
+
+    season = await prisma.season.findUnique({
+      where: {
+        id: normalizedSeasonId
+      },
+      select: {
+        id: true,
+        leagueId: true,
+        year: true,
+        name: true,
+        status: true,
+        targetDraft: {
+          select: {
+            id: true,
+            status: true
+          }
+        }
+      }
+    });
+  }
 
   if (!season) {
     throw new SeasonPhaseServiceError("Season not found.", 404);
@@ -132,7 +192,10 @@ async function getSeasonPhaseBaseContext(seasonId: string) {
     : null;
 
   return {
-    season,
+    season: {
+      ...season,
+      leaguePhase: season.leaguePhase ?? deriveLeaguePhaseFromSeasonStatus(season.status)
+    },
     recommendation,
     results
   };
@@ -199,21 +262,36 @@ export const seasonPhaseService = {
 
     await seasonService.assertCommissionerAccess(input.seasonId, input.actingUserId);
 
-    const season = await prisma.season.findUnique({
-      where: {
-        id: input.seasonId.trim()
-      },
-      select: {
-        id: true,
-        leaguePhase: true
+    let season: { id: string; leaguePhase?: LeaguePhase | null } | null;
+
+    try {
+      season = await prisma.season.findUnique({
+        where: {
+          id: input.seasonId.trim()
+        },
+        select: {
+          id: true,
+          leaguePhase: true
+        }
+      });
+    } catch (error) {
+      if (!isMissingLeaguePhaseColumnError(error)) {
+        throw error;
       }
-    });
+
+      const fallbackSeason = await seasonService.getSeasonSetupStatus(input.seasonId);
+      season = {
+        id: fallbackSeason.seasonId,
+        leaguePhase: null
+      };
+    }
 
     if (!season) {
       throw new SeasonPhaseServiceError("Season not found.", 404);
     }
 
-    const currentPhase = season.leaguePhase as LeaguePhase;
+    const currentContext = await this.getSeasonPhaseContext(input.seasonId);
+    const currentPhase = currentContext.season.leaguePhase;
 
     if (currentPhase === nextPhase) {
       throw new SeasonPhaseServiceError(`Season is already in ${nextPhase}.`, 409);
@@ -226,14 +304,25 @@ export const seasonPhaseService = {
       );
     }
 
-    await prisma.season.update({
-      where: {
-        id: season.id
-      },
-      data: {
-        leaguePhase: nextPhase
+    try {
+      await prisma.season.update({
+        where: {
+          id: season.id
+        },
+        data: {
+          leaguePhase: nextPhase
+        }
+      });
+    } catch (error) {
+      if (!isMissingLeaguePhaseColumnError(error)) {
+        throw error;
       }
-    });
+
+      throw new SeasonPhaseServiceError(
+        "League phase controls require the latest database migration. Run the Prisma migration locally, then try again.",
+        409
+      );
+    }
 
     return this.getSeasonPhaseContext(season.id);
   },

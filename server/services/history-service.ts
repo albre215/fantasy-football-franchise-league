@@ -109,12 +109,21 @@ async function getLeagueHistoryContext(leagueId: string) {
       where: {
         leagueId: normalizedLeagueId
       },
-      include: {
+      select: {
+        id: true,
+        year: true,
+        name: true,
+        status: true,
+        isLocked: true,
         teamOwnerships: {
-          include: {
+          select: {
+            nflTeamId: true,
+            slot: true,
+            leagueMemberId: true,
             nflTeam: true,
             leagueMember: {
-              include: {
+              select: {
+                userId: true,
                 user: true
               }
             }
@@ -131,8 +140,20 @@ async function getLeagueHistoryContext(leagueId: string) {
         leagueId: normalizedLeagueId
       },
       include: {
-        sourceSeason: true,
-        targetSeason: true,
+        sourceSeason: {
+          select: {
+            id: true,
+            year: true,
+            name: true
+          }
+        },
+        targetSeason: {
+          select: {
+            id: true,
+            year: true,
+            name: true
+          }
+        },
         keeperSelections: {
           include: {
             nflTeam: true,

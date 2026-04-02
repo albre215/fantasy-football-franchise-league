@@ -248,11 +248,20 @@ async function getSeasonResultsContext(seasonId: string) {
     where: {
       id: normalizedSeasonId
     },
-    include: {
+    select: {
+      id: true,
+      leagueId: true,
+      year: true,
+      name: true,
+      status: true,
+      fantasyPayoutConfig: true,
       league: {
-        include: {
+        select: {
           members: {
-            include: {
+            select: {
+              id: true,
+              userId: true,
+              role: true,
               user: true
             },
             orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
@@ -260,9 +269,23 @@ async function getSeasonResultsContext(seasonId: string) {
         }
       },
       seasonStandings: {
-        include: {
+        select: {
+          leagueMemberId: true,
+          provider: true,
+          rank: true,
+          wins: true,
+          losses: true,
+          ties: true,
+          pointsFor: true,
+          pointsAgainst: true,
+          playoffFinish: true,
+          isChampion: true,
+          ingestionRunId: true,
+          externalDisplayName: true,
           leagueMember: {
-            include: {
+            select: {
+              userId: true,
+              role: true,
               user: true
             }
           }
@@ -270,9 +293,18 @@ async function getSeasonResultsContext(seasonId: string) {
         orderBy: [{ rank: "asc" }, { leagueMember: { joinedAt: "asc" } }]
       },
       ledgerEntries: {
-        include: {
+        select: {
+          leagueMemberId: true,
+          amount: true,
+          category: true,
+          description: true,
+          metadata: true,
+          createdAt: true,
+          updatedAt: true,
           leagueMember: {
-            include: {
+            select: {
+              userId: true,
+              role: true,
               user: true
             }
           }
@@ -638,11 +670,20 @@ async function saveManualSeasonStandingsInternal(
       where: {
         id: seasonId
       },
-      include: {
+      select: {
+        id: true,
+        leagueId: true,
+        year: true,
+        name: true,
+        status: true,
+        fantasyPayoutConfig: true,
         league: {
-          include: {
+          select: {
             members: {
-              include: {
+              select: {
+                id: true,
+                userId: true,
+                role: true,
                 user: true
               },
               orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
@@ -725,11 +766,20 @@ async function saveManualSeasonStandingsInternal(
       where: {
         id: seasonId
       },
-      include: {
+      select: {
+        id: true,
+        leagueId: true,
+        year: true,
+        name: true,
+        status: true,
+        fantasyPayoutConfig: true,
         league: {
-          include: {
+          select: {
             members: {
-              include: {
+              select: {
+                id: true,
+                userId: true,
+                role: true,
                 user: true
               },
               orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
@@ -737,9 +787,23 @@ async function saveManualSeasonStandingsInternal(
           }
         },
         seasonStandings: {
-          include: {
+          select: {
+            leagueMemberId: true,
+            provider: true,
+            rank: true,
+            wins: true,
+            losses: true,
+            ties: true,
+            pointsFor: true,
+            pointsAgainst: true,
+            playoffFinish: true,
+            isChampion: true,
+            ingestionRunId: true,
+            externalDisplayName: true,
             leagueMember: {
-              include: {
+              select: {
+                userId: true,
+                role: true,
                 user: true
               }
             }
@@ -750,9 +814,18 @@ async function saveManualSeasonStandingsInternal(
           where: {
             category: "FANTASY_PAYOUT"
           },
-          include: {
+          select: {
+            leagueMemberId: true,
+            amount: true,
+            category: true,
+            description: true,
+            metadata: true,
+            createdAt: true,
+            updatedAt: true,
             leagueMember: {
-              include: {
+              select: {
+                userId: true,
+                role: true,
                 user: true
               }
             }

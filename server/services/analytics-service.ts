@@ -54,12 +54,18 @@ async function getLeagueAnalyticsContext(leagueId: string) {
     }),
     prisma.season.findMany({
       where: { leagueId: normalizedLeagueId },
-      include: {
+      select: {
+        id: true,
+        year: true,
+        name: true,
         teamOwnerships: {
-          include: {
+          select: {
+            nflTeamId: true,
             nflTeam: true,
             leagueMember: {
-              include: {
+              select: {
+                id: true,
+                userId: true,
                 user: true
               }
             }
@@ -67,9 +73,13 @@ async function getLeagueAnalyticsContext(leagueId: string) {
           orderBy: [{ slot: "asc" }, { createdAt: "asc" }]
         },
         seasonStandings: {
-          include: {
+          select: {
+            leagueMemberId: true,
+            rank: true,
+            isChampion: true,
             leagueMember: {
-              include: {
+              select: {
+                userId: true,
                 user: true
               }
             }
@@ -82,8 +92,20 @@ async function getLeagueAnalyticsContext(leagueId: string) {
     prisma.draft.findMany({
       where: { leagueId: normalizedLeagueId },
       include: {
-        sourceSeason: true,
-        targetSeason: true,
+        sourceSeason: {
+          select: {
+            id: true,
+            year: true,
+            name: true
+          }
+        },
+        targetSeason: {
+          select: {
+            id: true,
+            year: true,
+            name: true
+          }
+        },
         keeperSelections: {
           include: {
             nflTeam: true,

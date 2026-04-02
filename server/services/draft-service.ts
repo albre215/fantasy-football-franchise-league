@@ -38,72 +38,7 @@ class DraftServiceError extends Error {
 
 type PrismaClientLike = Prisma.TransactionClient | typeof prisma;
 
-type DraftWithContext = Prisma.DraftGetPayload<{
-  include: {
-    targetSeason: {
-      include: {
-        league: {
-          include: {
-            members: {
-              include: {
-                user: true;
-              };
-              orderBy: [{ role: "asc" }, { joinedAt: "asc" }];
-            };
-          };
-        };
-        teamOwnerships: {
-          include: {
-            nflTeam: true;
-            leagueMember: {
-              include: {
-                user: true;
-              };
-            };
-          };
-        };
-      };
-    };
-    sourceSeason: {
-      include: {
-        teamOwnerships: {
-          include: {
-            nflTeam: true;
-            leagueMember: {
-              include: {
-                user: true;
-              };
-            };
-          };
-        };
-      };
-    };
-    keeperSelections: {
-      include: {
-        nflTeam: true;
-        leagueMember: {
-          include: {
-            user: true;
-          };
-        };
-      };
-      orderBy: [{ leagueMemberId: "asc" }, { createdAt: "asc" }];
-    };
-    picks: {
-      include: {
-        selectedNflTeam: true;
-        selectingLeagueMember: {
-          include: {
-            user: true;
-          };
-        };
-      };
-      orderBy: {
-        overallPickNumber: "asc";
-      };
-    };
-  };
-}>;
+type DraftWithContext = Awaited<ReturnType<typeof getDraftWithContextOrThrow>>;
 
 function mapDraftTeam(team: {
   id: string;
@@ -179,11 +114,19 @@ async function getDraftWithContextOrThrow(tx: PrismaClientLike, draftId: string)
     },
     include: {
       targetSeason: {
-        include: {
+        select: {
+          id: true,
+          leagueId: true,
+          year: true,
+          name: true,
+          isLocked: true,
           league: {
-            include: {
+            select: {
               members: {
-                include: {
+                select: {
+                  id: true,
+                  userId: true,
+                  role: true,
                   user: true
                 },
                 orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
@@ -191,10 +134,15 @@ async function getDraftWithContextOrThrow(tx: PrismaClientLike, draftId: string)
             }
           },
           teamOwnerships: {
-            include: {
+            select: {
+              id: true,
+              nflTeamId: true,
+              leagueMemberId: true,
               nflTeam: true,
               leagueMember: {
-                include: {
+                select: {
+                  id: true,
+                  userId: true,
                   user: true
                 }
               }
@@ -203,12 +151,22 @@ async function getDraftWithContextOrThrow(tx: PrismaClientLike, draftId: string)
         }
       },
       sourceSeason: {
-        include: {
+        select: {
+          id: true,
+          leagueId: true,
+          year: true,
+          name: true,
           teamOwnerships: {
-            include: {
+            select: {
+              id: true,
+              nflTeamId: true,
+              leagueMemberId: true,
+              slot: true,
               nflTeam: true,
               leagueMember: {
-                include: {
+                select: {
+                  id: true,
+                  userId: true,
                   user: true
                 }
               }
@@ -315,7 +273,10 @@ async function getDraftByTargetSeasonOrThrow(tx: PrismaClientLike, targetSeasonI
           league: {
             select: {
               members: {
-                include: {
+                select: {
+                  id: true,
+                  userId: true,
+                  role: true,
                   user: true
                 },
                 orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
@@ -507,11 +468,18 @@ async function validateDraftInitialization(
       where: {
         id: targetSeasonId
       },
-      include: {
+      select: {
+        id: true,
+        leagueId: true,
+        year: true,
+        isLocked: true,
         league: {
-          include: {
+          select: {
             members: {
-              include: {
+              select: {
+                id: true,
+                userId: true,
+                role: true,
                 user: true
               },
               orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
@@ -525,12 +493,18 @@ async function validateDraftInitialization(
       where: {
         id: sourceSeasonId
       },
-      include: {
+      select: {
+        id: true,
+        leagueId: true,
+        year: true,
         teamOwnerships: {
-          include: {
+          select: {
+            nflTeamId: true,
             nflTeam: true,
             leagueMember: {
-              include: {
+              select: {
+                id: true,
+                userId: true,
                 user: true
               }
             }

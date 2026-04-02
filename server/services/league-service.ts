@@ -349,6 +349,15 @@ async function getLeagueDashboard(leagueId: string) {
       seasons: {
         orderBy: {
           year: "desc"
+        },
+        select: {
+          id: true,
+          year: true,
+          name: true,
+          status: true,
+          isLocked: true,
+          startsAt: true,
+          endsAt: true
         }
       }
     }
@@ -844,6 +853,15 @@ export const leagueService = {
     const seasons = await prisma.season.findMany({
       where: {
         leagueId
+      },
+      select: {
+        id: true,
+        year: true,
+        name: true,
+        status: true,
+        isLocked: true,
+        startsAt: true,
+        endsAt: true
       },
       orderBy: {
         year: "desc"
