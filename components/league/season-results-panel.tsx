@@ -155,7 +155,7 @@ export function SeasonResultsPanel({
       <div className="space-y-2">
         <h2 className="text-2xl font-semibold tracking-tight">Final Standings</h2>
         <p className="text-muted-foreground">
-          Manually record the 1st through 10th place finishers for {seasonLabel(activeSeason)}. These standings become the official source of truth for future draft order and long-term analytics.
+          Manually record the 1st through 10th place finishers for {seasonLabel(activeSeason)}. These standings remain the official fantasy-placement record for long-term season history.
         </p>
       </div>
 
@@ -251,8 +251,8 @@ export function SeasonResultsPanel({
                 <p>Standings ready to save: {standingsReady ? "Yes" : "No"}</p>
                 <div className="rounded-lg border border-dashed border-border p-4">
                   {results?.availability.isReadyForDraftOrderAutomation
-                    ? "Saved standings are complete and can support reverse-order draft automation later."
-                    : "Save a complete 1st-through-10th order to prepare for Prompt 9 draft-order automation."}
+                    ? "Saved standings are complete and available for downstream review workflows."
+                    : "Save a complete 1st-through-10th order to finish the season record cleanly."}
                 </div>
               </CardContent>
             </Card>
@@ -294,13 +294,13 @@ export function SeasonResultsPanel({
 
             <Card>
               <CardHeader>
-                <CardTitle>Prompt 9 Preview</CardTitle>
-                <CardDescription>Reverse of the saved final standings for future offseason draft order automation.</CardDescription>
+                <CardTitle>Offseason Recommendation Preview</CardTitle>
+                <CardDescription>Preview the current offseason recommendation output for this season context.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {recommendedReverseDraftOrder.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    Save final standings first to derive the reverse-order draft sequence.
+                    Save final standings first to generate the current preview.
                   </p>
                 ) : (
                   recommendedReverseDraftOrder.map((member, index) => (

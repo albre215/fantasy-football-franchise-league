@@ -22,7 +22,9 @@ import type { SeasonResultsResponse } from "@/types/results";
 import type {
   CreateSeasonResponse,
   LockSeasonResponse,
+  SeasonPhaseContextResponse,
   SeasonListResponse,
+  UpdateSeasonLeaguePhaseResponse,
   UpdateSeasonYearResponse,
   UnlockSeasonResponse
 } from "@/types/season";
@@ -59,6 +61,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   const [seasonOwnership, setSeasonOwnership] = useState<SeasonOwnershipResponse["ownership"] | null>(null);
   const [draftState, setDraftState] = useState<DraftState | null>(null);
   const [resultsAvailability, setResultsAvailability] = useState<SeasonResultsResponse["results"]["availability"] | null>(null);
+  const [seasonPhaseContext, setSeasonPhaseContext] = useState<SeasonPhaseContextResponse["phase"] | null>(null);
   const [ownershipError, setOwnershipError] = useState<string | null>(null);
   const [seasonYear, setSeasonYear] = useState(new Date().getFullYear().toString());
   const [seasonName, setSeasonName] = useState("");
@@ -117,6 +120,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
         setSeasonOwnership(null);
         setDraftState(null);
         setResultsAvailability(null);
+        setSeasonPhaseContext(null);
         setOwnershipError(null);
         setSelectedOwnerId("");
         setSelectedTeamId("");
@@ -168,6 +172,18 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       }
 
       try {
+        const phaseResponse = await fetch(`/api/season/${seasonId}/phase`, { cache: "no-store" });
+        const phaseData = await parseJsonResponse<SeasonPhaseContextResponse>(phaseResponse);
+        setSeasonPhaseContext(phaseData.phase);
+      } catch (error) {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Season phase load failed:", error);
+        }
+
+        setSeasonPhaseContext(null);
+      }
+
+      try {
         const resultsResponse = await fetch(`/api/season/${seasonId}/results`, { cache: "no-store" });
         const resultsData = await parseJsonResponse<SeasonResultsResponse>(resultsResponse);
         setResultsAvailability(resultsData.results.availability);
@@ -195,6 +211,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
         setSeasons([]);
         setSeasonOwnership(null);
         setDraftState(null);
+        setSeasonPhaseContext(null);
         setOwnershipError(null);
         setErrorMessage("Sign in to access the league dashboard.");
         return;
@@ -337,6 +354,36 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
       await refreshLeagueDashboard(leagueId);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to update season year.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleUpdateSeasonPhase(seasonId: string, nextPhase: string) {
+    if (!leagueId) {
+      return;
+    }
+
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch(`/api/season/${seasonId}/phase`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          nextPhase
+        })
+      });
+      const data = await parseJsonResponse<UpdateSeasonLeaguePhaseResponse>(response);
+
+      setSuccessMessage(`League phase updated to ${data.phase.season.leaguePhase}.`);
+      await refreshLeagueDashboard(leagueId);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to update season phase.");
     } finally {
       setIsSubmitting(false);
     }
@@ -588,11 +635,20 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
   const draftStatus = draftState?.draft.status ?? "No draft";
   const ownershipFinalized = isLocked && assignedTeamsCount === 30;
   const recommendedDraftOrderReady = resultsAvailability?.isReadyForDraftOrderAutomation ?? false;
+  const currentLeaguePhase = seasonPhaseContext?.season.leaguePhase ?? activeSeason?.leaguePhase ?? null;
 
   const primaryNextAction = !hasActiveSeason
     ? "Create or activate a season to begin commissioner workflows."
     : commissionerAccessMessage
     ? commissionerAccessMessage
+    : currentLeaguePhase === "IN_SEASON"
+    ? "Keep live season operations in IN_SEASON until results are ready to review."
+    : currentLeaguePhase === "POST_SEASON" && !standingsSaved
+    ? "Review and save final standings before moving deeper into offseason workflows."
+    : currentLeaguePhase === "DROP_PHASE"
+    ? "Use this phase as the keeper and release window before draft mechanics begin."
+    : currentLeaguePhase === "DRAFT_PHASE" && !draftExists
+    ? "Prepare the offseason draft workspace when the recommendation looks right."
     : !bootstrapState?.lockReadiness.hasExactlyTenMembers
     ? "Add league members until the league has all 10 owners."
     : !bootstrapState.lockReadiness.hasThirtyAssignedTeams
@@ -713,6 +769,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                   onError={(message) => setErrorMessage(message || null)}
                   onRefresh={() => refreshLeagueDashboard(leagueId)}
                   onSuccess={(message) => setSuccessMessage(message || null)}
+                  phaseContext={seasonPhaseContext}
                   seasonOwnership={seasonOwnership}
                   seasons={seasons}
                   visibleSections={["state"]}
@@ -783,12 +840,48 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
 
                       <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
                         {hasActiveSeason
-                          ? `Active season: ${activeSeason?.name ?? activeSeason?.year} - ${isLocked ? "Locked" : "Open"}`
+                          ? `Active season: ${activeSeason?.name ?? activeSeason?.year} - ${isLocked ? "Locked" : "Open"} - Phase ${currentLeaguePhase ?? "Unknown"}`
                           : "Create or activate a season first. All season-scoped workflows use the active season."}
                       </div>
                       {hasActiveSeason ? (
                         <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                           Only the commissioner can lock or unlock the season under the authenticated workflow.
+                        </div>
+                      ) : null}
+                      {hasActiveSeason && seasonPhaseContext ? (
+                        <div className="space-y-3 rounded-lg border border-border p-4 text-sm text-muted-foreground">
+                          <div>
+                            <p className="font-medium text-foreground">League Phase</p>
+                            <p>Current phase: {seasonPhaseContext.season.leaguePhase}</p>
+                          </div>
+                          <div className="space-y-2">
+                            {seasonPhaseContext.availableTransitions.length === 0 ? (
+                              <p>No forward phase transitions are available from the current phase.</p>
+                            ) : (
+                              seasonPhaseContext.availableTransitions.map((transition) => (
+                                <div className="rounded-lg border border-dashed border-border p-3" key={transition.nextPhase}>
+                                  <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div>
+                                      <p className="font-medium text-foreground">{transition.nextPhase}</p>
+                                      <p>
+                                        {transition.warnings.length > 0
+                                          ? transition.warnings.join(" ")
+                                          : "No blocking warnings are currently surfaced for this transition."}
+                                      </p>
+                                    </div>
+                                    <Button
+                                      disabled={isSubmitting || !canManageLeague}
+                                      onClick={() => void handleUpdateSeasonPhase(activeSeason!.id, transition.nextPhase)}
+                                      type="button"
+                                      variant="outline"
+                                    >
+                                      Move to {transition.nextPhase}
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
                         </div>
                       ) : null}
                     </div>
@@ -807,7 +900,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                             <div>
                               <p className="font-medium text-foreground">{season.name ?? `${season.year} Season`}</p>
                               <p className="text-sm text-muted-foreground">
-                                {season.status} - {season.isLocked ? "Locked" : "Open"}
+                                {season.status} - {season.leaguePhase} - {season.isLocked ? "Locked" : "Open"}
                               </p>
                               {editingSeasonId === season.id ? (
                                 <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1248,6 +1341,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                     onError={(message) => setErrorMessage(message || null)}
                     onRefresh={() => refreshLeagueDashboard(leagueId)}
                     onSuccess={(message) => setSuccessMessage(message || null)}
+                    phaseContext={seasonPhaseContext}
                     seasonOwnership={seasonOwnership}
                     seasons={seasons}
                     visibleSections={["standings"]}
@@ -1257,6 +1351,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                 {activeResultsDraftTab === "offseason-draft" ? (
                   <OffseasonDraftPanel
                     leagueId={leagueId}
+                    leagueCode={bootstrapState?.league.leagueCode ?? null}
                     activeSeason={activeSeason}
                     accessMessage={commissionerAccessMessage}
                     canManageDraft={canManageLeague}
@@ -1269,6 +1364,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                     onRefresh={() => refreshLeagueDashboard(leagueId)}
                     onStartSubmit={() => setIsSubmitting(true)}
                     onSuccess={(message) => setSuccessMessage(message || null)}
+                    phaseContext={seasonPhaseContext}
                     seasons={seasons}
                   />
                 ) : null}
@@ -1284,6 +1380,7 @@ export function LeagueDashboard({ leagueId }: LeagueDashboardProps) {
                     onError={(message) => setErrorMessage(message || null)}
                     onRefresh={() => refreshLeagueDashboard(leagueId)}
                     onSuccess={(message) => setSuccessMessage(message || null)}
+                    phaseContext={seasonPhaseContext}
                     seasonOwnership={seasonOwnership}
                     seasons={seasons}
                     visibleSections={["draftReset", "draftOrder"]}

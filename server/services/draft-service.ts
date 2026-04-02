@@ -2,6 +2,7 @@ import { DraftStatus, Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { resultsService } from "@/server/services/results-service";
+import { seasonPhaseService, SeasonPhaseServiceError } from "@/server/services/season-phase-service";
 import { seasonService } from "@/server/services/season-service";
 import type {
   DraftKeeperSelection,
@@ -336,6 +337,30 @@ async function getDraftByTargetSeasonOrThrow(tx: PrismaClientLike, targetSeasonI
 function assertSeasonIsEditable(isLocked: boolean) {
   if (isLocked) {
     throw new DraftServiceError("Target season is locked. Unlock it before changing the offseason draft.", 409);
+  }
+}
+
+async function assertDraftPreparationPhaseOrThrow(targetSeasonId: string) {
+  try {
+    await seasonPhaseService.assertPhaseAllowsDraftPreparation(targetSeasonId);
+  } catch (error) {
+    if (error instanceof SeasonPhaseServiceError) {
+      throw new DraftServiceError(error.message, error.statusCode);
+    }
+
+    throw error;
+  }
+}
+
+async function assertDraftExecutionPhaseOrThrow(targetSeasonId: string) {
+  try {
+    await seasonPhaseService.assertPhaseAllowsDraftExecution(targetSeasonId);
+  } catch (error) {
+    if (error instanceof SeasonPhaseServiceError) {
+      throw new DraftServiceError(error.message, error.statusCode);
+    }
+
+    throw error;
   }
 }
 
@@ -763,6 +788,8 @@ export const draftService = {
   async initializeDraft(input: InitializeDraftInput) {
     const targetSeasonId = input.targetSeasonId.trim();
 
+    await assertDraftPreparationPhaseOrThrow(targetSeasonId);
+
     return prisma.$transaction(async (tx) => {
       const { targetSeason, sourceSeason, orderLeagueMemberIds } = await validateDraftInitialization(tx, input);
       const commissioner = await tx.leagueMember.findUnique({
@@ -808,6 +835,8 @@ export const draftService = {
     if (!targetSeasonId) {
       throw new DraftServiceError("targetSeasonId is required.", 400);
     }
+
+    await assertDraftPreparationPhaseOrThrow(targetSeasonId);
 
     return prisma.$transaction(async (tx) => {
       await seasonService.assertCommissionerAccess(targetSeasonId, input.actingUserId);
@@ -887,6 +916,8 @@ export const draftService = {
       throw new DraftServiceError("targetSeasonId is required.", 400);
     }
 
+    await assertDraftPreparationPhaseOrThrow(targetSeasonId);
+
     return prisma.$transaction(async (tx) => {
       await seasonService.assertCommissionerAccess(targetSeasonId, input.actingUserId);
       const draft = await getDraftByTargetSeasonOrThrow(tx, targetSeasonId);
@@ -927,6 +958,27 @@ export const draftService = {
   },
 
   async saveKeepers(input: SaveKeepersInput) {
+    const draftId = input.draftId.trim();
+
+    if (!draftId) {
+      throw new DraftServiceError("draftId is required.", 400);
+    }
+
+    const draft = await prisma.draft.findUnique({
+      where: {
+        id: draftId
+      },
+      select: {
+        targetSeasonId: true
+      }
+    });
+
+    if (!draft) {
+      throw new DraftServiceError("Draft not found.", 404);
+    }
+
+    await assertDraftPreparationPhaseOrThrow(draft.targetSeasonId);
+
     return prisma.$transaction(async (tx) => {
       const draftRecord = await assertCommissionerAccessForDraft(tx, input.draftId, input.actingUserId);
       const { draft, leagueMemberId, nflTeamIds } = await validateKeeperSave(tx, input);
@@ -963,6 +1015,21 @@ export const draftService = {
       throw new DraftServiceError("draftId is required.", 400);
     }
 
+    const draft = await prisma.draft.findUnique({
+      where: {
+        id: draftId
+      },
+      select: {
+        targetSeasonId: true
+      }
+    });
+
+    if (!draft) {
+      throw new DraftServiceError("Draft not found.", 404);
+    }
+
+    await assertDraftExecutionPhaseOrThrow(draft.targetSeasonId);
+
     return prisma.$transaction(async (tx) => {
       await assertCommissionerAccessForDraft(tx, draftId, input.actingUserId);
       await validateDraftStart(tx, draftId);
@@ -987,6 +1054,21 @@ export const draftService = {
     if (!draftId) {
       throw new DraftServiceError("draftId is required.", 400);
     }
+
+    const draft = await prisma.draft.findUnique({
+      where: {
+        id: draftId
+      },
+      select: {
+        targetSeasonId: true
+      }
+    });
+
+    if (!draft) {
+      throw new DraftServiceError("Draft not found.", 404);
+    }
+
+    await assertDraftExecutionPhaseOrThrow(draft.targetSeasonId);
 
     return prisma.$transaction(async (tx) => {
       const draft = await assertCommissionerAccessForDraft(tx, draftId, input.actingUserId);
@@ -1023,6 +1105,21 @@ export const draftService = {
       throw new DraftServiceError("draftId is required.", 400);
     }
 
+    const draft = await prisma.draft.findUnique({
+      where: {
+        id: draftId
+      },
+      select: {
+        targetSeasonId: true
+      }
+    });
+
+    if (!draft) {
+      throw new DraftServiceError("Draft not found.", 404);
+    }
+
+    await assertDraftExecutionPhaseOrThrow(draft.targetSeasonId);
+
     return prisma.$transaction(async (tx) => {
       const draft = await assertCommissionerAccessForDraft(tx, draftId, input.actingUserId);
       const current = await tx.draft.findUniqueOrThrow({
@@ -1052,6 +1149,27 @@ export const draftService = {
   },
 
   async makeDraftPick(input: MakeDraftPickInput) {
+    const draftId = input.draftId.trim();
+
+    if (!draftId) {
+      throw new DraftServiceError("draftId is required.", 400);
+    }
+
+    const draft = await prisma.draft.findUnique({
+      where: {
+        id: draftId
+      },
+      select: {
+        targetSeasonId: true
+      }
+    });
+
+    if (!draft) {
+      throw new DraftServiceError("Draft not found.", 404);
+    }
+
+    await assertDraftExecutionPhaseOrThrow(draft.targetSeasonId);
+
     return prisma.$transaction(async (tx) => {
       const draftRecord = await assertCommissionerAccessForDraft(tx, input.draftId, input.actingUserId);
       const { draft, currentPick } = await validateDraftPick(tx, input);
@@ -1087,6 +1205,27 @@ export const draftService = {
   },
 
   async finalizeDraft(input: FinalizeDraftInput) {
+    const draftId = input.draftId.trim();
+
+    if (!draftId) {
+      throw new DraftServiceError("draftId is required.", 400);
+    }
+
+    const draft = await prisma.draft.findUnique({
+      where: {
+        id: draftId
+      },
+      select: {
+        targetSeasonId: true
+      }
+    });
+
+    if (!draft) {
+      throw new DraftServiceError("Draft not found.", 404);
+    }
+
+    await assertDraftExecutionPhaseOrThrow(draft.targetSeasonId);
+
     return prisma.$transaction(async (tx) => {
       const draftRecord = await assertCommissionerAccessForDraft(tx, input.draftId, input.actingUserId);
       const { draft } = await validateDraftFinalization(tx, input.draftId);

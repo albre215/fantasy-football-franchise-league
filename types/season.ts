@@ -1,9 +1,20 @@
+export type LeaguePhase = "IN_SEASON" | "POST_SEASON" | "DROP_PHASE" | "DRAFT_PHASE";
+
+export type SeasonActionKey =
+  | "REVIEW_RESULTS"
+  | "REVIEW_OFFSEASON_RECOMMENDATION"
+  | "ENTER_DROP_PHASE"
+  | "PREPARE_DRAFT"
+  | "EDIT_DRAFT"
+  | "RUN_DRAFT";
+
 export interface SeasonSummary {
   id: string;
   leagueId: string;
   year: number;
   name: string | null;
   status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
+  leaguePhase: LeaguePhase;
   isLocked: boolean;
   startsAt: string | null;
   endsAt: string | null;
@@ -50,6 +61,47 @@ export interface UpdateSeasonYearInput {
   actingUserId: string;
 }
 
+export interface UpdateSeasonLeaguePhaseInput {
+  seasonId: string;
+  nextPhase: LeaguePhase;
+  actingUserId: string;
+}
+
+export interface SeasonPhaseContext {
+  season: {
+    id: string;
+    leagueId: string;
+    year: number;
+    name: string | null;
+    status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
+    leaguePhase: LeaguePhase;
+    isLocked: boolean;
+  };
+  allowedActions: {
+    canReviewResults: boolean;
+    canReviewOffseasonRecommendation: boolean;
+    canEnterDropPhase: boolean;
+    canPrepareDraft: boolean;
+    canEditDraft: boolean;
+    canRunDraft: boolean;
+  };
+  availableTransitions: Array<{
+    nextPhase: LeaguePhase;
+    warnings: string[];
+  }>;
+  warnings: string[];
+  readiness: {
+    hasPreviousSeason: boolean;
+    hasFinalStandings: boolean;
+    hasRecommendedDraftOrder: boolean;
+    hasCompleteTargetMapping: boolean;
+    hasDraftWorkspace: boolean;
+    draftStatus: "PLANNING" | "ACTIVE" | "PAUSED" | "COMPLETED" | "CANCELLED" | null;
+    participantCount: number;
+    mappedTargetMemberCount: number;
+  };
+}
+
 export interface CreateSeasonResponse {
   season: SeasonSummary;
 }
@@ -85,5 +137,14 @@ export interface UnlockSeasonResponse {
 }
 
 export interface UpdateSeasonYearResponse {
+  season: SeasonSummary;
+}
+
+export interface SeasonPhaseContextResponse {
+  phase: SeasonPhaseContext;
+}
+
+export interface UpdateSeasonLeaguePhaseResponse {
+  phase: SeasonPhaseContext;
   season: SeasonSummary;
 }

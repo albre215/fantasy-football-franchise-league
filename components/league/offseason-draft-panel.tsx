@@ -16,14 +16,16 @@ import type {
   StartDraftResponse
 } from "@/types/draft";
 import type { LeagueBootstrapMember } from "@/types/league";
-import type { SeasonSummary } from "@/types/season";
+import type { SeasonPhaseContext, SeasonSummary } from "@/types/season";
 
 interface OffseasonDraftPanelProps {
   leagueId: string;
+  leagueCode?: string | null;
   activeSeason: SeasonSummary | null;
   seasons: SeasonSummary[];
   members: LeagueBootstrapMember[];
   draftState: DraftState | null;
+  phaseContext: SeasonPhaseContext | null;
   isDraftStateLoading: boolean;
   isSubmitting: boolean;
   canManageDraft: boolean;
@@ -156,10 +158,12 @@ async function preserveScrollPosition<T>(run: () => Promise<T>, anchorId?: strin
 
 export function OffseasonDraftPanel({
   leagueId,
+  leagueCode,
   activeSeason,
   seasons,
   members,
   draftState,
+  phaseContext,
   isDraftStateLoading,
   isSubmitting,
   canManageDraft,
@@ -328,6 +332,7 @@ export function OffseasonDraftPanel({
       draftState ||
       isDraftStateLoading ||
       !canManageDraft ||
+      !phaseContext?.allowedActions.canPrepareDraft ||
       !setupSourceSeasonId ||
       !recommendedOrder ||
       isLoadingRecommendedOrder ||
@@ -375,6 +380,7 @@ export function OffseasonDraftPanel({
     onError,
     onRefresh,
     onSuccess,
+    phaseContext,
     recommendedOrder,
     setupSourceSeasonId
   ]);
@@ -400,6 +406,7 @@ export function OffseasonDraftPanel({
   const showPlanningDraftOrder = Boolean(
     draftState && (draftState.draft.status !== "PLANNING" || draftState.keeperProgress.isComplete)
   );
+  const phaseBlocksDraftWork = Boolean(phaseContext && !phaseContext.allowedActions.canEditDraft);
 
   function toggleKeeperSelection(leagueMemberId: string, nflTeamId: string) {
     setKeeperSelectionsByOwner((current) => {
@@ -628,6 +635,13 @@ export function OffseasonDraftPanel({
                       {accessMessage ??
                         "Only the league commissioner can prepare keeper selections and manage the offseason draft."}
                     </p>
+                  ) : phaseContext && !phaseContext.allowedActions.canPrepareDraft ? (
+                    <>
+                      <p className="font-medium text-foreground">Draft phase is not active yet</p>
+                      <p>
+                        Move this season into DRAFT_PHASE before preparing the offseason draft workspace.
+                      </p>
+                    </>
                   ) : isPreparingDraftWorkspace ? (
                     <>
                       <p className="font-medium text-foreground">Preparing keeper workspace</p>
@@ -663,8 +677,9 @@ export function OffseasonDraftPanel({
             </div>
 
             <div className="space-y-4 rounded-lg border border-border p-4 text-sm text-muted-foreground">
-              <p>League ID: {leagueId}</p>
+              <p>League Code: {leagueCode ?? leagueId}</p>
               <p>Target season: {formatSeasonLabel(activeSeason)}</p>
+              <p>League phase: {phaseContext?.season.leaguePhase ?? "Unknown"}</p>
               <p>Owners in draft: {members.length} / 10</p>
               <p>Expected keepers: 20 total</p>
               <p>Expected draft pool: 12 teams</p>
@@ -672,7 +687,13 @@ export function OffseasonDraftPanel({
               <p>Commissioner access: {canManageDraft ? "Pass" : "Read-only"}</p>
               <p>Previous season found: {previousSeason ? "Pass" : "Fail"}</p>
               <p>Saved final standings found: {recommendedOrder ? "Pass" : "Fail"}</p>
+              <p>Draft phase open: {phaseContext?.allowedActions.canEditDraft ? "Pass" : "Fail"}</p>
               <p>Keeper workspace prepared: {draftState ? "Yes" : isPreparingDraftWorkspace ? "In progress" : "No"}</p>
+              {phaseContext && !phaseContext.allowedActions.canEditDraft ? (
+                <div className="rounded-lg border border-dashed border-border p-3">
+                  Draft setup and execution are paused until the season reaches DRAFT_PHASE.
+                </div>
+              ) : null}
               {!recommendedOrder && (
                 <div className="rounded-lg border border-dashed border-border p-3">
                   {previousSeason
@@ -740,6 +761,14 @@ export function OffseasonDraftPanel({
                         </p>
                       </div>
                     ) : null}
+                    {phaseBlocksDraftWork ? (
+                      <div className="rounded-lg border border-dashed border-border bg-secondary/30 p-4 text-sm text-muted-foreground">
+                        <p className="font-medium text-foreground">Draft actions are phase-gated.</p>
+                        <p>
+                          This season is currently in {phaseContext?.season.leaguePhase}. Move it into DRAFT_PHASE before editing keepers or running the draft.
+                        </p>
+                      </div>
+                    ) : null}
                     {draftState.keeperEditing.isLocked ? (
                       <div className="rounded-lg border border-dashed border-border bg-secondary/30 p-4 text-sm text-muted-foreground">
                         <p className="font-medium text-foreground">Keeper selections are locked.</p>
@@ -755,7 +784,7 @@ export function OffseasonDraftPanel({
                       const hasUnsavedChanges = Boolean(dirtyKeeperOwners[member.leagueMemberId]);
                       const isOwnerSaving = Boolean(savingKeeperOwners[member.leagueMemberId]);
                       const feedback = keeperFeedbackByOwner[member.leagueMemberId];
-                      const canEdit = canManageDraft && draftState.keeperEditing.canEdit;
+                      const canEdit = canManageDraft && draftState.keeperEditing.canEdit && !phaseBlocksDraftWork;
                       const canSaveKeepers = canEdit && !isOwnerSaving && selectedKeepers.length === 2 && hasUnsavedChanges;
                       const selectedCountLabel = `${selectedKeepers.length}/2 selected`;
 
@@ -860,9 +889,9 @@ export function OffseasonDraftPanel({
                   <Card>
                     <CardHeader>
                       <CardTitle>{draftState.draft.status === "PLANNING" ? "Generated Draft Order" : "Draft Board"}</CardTitle>
-                      <CardDescription>
+                    <CardDescription>
                         {draftState.draft.status === "PLANNING"
-                          ? "Reverse standings order for the upcoming offseason draft."
+                          ? "Current recommended order for the upcoming offseason draft."
                           : "Follow the full order and current pick."}
                       </CardDescription>
                     </CardHeader>
@@ -953,7 +982,7 @@ export function OffseasonDraftPanel({
                         </select>
                         <Button
                           className="w-full"
-                          disabled={isSubmitting || !currentPickTeamId}
+                          disabled={isSubmitting || !currentPickTeamId || phaseBlocksDraftWork}
                           onClick={() => void handleMakePick()}
                           type="button"
                         >
@@ -964,7 +993,7 @@ export function OffseasonDraftPanel({
                     <div className="flex flex-wrap gap-3">
                       {draftState.draft.status === "PLANNING" && (
                         <Button
-                          disabled={isSubmitting || !canStartDraftFromUi || !canManageDraft}
+                          disabled={isSubmitting || !canStartDraftFromUi || !canManageDraft || phaseBlocksDraftWork}
                           onClick={() => void handleDraftAction("start", "Draft started.")}
                           type="button"
                           variant={canStartDraftFromUi && canManageDraft ? "default" : "secondary"}
@@ -974,7 +1003,7 @@ export function OffseasonDraftPanel({
                       )}
                       {draftState.draft.status === "ACTIVE" && (
                         <Button
-                          disabled={isSubmitting || !canManageDraft}
+                          disabled={isSubmitting || !canManageDraft || phaseBlocksDraftWork}
                           onClick={() => void handleDraftAction("pause", "Draft paused.")}
                           type="button"
                           variant="outline"
@@ -984,7 +1013,7 @@ export function OffseasonDraftPanel({
                       )}
                       {draftState.draft.status === "PAUSED" && (
                         <Button
-                          disabled={isSubmitting || !canManageDraft}
+                          disabled={isSubmitting || !canManageDraft || phaseBlocksDraftWork}
                           onClick={() => void handleDraftAction("resume", "Draft resumed.")}
                           type="button"
                           variant="outline"
@@ -993,7 +1022,7 @@ export function OffseasonDraftPanel({
                         </Button>
                       )}
                       <Button
-                        disabled={isSubmitting || !draftState.canFinalize || !canManageDraft}
+                        disabled={isSubmitting || !draftState.canFinalize || !canManageDraft || phaseBlocksDraftWork}
                         onClick={() => void handleDraftAction("finalize", "Draft finalized into season ownership.")}
                         type="button"
                         variant="secondary"
@@ -1007,6 +1036,8 @@ export function OffseasonDraftPanel({
                           "You can review this offseason draft, but only the league commissioner can change keeper selections or run draft actions."
                         : draftState.draft.status === "COMPLETED"
                         ? "Draft completed. Team ownership for the target season has been created."
+                        : phaseBlocksDraftWork
+                        ? `Draft actions are blocked until the season reaches DRAFT_PHASE. Current phase: ${phaseContext?.season.leaguePhase}.`
                         : draftState.draft.status === "PLANNING" && hasUnsavedKeeperChanges
                         ? "Save all keeper changes before starting the draft. Unsaved keeper edits are still on the screen."
                         : draftState.draft.status === "PLANNING" && isAnyKeeperSaveInFlight

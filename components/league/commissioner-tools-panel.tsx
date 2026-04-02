@@ -16,6 +16,7 @@ import type {
   SeasonResultsResponse
 } from "@/types/results";
 import type { SeasonSummary } from "@/types/season";
+import type { SeasonPhaseContext } from "@/types/season";
 import type {
   AssignTeamResponse,
   RemoveTeamOwnershipResponse,
@@ -28,6 +29,7 @@ interface CommissionerToolsPanelProps {
   members: LeagueBootstrapMember[];
   seasonOwnership: SeasonOwnershipSummary | null;
   draftState: DraftState | null;
+  phaseContext: SeasonPhaseContext | null;
   canManageLeague: boolean;
   accessMessage?: string | null;
   onError: (message: string) => void;
@@ -85,6 +87,7 @@ export function CommissionerToolsPanel({
   members,
   seasonOwnership,
   draftState,
+  phaseContext,
   canManageLeague,
   accessMessage,
   onError,
@@ -442,6 +445,7 @@ export function CommissionerToolsPanel({
           <CardDescription>Single source of truth for the current operational state of the active season.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
+          <p>League phase: {phaseContext?.season.leaguePhase ?? "Unknown"}</p>
           <p>Assigned teams: {assignedTeamCount} / 30</p>
           <p>Final standings saved: {results?.availability.hasFinalStandings ? "Yes" : "No"}</p>
           <p>Draft exists: {draftState ? "Yes" : "No"}</p>
@@ -449,6 +453,11 @@ export function CommissionerToolsPanel({
           <p>Target season locked: {activeSeason?.isLocked ? "Yes" : "No"}</p>
           <p>Ownership finalized: {ownershipFinalized ? "Yes" : "No"}</p>
           <p>Recommended draft order ready: {results?.availability.isReadyForDraftOrderAutomation ? "Yes" : "No"}</p>
+          {phaseContext?.warnings.length ? (
+            <div className="md:col-span-2 rounded-lg border border-dashed border-border p-3">
+              {phaseContext.warnings.join(" ")}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
       ) : null}
@@ -568,10 +577,10 @@ export function CommissionerToolsPanel({
         {showDraftOrderSection ? (
         <Card>
           <CardHeader>
-            <CardTitle>Draft Order Override</CardTitle>
-            <CardDescription>
-              Compare the standings-derived order with the currently saved planning draft order and save an explicit override.
-            </CardDescription>
+              <CardTitle>Draft Order Override</CardTitle>
+              <CardDescription>
+              Compare the current offseason recommendation with the saved planning draft order and save an explicit override.
+              </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {!activeSeason ? (
@@ -579,7 +588,11 @@ export function CommissionerToolsPanel({
             ) : recommendedOrderError ? (
               <p className="text-sm text-destructive">{recommendedOrderError}</p>
             ) : isLoadingRecommendation ? (
-              <p className="text-sm text-muted-foreground">Loading standings-derived draft order...</p>
+              <p className="text-sm text-muted-foreground">Loading offseason recommendation...</p>
+            ) : phaseContext && !phaseContext.allowedActions.canEditDraft ? (
+              <p className="text-sm text-muted-foreground">
+                Draft order overrides are only available during DRAFT_PHASE. Current phase: {phaseContext.season.leaguePhase}.
+              </p>
             ) : !draftState ? (
               <p className="text-sm text-muted-foreground">Prepare the offseason draft workspace before overriding the order.</p>
             ) : draftState.draft.status !== "PLANNING" ? (
@@ -590,7 +603,7 @@ export function CommissionerToolsPanel({
               <>
                 <div className="grid gap-6 lg:grid-cols-2">
                   <div className="space-y-2">
-                    <p className="text-sm font-medium">Standings-based order</p>
+                    <p className="text-sm font-medium">Recommended order</p>
                     {recommendedDraftOrderDisplay.map((entry) => (
                       <div className="rounded-lg border border-border p-3 text-sm" key={`recommended-${entry.leagueMemberId}`}>
                         Pick {entry.draftSlot}: {entry.displayName}
@@ -627,14 +640,15 @@ export function CommissionerToolsPanel({
 
                 <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                   {overrideMatchesRecommended
-                    ? "The saved planning draft order currently matches the standings-derived recommendation."
-                    : "The saved planning draft order has been manually adjusted from the standings-derived recommendation."}
+                    ? "The saved planning draft order currently matches the current recommendation."
+                    : "The saved planning draft order has been manually adjusted from the current recommendation."}
                 </div>
 
                 <Button
                   disabled={
                     isMutating ||
                     !canManageLeague ||
+                    Boolean(phaseContext && !phaseContext.allowedActions.canEditDraft) ||
                     draftOrderLeagueMemberIds.length !== 10 ||
                     new Set(draftOrderLeagueMemberIds.filter(Boolean)).size !== 10 ||
                     draftOrderLeagueMemberIds.some((id) => !id)
