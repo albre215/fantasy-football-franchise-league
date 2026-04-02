@@ -1,9 +1,14 @@
+import type { DraftStatus } from "@/types/draft";
+
+export type LeaguePhase = "IN_SEASON" | "POST_SEASON" | "DROP_PHASE" | "DRAFT_PHASE";
+
 export interface SeasonSummary {
   id: string;
   leagueId: string;
   year: number;
   name: string | null;
   status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
+  leaguePhase: LeaguePhase;
   isLocked: boolean;
   startsAt: string | null;
   endsAt: string | null;
@@ -56,6 +61,12 @@ export interface UpdateSeasonYearInput {
   actingUserId: string;
 }
 
+export interface UpdateSeasonLeaguePhaseInput {
+  seasonId: string;
+  actingUserId: string;
+  nextPhase: LeaguePhase;
+}
+
 export interface CreateSeasonResponse {
   season: SeasonSummary;
 }
@@ -94,4 +105,47 @@ export interface UnlockSeasonResponse {
 export interface UpdateSeasonYearResponse {
   season: SeasonSummary;
   nflImport: SeasonNflSyncStatus | null;
+}
+
+export interface SeasonPhaseContext {
+  season: {
+    id: string;
+    leagueId: string;
+    year: number;
+    name: string | null;
+    status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
+    leaguePhase: LeaguePhase;
+  };
+  allowedActions: {
+    canReviewResults: boolean;
+    canReviewOffseasonRecommendation: boolean;
+    canPrepareDraft: boolean;
+    canEditDraft: boolean;
+    canRunDraft: boolean;
+    canEnterDropPhase: boolean;
+  };
+  readiness: {
+    hasPreviousSeason: boolean;
+    hasFinalStandings: boolean;
+    hasFantasyPayoutsPublished: boolean;
+    draftOrderReady: boolean;
+    allTargetMappingsComplete: boolean;
+    ledgerCoverageStatus: "NONE" | "PARTIAL" | "FULL";
+    hasDraftWorkspace: boolean;
+    draftStatus: DraftStatus | null;
+  };
+  availableTransitions: Array<{
+    phase: LeaguePhase;
+    isAvailable: boolean;
+    warnings: string[];
+  }>;
+  warnings: string[];
+}
+
+export interface SeasonPhaseContextResponse {
+  phase: SeasonPhaseContext;
+}
+
+export interface UpdateSeasonLeaguePhaseResponse {
+  phase: SeasonPhaseContext;
 }

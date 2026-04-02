@@ -17,7 +17,7 @@ import type {
   OverwriteManualSeasonStandingsResponse,
   SeasonResultsResponse
 } from "@/types/results";
-import type { SeasonSummary } from "@/types/season";
+import type { SeasonPhaseContext, SeasonSummary } from "@/types/season";
 import type {
   AssignTeamResponse,
   RemoveTeamOwnershipResponse,
@@ -30,6 +30,7 @@ interface CommissionerToolsPanelProps {
   members: LeagueBootstrapMember[];
   seasonOwnership: SeasonOwnershipSummary | null;
   draftState: DraftState | null;
+  phaseContext?: SeasonPhaseContext | null;
   canManageLeague: boolean;
   accessMessage?: string | null;
   onError: (message: string) => void;
@@ -97,6 +98,7 @@ export function CommissionerToolsPanel({
   members,
   seasonOwnership,
   draftState,
+  phaseContext = null,
   canManageLeague,
   accessMessage,
   onError,
@@ -165,6 +167,7 @@ export function CommissionerToolsPanel({
   const showDraftResetSection = visibleSectionSet.has("draftReset");
   const showDraftOrderSection = visibleSectionSet.has("draftOrder");
   const showOwnershipSection = visibleSectionSet.has("ownership");
+  const canEditDraftFromPhase = phaseContext?.allowedActions.canEditDraft ?? false;
 
   useEffect(() => {
     if (!activeSeason) {
@@ -468,6 +471,7 @@ export function CommissionerToolsPanel({
         </CardHeader>
         <CardContent className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
           <p>Assigned teams: {assignedTeamCount} / 30</p>
+          <p>League phase: {phaseContext?.season.leaguePhase ?? activeSeason?.leaguePhase ?? "Unknown"}</p>
           <p>Final standings saved: {results?.availability.hasFinalStandings ? "Yes" : "No"}</p>
           <p>Fantasy payouts published: {results?.availability.hasFantasyPayoutsPublished ? "Yes" : "No"}</p>
           <p>Draft exists: {draftState ? "Yes" : "No"}</p>
@@ -480,6 +484,13 @@ export function CommissionerToolsPanel({
             Owners with ledger entries: {results?.availability.draftOrderReadiness.ownersWithLedgerEntries ?? 0} /{" "}
             {results?.eligibleMembers.length ?? 0}
           </p>
+          {phaseContext?.warnings.length ? (
+            <div className="md:col-span-2 rounded-lg border border-dashed border-border p-3">
+              {phaseContext.warnings.slice(0, 3).map((warning) => (
+                <p key={warning}>{warning}</p>
+              ))}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
       ) : null}
@@ -600,6 +611,11 @@ export function CommissionerToolsPanel({
               <p>Activate a season before using draft reset tools.</p>
             ) : !draftState ? (
               <p>No offseason draft exists for the active season.</p>
+            ) : !canEditDraftFromPhase ? (
+              <p>
+                Draft reset is only available during DRAFT_PHASE. Current phase:{" "}
+                {phaseContext?.season.leaguePhase ?? activeSeason.leaguePhase}.
+              </p>
             ) : (
               <>
                 <p>Draft status: {draftState.draft.status}</p>
@@ -609,7 +625,7 @@ export function CommissionerToolsPanel({
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <Button
-                    disabled={isMutating || !canManageLeague}
+                    disabled={isMutating || !canManageLeague || !canEditDraftFromPhase}
                     onClick={() => void handleResetDraft(false)}
                     type="button"
                     variant="outline"
@@ -617,7 +633,7 @@ export function CommissionerToolsPanel({
                     Reset Draft
                   </Button>
                   <Button
-                    disabled={isMutating || !canManageLeague}
+                    disabled={isMutating || !canManageLeague || !canEditDraftFromPhase}
                     onClick={() => void handleResetDraft(true)}
                     type="button"
                     variant="secondary"
@@ -652,6 +668,11 @@ export function CommissionerToolsPanel({
               <p className="text-sm text-muted-foreground">Loading ledger-derived draft order...</p>
             ) : !draftState ? (
               <p className="text-sm text-muted-foreground">Prepare the offseason draft workspace before overriding the order.</p>
+            ) : !canEditDraftFromPhase ? (
+              <p className="text-sm text-muted-foreground">
+                Draft order overrides are only available during DRAFT_PHASE. Current phase:{" "}
+                {phaseContext?.season.leaguePhase ?? activeSeason.leaguePhase}.
+              </p>
             ) : draftState.draft.status !== "PLANNING" ? (
               <p className="text-sm text-muted-foreground">
                 Draft order overrides are only available while the offseason draft is still planning.
@@ -722,6 +743,7 @@ export function CommissionerToolsPanel({
                   disabled={
                     isMutating ||
                     !canManageLeague ||
+                    !canEditDraftFromPhase ||
                     draftOrderLeagueMemberIds.length !== 10 ||
                     new Set(draftOrderLeagueMemberIds.filter(Boolean)).size !== 10 ||
                     draftOrderLeagueMemberIds.some((id) => !id)

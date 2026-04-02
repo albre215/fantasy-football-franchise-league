@@ -2,6 +2,7 @@ import { DraftStatus, Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { resultsService } from "@/server/services/results-service";
+import { seasonPhaseService, SeasonPhaseServiceError } from "@/server/services/season-phase-service";
 import { seasonService } from "@/server/services/season-service";
 import type {
   DraftKeeperSelection,
@@ -336,6 +337,30 @@ async function getDraftByTargetSeasonOrThrow(tx: PrismaClientLike, targetSeasonI
 function assertSeasonIsEditable(isLocked: boolean) {
   if (isLocked) {
     throw new DraftServiceError("Target season is locked. Unlock it before changing the offseason draft.", 409);
+  }
+}
+
+async function assertDraftPreparationPhase(seasonId: string) {
+  try {
+    await seasonPhaseService.assertPhaseAllowsDraftPreparation(seasonId);
+  } catch (error) {
+    if (error instanceof SeasonPhaseServiceError) {
+      throw new DraftServiceError(error.message, error.statusCode);
+    }
+
+    throw error;
+  }
+}
+
+async function assertDraftExecutionPhase(seasonId: string) {
+  try {
+    await seasonPhaseService.assertPhaseAllowsDraftExecution(seasonId);
+  } catch (error) {
+    if (error instanceof SeasonPhaseServiceError) {
+      throw new DraftServiceError(error.message, error.statusCode);
+    }
+
+    throw error;
   }
 }
 
@@ -773,6 +798,8 @@ export const draftService = {
   async initializeDraft(input: InitializeDraftInput) {
     const targetSeasonId = input.targetSeasonId.trim();
 
+    await assertDraftPreparationPhase(targetSeasonId);
+
     return prisma.$transaction(async (tx) => {
       const { targetSeason, sourceSeason, orderLeagueMemberIds } = await validateDraftInitialization(tx, input);
       const commissioner = await tx.leagueMember.findUnique({
@@ -821,6 +848,7 @@ export const draftService = {
 
     return prisma.$transaction(async (tx) => {
       await seasonService.assertCommissionerAccess(targetSeasonId, input.actingUserId);
+      await assertDraftPreparationPhase(targetSeasonId);
       const draft = await getDraftByTargetSeasonOrThrow(tx, targetSeasonId);
 
       if (draft.status !== "PLANNING") {
@@ -899,6 +927,7 @@ export const draftService = {
 
     return prisma.$transaction(async (tx) => {
       await seasonService.assertCommissionerAccess(targetSeasonId, input.actingUserId);
+      await assertDraftPreparationPhase(targetSeasonId);
       const draft = await getDraftByTargetSeasonOrThrow(tx, targetSeasonId);
 
       const targetSeasonOwnershipCount = draft.targetSeason.teamOwnerships.length;
@@ -939,6 +968,7 @@ export const draftService = {
   async saveKeepers(input: SaveKeepersInput) {
     return prisma.$transaction(async (tx) => {
       const draftRecord = await assertCommissionerAccessForDraft(tx, input.draftId, input.actingUserId);
+      await assertDraftPreparationPhase(draftRecord.targetSeasonId);
       const { draft, leagueMemberId, nflTeamIds } = await validateKeeperSave(tx, input);
 
       if (draftRecord.id !== draft.id) {
@@ -974,7 +1004,8 @@ export const draftService = {
     }
 
     return prisma.$transaction(async (tx) => {
-      await assertCommissionerAccessForDraft(tx, draftId, input.actingUserId);
+      const draftContext = await assertCommissionerAccessForDraft(tx, draftId, input.actingUserId);
+      await assertDraftExecutionPhase(draftContext.targetSeasonId);
       await validateDraftStart(tx, draftId);
 
       await tx.draft.update({
@@ -1000,6 +1031,7 @@ export const draftService = {
 
     return prisma.$transaction(async (tx) => {
       const draft = await assertCommissionerAccessForDraft(tx, draftId, input.actingUserId);
+      await assertDraftExecutionPhase(draft.targetSeasonId);
       const current = await tx.draft.findUniqueOrThrow({
         where: {
           id: draft.id
@@ -1035,6 +1067,7 @@ export const draftService = {
 
     return prisma.$transaction(async (tx) => {
       const draft = await assertCommissionerAccessForDraft(tx, draftId, input.actingUserId);
+      await assertDraftExecutionPhase(draft.targetSeasonId);
       const current = await tx.draft.findUniqueOrThrow({
         where: {
           id: draft.id
@@ -1064,6 +1097,7 @@ export const draftService = {
   async makeDraftPick(input: MakeDraftPickInput) {
     return prisma.$transaction(async (tx) => {
       const draftRecord = await assertCommissionerAccessForDraft(tx, input.draftId, input.actingUserId);
+      await assertDraftExecutionPhase(draftRecord.targetSeasonId);
       const { draft, currentPick } = await validateDraftPick(tx, input);
 
       if (draftRecord.id !== draft.id) {
@@ -1099,6 +1133,7 @@ export const draftService = {
   async finalizeDraft(input: FinalizeDraftInput) {
     return prisma.$transaction(async (tx) => {
       const draftRecord = await assertCommissionerAccessForDraft(tx, input.draftId, input.actingUserId);
+      await assertDraftExecutionPhase(draftRecord.targetSeasonId);
       const { draft } = await validateDraftFinalization(tx, input.draftId);
 
       if (draftRecord.id !== draft.id) {

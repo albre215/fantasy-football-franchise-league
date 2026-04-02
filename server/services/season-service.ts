@@ -33,6 +33,7 @@ function mapSeason(season: {
   year: number;
   name: string | null;
   status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
+  leaguePhase: "IN_SEASON" | "POST_SEASON" | "DROP_PHASE" | "DRAFT_PHASE";
   isLocked: boolean;
   startsAt: Date | null;
   endsAt: Date | null;
@@ -44,6 +45,7 @@ function mapSeason(season: {
     year: season.year,
     name: season.name,
     status: season.status,
+    leaguePhase: season.leaguePhase,
     isLocked: season.isLocked,
     startsAt: season.startsAt?.toISOString() ?? null,
     endsAt: season.endsAt?.toISOString() ?? null,
@@ -107,6 +109,7 @@ async function getSeasonOrThrow(tx: Prisma.TransactionClient | typeof prisma, se
       year: true,
       name: true,
       status: true,
+      leaguePhase: true,
       isLocked: true,
       startsAt: true,
       endsAt: true,
@@ -279,7 +282,8 @@ export const seasonService = {
           leagueId,
           year: input.year,
           name,
-          status: "PLANNING"
+          status: "PLANNING",
+          leaguePhase: "IN_SEASON"
         }
       });
 
@@ -312,6 +316,7 @@ export const seasonService = {
         year: true,
         name: true,
         status: true,
+        leaguePhase: true,
         isLocked: true,
         startsAt: true,
         endsAt: true,
@@ -343,6 +348,7 @@ export const seasonService = {
         year: true,
         name: true,
         status: true,
+        leaguePhase: true,
         isLocked: true,
         startsAt: true,
         endsAt: true,
@@ -391,7 +397,8 @@ export const seasonService = {
           id: seasonId
         },
         data: {
-          status: "ACTIVE"
+          status: "ACTIVE",
+          leaguePhase: "IN_SEASON"
         }
       });
 

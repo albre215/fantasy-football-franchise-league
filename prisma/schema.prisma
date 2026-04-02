@@ -19,6 +19,13 @@ enum SeasonStatus {
   ARCHIVED
 }
 
+enum LeaguePhase {
+  IN_SEASON
+  POST_SEASON
+  DROP_PHASE
+  DRAFT_PHASE
+}
+
 enum NFLConference {
   AFC
   NFC
@@ -143,6 +150,7 @@ model Season {
   name              String?
   fantasyPayoutConfig Json?
   status            SeasonStatus         @default(PLANNING)
+  leaguePhase       LeaguePhase          @default(IN_SEASON)
   isLocked          Boolean              @default(false)
   startsAt          DateTime?
   endsAt            DateTime?
