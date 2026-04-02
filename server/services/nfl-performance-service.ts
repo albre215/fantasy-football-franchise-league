@@ -271,6 +271,21 @@ async function getSeasonImportRuns(tx: PrismaClientLike, seasonId: string, seaso
       seasonId,
       seasonYear
     },
+    select: {
+      id: true,
+      seasonId: true,
+      seasonYear: true,
+      provider: true,
+      mode: true,
+      weekNumber: true,
+      status: true,
+      actingUserId: true,
+      importedResultCount: true,
+      warnings: true,
+      errorMessage: true,
+      startedAt: true,
+      completedAt: true
+    },
     orderBy: [{ startedAt: "desc" }, { id: "desc" }],
     take: 8
   });
@@ -281,6 +296,21 @@ async function getRunningSeasonImportRun(tx: PrismaClientLike, seasonId: string)
     where: {
       seasonId,
       status: "RUNNING"
+    },
+    select: {
+      id: true,
+      seasonId: true,
+      seasonYear: true,
+      provider: true,
+      mode: true,
+      weekNumber: true,
+      status: true,
+      actingUserId: true,
+      importedResultCount: true,
+      warnings: true,
+      errorMessage: true,
+      startedAt: true,
+      completedAt: true
     },
     orderBy: [{ startedAt: "desc" }, { id: "desc" }]
   });
