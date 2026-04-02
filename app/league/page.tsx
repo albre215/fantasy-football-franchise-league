@@ -26,16 +26,24 @@ export default async function LeaguePage({ searchParams }: LeaguePageProps) {
       initialLeagueOptions = await leagueService.listLeaguesForUser(session.user.id);
 
       if (leagueId) {
-        const [bootstrapState, seasons] = await Promise.all([
-          leagueService.getBootstrapState(leagueId),
-          seasonService.getLeagueSeasons(leagueId)
-        ]);
+        try {
+          initialBootstrapState = await leagueService.getBootstrapState(leagueId);
+        } catch (error) {
+          initialErrorMessage = error instanceof Error ? error.message : "Unable to load league.";
+        }
 
-        initialBootstrapState = bootstrapState;
-        initialSeasons = seasons;
+        try {
+          initialSeasons = await seasonService.getLeagueSeasons(leagueId);
+        } catch (error) {
+          if (!initialErrorMessage) {
+            initialErrorMessage = error instanceof Error ? error.message : "Unable to load seasons.";
+          }
+        }
       }
     } catch (error) {
-      initialErrorMessage = error instanceof Error ? error.message : "Unable to load league.";
+      if (!initialErrorMessage) {
+        initialErrorMessage = error instanceof Error ? error.message : "Unable to load league.";
+      }
     }
   }
 

@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type {
   CreateSeasonInput,
+  LeaguePhase,
   SeasonSetupStatus,
   SeasonActorInput,
   SeasonSummary,
@@ -27,13 +28,35 @@ function isValidSeasonYear(year: number) {
   return Number.isInteger(year) && year >= MIN_SUPPORTED_SEASON_YEAR && year <= MAX_SUPPORTED_SEASON_YEAR;
 }
 
+function deriveLeaguePhaseFromSeasonStatus(status: SeasonSummary["status"]): LeaguePhase {
+  if (status === "ACTIVE") {
+    return "IN_SEASON";
+  }
+
+  if (status === "PLANNING") {
+    return "DRAFT_PHASE";
+  }
+
+  return "POST_SEASON";
+}
+
+function isMissingLeaguePhaseColumnError(error: unknown) {
+  return (
+    error instanceof Error &&
+    (error.message.includes("leaguePhase") ||
+      error.message.includes("column") ||
+      error.message.includes("does not exist") ||
+      error.message.includes("Unknown field"))
+  );
+}
+
 function mapSeason(season: {
   id: string;
   leagueId: string;
   year: number;
   name: string | null;
   status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
-  leaguePhase: "IN_SEASON" | "POST_SEASON" | "DROP_PHASE" | "DRAFT_PHASE";
+  leaguePhase?: "IN_SEASON" | "POST_SEASON" | "DROP_PHASE" | "DRAFT_PHASE" | null;
   isLocked: boolean;
   startsAt: Date | null;
   endsAt: Date | null;
@@ -45,7 +68,7 @@ function mapSeason(season: {
     year: season.year,
     name: season.name,
     status: season.status,
-    leaguePhase: season.leaguePhase,
+    leaguePhase: season.leaguePhase ?? deriveLeaguePhaseFromSeasonStatus(season.status),
     isLocked: season.isLocked,
     startsAt: season.startsAt?.toISOString() ?? null,
     endsAt: season.endsAt?.toISOString() ?? null,
@@ -306,24 +329,61 @@ export const seasonService = {
 
     await getLeagueOrThrow(prisma, normalizedLeagueId);
 
-    const seasons = await prisma.season.findMany({
-      where: {
-        leagueId: normalizedLeagueId
-      },
-      select: {
-        id: true,
-        leagueId: true,
-        year: true,
-        name: true,
-        status: true,
-        leaguePhase: true,
-        isLocked: true,
-        startsAt: true,
-        endsAt: true,
-        createdAt: true
-      },
-      orderBy: [{ year: "desc" }, { createdAt: "desc" }]
-    });
+    let seasons: Array<{
+      id: string;
+      leagueId: string;
+      year: number;
+      name: string | null;
+      status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
+      leaguePhase?: "IN_SEASON" | "POST_SEASON" | "DROP_PHASE" | "DRAFT_PHASE" | null;
+      isLocked: boolean;
+      startsAt: Date | null;
+      endsAt: Date | null;
+      createdAt: Date;
+    }>;
+
+    try {
+      seasons = await prisma.season.findMany({
+        where: {
+          leagueId: normalizedLeagueId
+        },
+        select: {
+          id: true,
+          leagueId: true,
+          year: true,
+          name: true,
+          status: true,
+          leaguePhase: true,
+          isLocked: true,
+          startsAt: true,
+          endsAt: true,
+          createdAt: true
+        },
+        orderBy: [{ year: "desc" }, { createdAt: "desc" }]
+      });
+    } catch (error) {
+      if (!isMissingLeaguePhaseColumnError(error)) {
+        throw error;
+      }
+
+      seasons = await prisma.season.findMany({
+        where: {
+          leagueId: normalizedLeagueId
+        },
+        select: {
+          id: true,
+          leagueId: true,
+          year: true,
+          name: true,
+          status: true,
+          isLocked: true,
+          startsAt: true,
+          endsAt: true,
+          createdAt: true
+        },
+        orderBy: [{ year: "desc" }, { createdAt: "desc" }]
+      });
+    }
 
     return seasons.map(mapSeason);
   },
@@ -337,27 +397,69 @@ export const seasonService = {
 
     await getLeagueOrThrow(prisma, normalizedLeagueId);
 
-    const season = await prisma.season.findFirst({
-      where: {
-        leagueId: normalizedLeagueId,
-        status: "ACTIVE"
-      },
-      select: {
-        id: true,
-        leagueId: true,
-        year: true,
-        name: true,
-        status: true,
-        leaguePhase: true,
-        isLocked: true,
-        startsAt: true,
-        endsAt: true,
-        createdAt: true
-      },
-      orderBy: {
-        year: "desc"
+    let season:
+      | {
+          id: string;
+          leagueId: string;
+          year: number;
+          name: string | null;
+          status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
+          leaguePhase?: "IN_SEASON" | "POST_SEASON" | "DROP_PHASE" | "DRAFT_PHASE" | null;
+          isLocked: boolean;
+          startsAt: Date | null;
+          endsAt: Date | null;
+          createdAt: Date;
+        }
+      | null;
+
+    try {
+      season = await prisma.season.findFirst({
+        where: {
+          leagueId: normalizedLeagueId,
+          status: "ACTIVE"
+        },
+        select: {
+          id: true,
+          leagueId: true,
+          year: true,
+          name: true,
+          status: true,
+          leaguePhase: true,
+          isLocked: true,
+          startsAt: true,
+          endsAt: true,
+          createdAt: true
+        },
+        orderBy: {
+          year: "desc"
+        }
+      });
+    } catch (error) {
+      if (!isMissingLeaguePhaseColumnError(error)) {
+        throw error;
       }
-    });
+
+      season = await prisma.season.findFirst({
+        where: {
+          leagueId: normalizedLeagueId,
+          status: "ACTIVE"
+        },
+        select: {
+          id: true,
+          leagueId: true,
+          year: true,
+          name: true,
+          status: true,
+          isLocked: true,
+          startsAt: true,
+          endsAt: true,
+          createdAt: true
+        },
+        orderBy: {
+          year: "desc"
+        }
+      });
+    }
 
     return season ? mapSeason(season) : null;
   },

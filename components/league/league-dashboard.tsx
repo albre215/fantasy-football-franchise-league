@@ -324,15 +324,19 @@ export function LeagueDashboard({
         fetch(`/api/league/${currentLeagueId}/season/list`, { cache: "no-store" })
       ]);
 
-      const [listData, bootstrapData, seasonsData] = await Promise.all([
-        parseJsonResponse<ListLeaguesResponse>(listResponse),
-        parseJsonResponse<LeagueBootstrapStateResponse>(bootstrapResponse),
-        parseJsonResponse<SeasonListResponse>(seasonsResponse)
-      ]);
+      const listData = await parseJsonResponse<ListLeaguesResponse>(listResponse);
+      const bootstrapData = await parseJsonResponse<LeagueBootstrapStateResponse>(bootstrapResponse);
+      let seasonsData: SeasonListResponse | null = null;
+
+      try {
+        seasonsData = await parseJsonResponse<SeasonListResponse>(seasonsResponse);
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Unable to load seasons.");
+      }
 
       setLeagueOptions(listData.leagues);
       setBootstrapState(bootstrapData.bootstrapState);
-      setSeasons(seasonsData.seasons);
+      setSeasons(seasonsData?.seasons ?? []);
 
       if (!bootstrapData.bootstrapState.activeSeason) {
         setSeasonOwnership(null);
