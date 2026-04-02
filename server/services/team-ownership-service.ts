@@ -89,11 +89,18 @@ async function getSeasonContext(tx: Prisma.TransactionClient | typeof prisma, se
     where: {
       id: seasonId
     },
-    include: {
+    select: {
+      id: true,
+      leagueId: true,
+      year: true,
+      name: true,
       league: {
-        include: {
+        select: {
           members: {
-            include: {
+            select: {
+              id: true,
+              role: true,
+              userId: true,
               user: true
             },
             orderBy: [
@@ -104,10 +111,16 @@ async function getSeasonContext(tx: Prisma.TransactionClient | typeof prisma, se
         }
       },
       teamOwnerships: {
-        include: {
+        select: {
+          id: true,
+          nflTeamId: true,
+          leagueMemberId: true,
+          slot: true,
           nflTeam: true,
           leagueMember: {
-            include: {
+            select: {
+              id: true,
+              userId: true,
               user: true
             }
           }
