@@ -137,11 +137,19 @@ async function getSeasonContextOrThrow(tx: PrismaClientLike, seasonId: string) {
     where: {
       id: normalizedSeasonId
     },
-    include: {
+    select: {
+      id: true,
+      leagueId: true,
+      year: true,
+      name: true,
+      status: true,
       league: {
-        include: {
+        select: {
           members: {
-            include: {
+            select: {
+              id: true,
+              userId: true,
+              role: true,
               user: true
             },
             orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
