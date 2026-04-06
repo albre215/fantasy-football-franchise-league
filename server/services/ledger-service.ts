@@ -373,6 +373,89 @@ export const ledgerService = {
     };
   },
 
+  async getOwnerFinancialHistory(userId: string) {
+    const normalizedUserId = userId.trim();
+
+    if (!normalizedUserId) {
+      throw new LedgerServiceError("userId is required.", 400);
+    }
+
+    const entries = await prisma.ledgerEntry.findMany({
+      where: {
+        leagueMember: {
+          userId: normalizedUserId
+        }
+      },
+      select: {
+        id: true,
+        seasonId: true,
+        amount: true,
+        season: {
+          select: {
+            id: true,
+            year: true,
+            name: true,
+            leagueId: true,
+            league: {
+              select: {
+                name: true,
+                leagueCode: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: [{ season: { year: "desc" } }, { createdAt: "desc" }, { id: "desc" }]
+    });
+
+    const rollups = new Map<
+      string,
+      {
+        leagueId: string;
+        leagueCode: string | null;
+        leagueName: string;
+        seasonId: string;
+        seasonYear: number;
+        seasonName: string | null;
+        entryCount: number;
+        totalPositive: number;
+        totalNegative: number;
+        ledgerTotal: number;
+      }
+    >();
+
+    for (const entry of entries) {
+      const current = rollups.get(entry.seasonId) ?? {
+        leagueId: entry.season.leagueId,
+        leagueCode: entry.season.league.leagueCode,
+        leagueName: entry.season.league.name,
+        seasonId: entry.season.id,
+        seasonYear: entry.season.year,
+        seasonName: entry.season.name,
+        entryCount: 0,
+        totalPositive: 0,
+        totalNegative: 0,
+        ledgerTotal: 0
+      };
+      const amount = decimalToNumber(entry.amount);
+
+      current.entryCount += 1;
+      current.ledgerTotal = Number((current.ledgerTotal + amount).toFixed(2));
+      current.totalPositive = Number((current.totalPositive + (amount > 0 ? amount : 0)).toFixed(2));
+      current.totalNegative = Number((current.totalNegative + (amount < 0 ? amount : 0)).toFixed(2));
+
+      rollups.set(entry.seasonId, current);
+    }
+
+    return Array.from(rollups.values()).sort((left, right) => {
+      if (right.seasonYear !== left.seasonYear) {
+        return right.seasonYear - left.seasonYear;
+      }
+
+      return left.leagueName.localeCompare(right.leagueName);
+    });
+  },
+
   async getLeagueMemberSeasonLedger(
     seasonId: string,
     leagueMemberId: string,
