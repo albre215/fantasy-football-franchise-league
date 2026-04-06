@@ -55,6 +55,19 @@ type DashboardTab =
   | "history-analytics";
 type ResultsDraftTab = "final-standings" | "offseason-draft" | "commissioner-overrides";
 
+function getFallbackPhaseTransitions(currentPhase: SeasonPhaseContextResponse["phase"]["season"]["leaguePhase"] | null) {
+  switch (currentPhase) {
+    case "IN_SEASON":
+      return [{ phase: "POST_SEASON" as const, isAvailable: true, warnings: [] as string[] }];
+    case "POST_SEASON":
+      return [{ phase: "DROP_PHASE" as const, isAvailable: true, warnings: [] as string[] }];
+    case "DROP_PHASE":
+      return [{ phase: "DRAFT_PHASE" as const, isAvailable: true, warnings: [] as string[] }];
+    default:
+      return [];
+  }
+}
+
 function TabPanelSkeleton({ title, description }: { title: string; description: string }) {
   return (
     <Card>
@@ -198,7 +211,10 @@ export function LeagueDashboard({
     [ownershipOwners]
   );
   const tabNeedsOperationalData =
-    activeTab === "ownership" || activeTab === "results-draft" || activeTab === "nfl-performance";
+    activeTab === "seasons" ||
+    activeTab === "ownership" ||
+    activeTab === "results-draft" ||
+    activeTab === "nfl-performance";
   const isAuthenticated = initialIsAuthenticated || sessionStatus === "authenticated";
 
   useEffect(() => {
@@ -851,6 +867,8 @@ export function LeagueDashboard({
   const ownershipFinalized = isLocked && assignedTeamsCount === 30;
   const recommendedDraftOrderReady = resultsAvailability?.isReadyForDraftOrderAutomation ?? false;
   const currentLeaguePhase = seasonPhaseContext?.season.leaguePhase ?? activeSeason?.leaguePhase ?? null;
+  const availablePhaseTransitions =
+    seasonPhaseContext?.availableTransitions ?? getFallbackPhaseTransitions(currentLeaguePhase);
 
   const primaryNextAction = !hasActiveSeason
     ? "Create or activate a season to begin commissioner workflows."
@@ -1139,8 +1157,8 @@ export function LeagueDashboard({
                               >
                                 {season.status === "ACTIVE" ? "Active Season" : "Set Active"}
                               </Button>
-                              {season.status === "ACTIVE" && seasonPhaseContext?.availableTransitions.length ? (
-                                seasonPhaseContext.availableTransitions.map((transition) => (
+                              {season.status === "ACTIVE" && availablePhaseTransitions.length ? (
+                                availablePhaseTransitions.map((transition) => (
                                   <Button
                                     disabled={isSubmitting || !canManageLeague}
                                     key={transition.phase}
@@ -1153,9 +1171,9 @@ export function LeagueDashboard({
                                 ))
                               ) : null}
                             </div>
-                            {season.status === "ACTIVE" && seasonPhaseContext?.availableTransitions.length ? (
+                            {season.status === "ACTIVE" && availablePhaseTransitions.length ? (
                               <div className="basis-full rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
-                                {seasonPhaseContext.availableTransitions.map((transition) => (
+                                {availablePhaseTransitions.map((transition) => (
                                   <div className="mb-2 last:mb-0" key={`${season.id}-${transition.phase}`}>
                                     <p className="font-medium text-foreground">{transition.phase}</p>
                                     {transition.warnings.length > 0 ? (

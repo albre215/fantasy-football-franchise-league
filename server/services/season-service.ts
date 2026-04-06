@@ -76,6 +76,31 @@ function mapSeason(season: {
   };
 }
 
+const seasonSummarySelect = {
+  id: true,
+  leagueId: true,
+  year: true,
+  name: true,
+  status: true,
+  leaguePhase: true,
+  isLocked: true,
+  startsAt: true,
+  endsAt: true,
+  createdAt: true
+} as const;
+
+const seasonSummarySelectWithoutPhase = {
+  id: true,
+  leagueId: true,
+  year: true,
+  name: true,
+  status: true,
+  isLocked: true,
+  startsAt: true,
+  endsAt: true,
+  createdAt: true
+} as const;
+
 async function getLeagueOrThrow(tx: Prisma.TransactionClient | typeof prisma, leagueId: string) {
   const league = await tx.league.findUnique({
     where: {
@@ -121,7 +146,12 @@ async function assertActingCommissionerForLeague(
   return commissioner;
 }
 
-async function getSeasonOrThrow(tx: Prisma.TransactionClient | typeof prisma, seasonId: string) {
+async function getSeasonOrThrow(
+  tx: Prisma.TransactionClient | typeof prisma,
+  seasonId: string,
+  options?: { includeLeaguePhase?: boolean }
+) {
+  const includeLeaguePhase = options?.includeLeaguePhase ?? true;
   let season:
     | {
         id: string;
@@ -137,44 +167,19 @@ async function getSeasonOrThrow(tx: Prisma.TransactionClient | typeof prisma, se
       }
     | null;
 
-  try {
+  if (includeLeaguePhase) {
     season = await tx.season.findUnique({
       where: {
         id: seasonId
       },
-      select: {
-        id: true,
-        leagueId: true,
-        year: true,
-        name: true,
-        status: true,
-        leaguePhase: true,
-        isLocked: true,
-        startsAt: true,
-        endsAt: true,
-        createdAt: true
-      }
+      select: seasonSummarySelect
     });
-  } catch (error) {
-    if (!isMissingLeaguePhaseColumnError(error)) {
-      throw error;
-    }
-
+  } else {
     season = await tx.season.findUnique({
       where: {
         id: seasonId
       },
-      select: {
-        id: true,
-        leagueId: true,
-        year: true,
-        name: true,
-        status: true,
-        isLocked: true,
-        startsAt: true,
-        endsAt: true,
-        createdAt: true
-      }
+      select: seasonSummarySelectWithoutPhase
     });
   }
 
@@ -345,7 +350,8 @@ export const seasonService = {
           name,
           status: "PLANNING",
           leaguePhase: "DRAFT_PHASE"
-        }
+        },
+        select: seasonSummarySelect
       }).catch(async (error) => {
         if (!isMissingLeaguePhaseColumnError(error)) {
           throw error;
@@ -357,7 +363,8 @@ export const seasonService = {
             year: input.year,
             name,
             status: "PLANNING"
-          }
+          },
+          select: seasonSummarySelectWithoutPhase
         });
       });
 
@@ -398,18 +405,7 @@ export const seasonService = {
         where: {
           leagueId: normalizedLeagueId
         },
-        select: {
-          id: true,
-          leagueId: true,
-          year: true,
-          name: true,
-          status: true,
-          leaguePhase: true,
-          isLocked: true,
-          startsAt: true,
-          endsAt: true,
-          createdAt: true
-        },
+        select: seasonSummarySelect,
         orderBy: [{ year: "desc" }, { createdAt: "desc" }]
       });
     } catch (error) {
@@ -421,17 +417,7 @@ export const seasonService = {
         where: {
           leagueId: normalizedLeagueId
         },
-        select: {
-          id: true,
-          leagueId: true,
-          year: true,
-          name: true,
-          status: true,
-          isLocked: true,
-          startsAt: true,
-          endsAt: true,
-          createdAt: true
-        },
+        select: seasonSummarySelectWithoutPhase,
         orderBy: [{ year: "desc" }, { createdAt: "desc" }]
       });
     }
@@ -469,18 +455,7 @@ export const seasonService = {
           leagueId: normalizedLeagueId,
           status: "ACTIVE"
         },
-        select: {
-          id: true,
-          leagueId: true,
-          year: true,
-          name: true,
-          status: true,
-          leaguePhase: true,
-          isLocked: true,
-          startsAt: true,
-          endsAt: true,
-          createdAt: true
-        },
+        select: seasonSummarySelect,
         orderBy: {
           year: "desc"
         }
@@ -495,17 +470,7 @@ export const seasonService = {
           leagueId: normalizedLeagueId,
           status: "ACTIVE"
         },
-        select: {
-          id: true,
-          leagueId: true,
-          year: true,
-          name: true,
-          status: true,
-          isLocked: true,
-          startsAt: true,
-          endsAt: true,
-          createdAt: true
-        },
+        select: seasonSummarySelectWithoutPhase,
         orderBy: {
           year: "desc"
         }
@@ -526,7 +491,9 @@ export const seasonService = {
     return prisma.$transaction(async (tx) => {
       await getLeagueOrThrow(tx, leagueId);
       await assertActingCommissionerForLeague(tx, leagueId, input.actingUserId);
-      const season = await getSeasonOrThrow(tx, seasonId);
+      const season = await getSeasonOrThrow(tx, seasonId, {
+        includeLeaguePhase: false
+      });
 
       if (season.leagueId !== leagueId) {
         throw new SeasonServiceError("Season does not belong to this league.", 400);
@@ -550,22 +517,9 @@ export const seasonService = {
           id: seasonId
         },
         data: {
-          status: "ACTIVE",
-          leaguePhase: "IN_SEASON"
-        }
-      }).catch(async (error) => {
-        if (!isMissingLeaguePhaseColumnError(error)) {
-          throw error;
-        }
-
-        return tx.season.update({
-          where: {
-            id: seasonId
-          },
-          data: {
-            status: "ACTIVE"
-          }
-        });
+          status: "ACTIVE"
+        },
+        select: seasonSummarySelectWithoutPhase
       });
 
       return mapSeason(updatedSeason);
@@ -613,7 +567,8 @@ export const seasonService = {
         },
         data: {
           isLocked: true
-        }
+        },
+        select: seasonSummarySelectWithoutPhase
       });
 
       return {
@@ -643,7 +598,8 @@ export const seasonService = {
         },
         data: {
           isLocked: false
-        }
+        },
+        select: seasonSummarySelectWithoutPhase
       });
 
       return mapSeason(unlockedSeason);
@@ -687,7 +643,8 @@ export const seasonService = {
           },
           data: {
             year: input.year
-          }
+          },
+          select: seasonSummarySelectWithoutPhase
         });
 
         return mapSeason(updatedSeason);

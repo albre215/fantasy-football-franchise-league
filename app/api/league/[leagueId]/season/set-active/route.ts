@@ -33,6 +33,17 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
     }
 
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Set active season route failed:", error);
+
+      return NextResponse.json(
+        {
+          error: error instanceof Error ? error.message : "Unable to set active season."
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({ error: "Unable to set active season." }, { status: 500 });
   }
 }

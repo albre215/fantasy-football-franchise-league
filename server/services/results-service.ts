@@ -471,11 +471,18 @@ async function getOffseasonDraftOrderContext(sourceSeasonId: string, targetSeaso
       where: {
         id: sourceSeasonId
       },
-      include: {
+      select: {
+        id: true,
+        leagueId: true,
+        year: true,
+        name: true,
         league: {
-          include: {
+          select: {
             members: {
-              include: {
+              select: {
+                id: true,
+                userId: true,
+                role: true,
                 user: true
               },
               orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
@@ -483,9 +490,14 @@ async function getOffseasonDraftOrderContext(sourceSeasonId: string, targetSeaso
           }
         },
         seasonStandings: {
-          include: {
+          select: {
+            leagueMemberId: true,
+            rank: true,
             leagueMember: {
-              include: {
+              select: {
+                id: true,
+                userId: true,
+                role: true,
                 user: true
               }
             }
@@ -499,11 +511,18 @@ async function getOffseasonDraftOrderContext(sourceSeasonId: string, targetSeaso
       where: {
         id: targetSeasonId
       },
-      include: {
+      select: {
+        id: true,
+        leagueId: true,
+        year: true,
+        name: true,
         league: {
-          include: {
+          select: {
             members: {
-              include: {
+              select: {
+                id: true,
+                userId: true,
+                role: true,
                 user: true
               },
               orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
