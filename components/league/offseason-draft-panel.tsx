@@ -6,6 +6,7 @@ import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type {
+  DropPhaseContextResponse,
   DraftOrderRecommendationResponse,
   DraftState,
   FinalizeDraftResponse,
@@ -189,6 +190,9 @@ export function OffseasonDraftPanel({
   const [recommendedOrder, setRecommendedOrder] = useState<DraftOrderRecommendationResponse["recommendation"] | null>(null);
   const [isLoadingRecommendedOrder, setIsLoadingRecommendedOrder] = useState(false);
   const [recommendedOrderError, setRecommendedOrderError] = useState<string | null>(null);
+  const [dropPhaseContext, setDropPhaseContext] = useState<DropPhaseContextResponse["dropPhase"] | null>(null);
+  const [isLoadingDropPhaseContext, setIsLoadingDropPhaseContext] = useState(false);
+  const [dropPhaseError, setDropPhaseError] = useState<string | null>(null);
   const [isPreparingDraftWorkspace, setIsPreparingDraftWorkspace] = useState(false);
   const [hasAttemptedWorkspacePreparation, setHasAttemptedWorkspacePreparation] = useState(false);
 
@@ -210,6 +214,8 @@ export function OffseasonDraftPanel({
       ),
     [draftState]
   );
+  const phaseAllowsDraftWorkspaceManagement = phaseContext?.allowedActions.canManageDraftWorkspace ?? false;
+  const phaseAllowsKeeperEditing = phaseContext?.allowedActions.canEditKeepers ?? false;
   const phaseAllowsDraftPreparation = phaseContext?.allowedActions.canPrepareDraft ?? false;
   const phaseAllowsDraftExecution = phaseContext?.allowedActions.canRunDraft ?? false;
 
@@ -330,12 +336,36 @@ export function OffseasonDraftPanel({
   }, [activeSeason, draftState, isDraftStateLoading, members.length, setupSourceSeasonId]);
 
   useEffect(() => {
+    if (!activeSeason) {
+      setDropPhaseContext(null);
+      setDropPhaseError(null);
+      return;
+    }
+
+    void (async () => {
+      setIsLoadingDropPhaseContext(true);
+      setDropPhaseError(null);
+
+      try {
+        const response = await fetch(`/api/season/${activeSeason.id}/drop-phase`, { cache: "no-store" });
+        const data = await parseJsonResponse<DropPhaseContextResponse>(response);
+        setDropPhaseContext(data.dropPhase);
+      } catch (error) {
+        setDropPhaseContext(null);
+        setDropPhaseError(error instanceof Error ? error.message : "Unable to load drop-phase review.");
+      } finally {
+        setIsLoadingDropPhaseContext(false);
+      }
+    })();
+  }, [activeSeason, draftState?.draft.id, draftState?.draft.keeperCount, draftState?.draft.status]);
+
+  useEffect(() => {
     if (
       !activeSeason ||
       draftState ||
       isDraftStateLoading ||
       !canManageDraft ||
-      !phaseAllowsDraftPreparation ||
+      !phaseAllowsDraftWorkspaceManagement ||
       !setupSourceSeasonId ||
       !recommendedOrder ||
       !recommendedOrder.readiness.isReady ||
@@ -367,7 +397,7 @@ export function OffseasonDraftPanel({
         });
 
         await parseJsonResponse<InitializeDraftResponse>(response);
-        onSuccess("Offseason draft workspace prepared. Save two keepers for each owner before starting the draft.");
+        onSuccess("Offseason keeper workspace prepared. Save two keepers for each owner before moving into DRAFT_PHASE.");
         await onRefresh();
       } catch (error) {
         onError(error instanceof Error ? error.message : "Unable to prepare the offseason draft workspace.");
@@ -386,7 +416,7 @@ export function OffseasonDraftPanel({
     onError,
     onRefresh,
     onSuccess,
-    phaseAllowsDraftPreparation,
+    phaseAllowsDraftWorkspaceManagement,
     recommendedOrder,
     setupSourceSeasonId
   ]);
@@ -631,8 +661,8 @@ export function OffseasonDraftPanel({
               <div className="space-y-3">
                 <p className="text-sm font-medium">Keeper Selection</p>
                 <p className="text-sm text-muted-foreground">
-                  Keeper selection is the first offseason step. Once the previous season is valid, the draft workspace
-                  is prepared automatically and owners can start locking in their two keepers.
+                  DROP_PHASE is the keeper and release window. Once the previous season is valid, the planning draft
+                  workspace is prepared automatically and commissioners can lock in each owner's two keepers.
                 </p>
                 <div className="space-y-2 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                   {!canManageDraft ? (
@@ -640,15 +670,40 @@ export function OffseasonDraftPanel({
                       {accessMessage ??
                         "Only the league commissioner can prepare keeper selections and manage the offseason draft."}
                     </p>
-                  ) : !phaseAllowsDraftPreparation ? (
+                  ) : !phaseAllowsDraftWorkspaceManagement ? (
                     <p>
-                      Move the season into DRAFT_PHASE before preparing keeper selections or the offseason draft
-                      workspace. Current phase: {phaseContext?.season.leaguePhase ?? activeSeason.leaguePhase}.
+                      Move the season into DROP_PHASE before preparing keeper selections. Current phase:{" "}
+                      {phaseContext?.season.leaguePhase ?? activeSeason.leaguePhase}.
                     </p>
                   ) : isPreparingDraftWorkspace ? (
                     <>
                       <p className="font-medium text-foreground">Preparing keeper workspace</p>
-                      <p>Creating the offseason planning draft from the previous season's ledger totals.</p>
+                      <p>Creating the offseason planning workspace from the previous season's ledger totals.</p>
+                    </>
+                  ) : isLoadingDropPhaseContext ? (
+                    <p>Loading DROP_PHASE keeper and release review...</p>
+                  ) : dropPhaseContext ? (
+                    <>
+                      <p className="font-medium text-foreground">
+                        {dropPhaseContext.isReadyForDraftPhase
+                          ? "DROP_PHASE review is complete"
+                          : "DROP_PHASE review is still in progress"}
+                      </p>
+                      <p>
+                        Owners complete: {dropPhaseContext.ownersCompleteCount}/{dropPhaseContext.ownersTotalCount}
+                      </p>
+                      <p>Released team pool: {dropPhaseContext.releasedTeamPool.length} teams</p>
+                      <p>
+                        Draft workspace:{" "}
+                        {dropPhaseContext.hasDraftWorkspace
+                          ? `Prepared (${dropPhaseContext.draftStatus ?? "Unknown"})`
+                          : "Not prepared yet"}
+                      </p>
+                      {dropPhaseContext.warnings.map((warning) => (
+                        <p className="text-destructive" key={warning}>
+                          {warning}
+                        </p>
+                      ))}
                     </>
                   ) : isLoadingRecommendedOrder ? (
                     <p>Checking previous-season ledger totals before preparing the keeper workspace...</p>
@@ -686,13 +741,14 @@ export function OffseasonDraftPanel({
                       ))}
                       <p>
                         {recommendedOrder.readiness.isReady
-                          ? "The planning draft will be prepared automatically so keeper selection can begin first."
+                          ? "The planning draft will be prepared automatically so DROP_PHASE keeper selection can begin."
                           : "Resolve the readiness warnings before the planning draft can be prepared automatically."}
                       </p>
                     </>
                   ) : (
                     <p>
-                      {recommendedOrderError ??
+                      {dropPhaseError ??
+                        recommendedOrderError ??
                         "Source-season ledger totals are required before generating draft order."}
                     </p>
                   )}
@@ -706,13 +762,17 @@ export function OffseasonDraftPanel({
               <p>League phase: {phaseContext?.season.leaguePhase ?? activeSeason.leaguePhase}</p>
               <p>Owners in draft: {members.length} / 10</p>
               <p>Expected keepers: 20 total</p>
+              <p>Expected released teams: 10 total</p>
               <p>Expected draft pool: 12 teams</p>
               <p>Expected draft picks: 10</p>
               <p>Commissioner access: {canManageDraft ? "Pass" : "Read-only"}</p>
+              <p>DROP_PHASE editing allowed now: {phaseAllowsKeeperEditing ? "Pass" : "Fail"}</p>
+              <p>Workspace management allowed now: {phaseAllowsDraftWorkspaceManagement ? "Pass" : "Fail"}</p>
               <p>Draft preparation allowed now: {phaseAllowsDraftPreparation ? "Pass" : "Fail"}</p>
               <p>Draft execution allowed now: {phaseAllowsDraftExecution ? "Pass" : "Fail"}</p>
               <p>Previous season found: {previousSeason ? "Pass" : "Fail"}</p>
               <p>Ledger-based recommendation ready: {recommendedOrder?.readiness.isReady ? "Pass" : "Fail"}</p>
+              <p>DROP_PHASE ready for DRAFT_PHASE: {dropPhaseContext?.isReadyForDraftPhase ? "Pass" : "Fail"}</p>
               <p>Keeper workspace prepared: {draftState ? "Yes" : isPreparingDraftWorkspace ? "In progress" : "No"}</p>
               {recommendedOrder && recommendedOrder.warnings.length > 0 ? (
                 <div className="rounded-lg border border-dashed border-border p-3">
@@ -775,7 +835,7 @@ export function OffseasonDraftPanel({
                   <CardHeader>
                     <CardTitle>Keeper Selection Workspace</CardTitle>
                     <CardDescription>
-                      Each owner keeps exactly 2 teams from the source season. The third team enters the draft pool.
+                      During DROP_PHASE, each owner keeps exactly 2 teams from the source season and explicitly releases the third.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -787,11 +847,11 @@ export function OffseasonDraftPanel({
                             "Only the league commissioner can change keeper selections or control the draft for this league."}
                         </p>
                       </div>
-                    ) : !phaseAllowsDraftPreparation ? (
+                    ) : !phaseAllowsKeeperEditing ? (
                       <div className="rounded-lg border border-dashed border-border bg-secondary/30 p-4 text-sm text-muted-foreground">
                         <p className="font-medium text-foreground">Keeper editing is phase-gated.</p>
                         <p>
-                          Move the season into DRAFT_PHASE before editing keepers. Current phase:{" "}
+                          Move the season into DROP_PHASE before editing keepers. Current phase:{" "}
                           {phaseContext?.season.leaguePhase ?? activeSeason?.leaguePhase ?? "Unknown"}.
                         </p>
                       </div>
@@ -811,7 +871,7 @@ export function OffseasonDraftPanel({
                       const hasUnsavedChanges = Boolean(dirtyKeeperOwners[member.leagueMemberId]);
                       const isOwnerSaving = Boolean(savingKeeperOwners[member.leagueMemberId]);
                       const feedback = keeperFeedbackByOwner[member.leagueMemberId];
-                      const canEdit = canManageDraft && phaseAllowsDraftPreparation && draftState.keeperEditing.canEdit;
+                      const canEdit = canManageDraft && phaseAllowsKeeperEditing && draftState.keeperEditing.canEdit;
                       const canSaveKeepers = canEdit && !isOwnerSaving && selectedKeepers.length === 2 && hasUnsavedChanges;
                       const selectedCountLabel = `${selectedKeepers.length}/2 selected`;
 
@@ -871,8 +931,7 @@ export function OffseasonDraftPanel({
                           ) : null}
                           {!canEdit ? (
                             <p className="mt-3 text-sm text-muted-foreground">
-                              Keepers are locked after the draft starts. Keeper selections can only be changed before
-                              the draft begins.
+                              Keepers are locked outside DROP_PHASE or after the draft has started.
                             </p>
                           ) : null}
                           <div className="mt-3 flex flex-wrap gap-2">
@@ -900,6 +959,16 @@ export function OffseasonDraftPanel({
                                 </button>
                               );
                             })}
+                          </div>
+                          <div className="mt-3 rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+                            <p className="font-medium text-foreground">Released team</p>
+                            {member.releasedTeam ? (
+                              <div className="mt-2">
+                                <NFLTeamLabel size="default" team={member.releasedTeam} />
+                              </div>
+                            ) : (
+                              <p className="mt-2">The released team will appear once exactly 2 keepers are saved.</p>
+                            )}
                           </div>
                           {member.draftedTeam && (
                             <p className="mt-3 text-sm text-muted-foreground">
@@ -965,6 +1034,26 @@ export function OffseasonDraftPanel({
               </div>
 
               <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Released Team Pool</CardTitle>
+                    <CardDescription>Teams explicitly released during DROP_PHASE before the offseason draft begins.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {draftState.releasedTeamPool.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Released teams will appear here once owners complete their keeper selections.
+                      </p>
+                    ) : (
+                      draftState.releasedTeamPool.map((team) => (
+                        <div className="rounded-lg border border-border p-3 text-sm" key={`released-${team.id}`}>
+                          <NFLTeamLabel size="default" team={team} />
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+
                 <Card data-scroll-anchor-id="draft-controls">
                   <CardHeader>
                     <CardTitle>Draft Pool</CardTitle>

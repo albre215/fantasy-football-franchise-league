@@ -484,6 +484,11 @@ export function CommissionerToolsPanel({
             Owners with ledger entries: {results?.availability.draftOrderReadiness.ownersWithLedgerEntries ?? 0} /{" "}
             {results?.eligibleMembers.length ?? 0}
           </p>
+          <p>
+            Drop-phase keeper completion: {phaseContext?.readiness.ownersWithCompletedKeeperSelections ?? 0} /{" "}
+            {phaseContext?.readiness.ownersTotalCount ?? 0}
+          </p>
+          <p>Ready for DRAFT_PHASE: {phaseContext?.readiness.isReadyForDraftPhase ? "Yes" : "No"}</p>
           {phaseContext?.warnings.length ? (
             <div className="md:col-span-2 rounded-lg border border-dashed border-border p-3">
               {phaseContext.warnings.slice(0, 3).map((warning) => (

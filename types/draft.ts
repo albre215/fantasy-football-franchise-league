@@ -24,6 +24,7 @@ export interface DraftMemberSummary {
   role: "COMMISSIONER" | "OWNER";
   previousSeasonTeams: DraftTeamSummary[];
   keepers: DraftKeeperSelection[];
+  releasedTeam: DraftTeamSummary | null;
   draftedTeam: DraftTeamSummary | null;
   keeperCount: number;
   isKeeperComplete: boolean;
@@ -62,6 +63,7 @@ export interface DraftState {
   draft: DraftSummary;
   members: DraftMemberSummary[];
   draftPool: DraftTeamSummary[];
+  releasedTeamPool: DraftTeamSummary[];
   picks: DraftPickSummary[];
   currentPick: DraftPickSummary | null;
   canFinalize: boolean;
@@ -76,6 +78,46 @@ export interface DraftState {
     totalOwners: number;
     isComplete: boolean;
   };
+}
+
+export interface DropPhaseOwnerSummary {
+  sourceLeagueMemberId: string | null;
+  targetLeagueMemberId: string;
+  userId: string;
+  displayName: string;
+  email: string;
+  role: "COMMISSIONER" | "OWNER";
+  eligibleTeams: DraftTeamSummary[];
+  keptTeamIds: string[];
+  keptTeams: DraftTeamSummary[];
+  releasedTeam: DraftTeamSummary | null;
+  isComplete: boolean;
+  mappingStatus: "MAPPED" | "MISSING_SOURCE_OWNER";
+  warnings: string[];
+}
+
+export interface DropPhaseContext {
+  sourceSeasonId: string | null;
+  sourceSeasonName: string | null;
+  sourceSeasonYear: number | null;
+  targetSeasonId: string;
+  targetSeasonName: string | null;
+  targetSeasonYear: number;
+  currentPhase: import("@/types/season").LeaguePhase;
+  hasDraftWorkspace: boolean;
+  draftId: string | null;
+  draftStatus: DraftStatus | null;
+  ownersCompleteCount: number;
+  ownersTotalCount: number;
+  releasedTeamPool: DraftTeamSummary[];
+  isReadyForDraftPhase: boolean;
+  recommendationReadiness: {
+    draftOrderReady: boolean;
+    allTargetMappingsComplete: boolean;
+    ledgerCoverageStatus: "NONE" | "PARTIAL" | "FULL";
+  };
+  warnings: string[];
+  owners: DropPhaseOwnerSummary[];
 }
 
 export interface DraftOrderRecommendationEntry {
@@ -175,6 +217,10 @@ export interface DraftStateResponse {
 
 export interface DraftOrderRecommendationResponse {
   recommendation: DraftOrderRecommendation;
+}
+
+export interface DropPhaseContextResponse {
+  dropPhase: DropPhaseContext;
 }
 
 export interface SaveKeepersResponse {

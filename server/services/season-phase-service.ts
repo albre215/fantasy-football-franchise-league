@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { dropPhaseService } from "@/server/services/drop-phase-service";
 import { resultsService } from "@/server/services/results-service";
 import { seasonService } from "@/server/services/season-service";
 import type { DraftStatus } from "@/types/draft";
@@ -52,6 +53,9 @@ function mapAllowedActions(currentPhase: LeaguePhase): SeasonPhaseContext["allow
     canReviewResults: currentPhase === "IN_SEASON" || currentPhase === "POST_SEASON",
     canReviewOffseasonRecommendation:
       currentPhase === "POST_SEASON" || currentPhase === "DROP_PHASE" || currentPhase === "DRAFT_PHASE",
+    canReviewDropPhase: currentPhase === "POST_SEASON" || currentPhase === "DROP_PHASE" || currentPhase === "DRAFT_PHASE",
+    canManageDraftWorkspace: currentPhase === "DROP_PHASE" || currentPhase === "DRAFT_PHASE",
+    canEditKeepers: currentPhase === "DROP_PHASE",
     canPrepareDraft: currentPhase === "DRAFT_PHASE",
     canEditDraft: currentPhase === "DRAFT_PHASE",
     canRunDraft: currentPhase === "DRAFT_PHASE",
@@ -92,15 +96,19 @@ function buildTransitionWarnings(
   }
 
   if (currentPhase === "DROP_PHASE" && nextPhase === "DRAFT_PHASE") {
-    if (!readiness.draftOrderReady) {
-      warnings.push("Ledger-based offseason draft recommendation is not fully ready yet.");
+    if (!readiness.hasDraftWorkspace) {
+      warnings.push("Prepare the offseason draft workspace before entering DRAFT_PHASE.");
+    }
+
+    if (readiness.ownersWithCompletedKeeperSelections !== readiness.ownersTotalCount) {
+      warnings.push("Every owner must keep exactly 2 teams and release exactly 1 team before entering DRAFT_PHASE.");
     }
 
     if (!readiness.allTargetMappingsComplete) {
       warnings.push("Target-season owner mappings are incomplete.");
     }
 
-    if (hasRecommendationWarnings) {
+    if (!readiness.draftOrderReady || hasRecommendationWarnings) {
       warnings.push("Draft recommendation warnings still exist. Review them before entering DRAFT_PHASE.");
     }
   }
@@ -205,6 +213,10 @@ export const seasonPhaseService = {
   async getSeasonPhaseContext(seasonId: string): Promise<SeasonPhaseContext> {
     const { season, recommendation, results } = await getSeasonPhaseBaseContext(seasonId);
     const currentPhase = season.leaguePhase as LeaguePhase;
+    const dropPhaseContext =
+      currentPhase === "DROP_PHASE" || currentPhase === "DRAFT_PHASE"
+        ? await dropPhaseService.getDropPhaseContext(season.id)
+        : null;
     const readiness: SeasonPhaseContext["readiness"] = {
       hasPreviousSeason: recommendation !== null,
       hasFinalStandings: results.availability.hasFinalStandings,
@@ -212,8 +224,11 @@ export const seasonPhaseService = {
       draftOrderReady: recommendation?.readiness.isReady ?? false,
       allTargetMappingsComplete: recommendation?.readiness.allTargetMappingsComplete ?? false,
       ledgerCoverageStatus: recommendation?.readiness.ledgerCoverageStatus ?? "NONE",
-      hasDraftWorkspace: Boolean(season.targetDraft),
-      draftStatus: season.targetDraft?.status ?? null
+      hasDraftWorkspace: dropPhaseContext?.hasDraftWorkspace ?? Boolean(season.targetDraft),
+      draftStatus: dropPhaseContext?.draftStatus ?? season.targetDraft?.status ?? null,
+      ownersWithCompletedKeeperSelections: dropPhaseContext?.ownersCompleteCount ?? 0,
+      ownersTotalCount: dropPhaseContext?.ownersTotalCount ?? 0,
+      isReadyForDraftPhase: dropPhaseContext?.isReadyForDraftPhase ?? false
     };
     const warnings = [
       ...(!readiness.hasFinalStandings &&
@@ -228,6 +243,7 @@ export const seasonPhaseService = {
         ? ["The immediately previous season is missing, so offseason review is incomplete."]
         : []),
       ...(recommendation?.warnings ?? []),
+      ...(dropPhaseContext?.warnings ?? []),
       ...(currentPhase === "DRAFT_PHASE" && !readiness.hasDraftWorkspace
         ? ["No offseason draft workspace exists yet for this season."]
         : [])
@@ -246,7 +262,7 @@ export const seasonPhaseService = {
       readiness,
       availableTransitions: FORWARD_TRANSITIONS[currentPhase].map((nextPhase) => ({
         phase: nextPhase,
-        isAvailable: true,
+        isAvailable: nextPhase === "DRAFT_PHASE" ? readiness.isReadyForDraftPhase : true,
         warnings: buildTransitionWarnings(currentPhase, nextPhase, readiness, Boolean(recommendation?.warnings.length))
       })),
       warnings
@@ -304,6 +320,14 @@ export const seasonPhaseService = {
       );
     }
 
+    if (nextPhase === "DRAFT_PHASE" && !currentContext.readiness.isReadyForDraftPhase) {
+      throw new SeasonPhaseServiceError(
+        currentContext.availableTransitions.find((transition) => transition.phase === "DRAFT_PHASE")?.warnings[0] ??
+          "Complete the DROP_PHASE keeper and release workflow before entering DRAFT_PHASE.",
+        409
+      );
+    }
+
     try {
       await prisma.season.update({
         where: {
@@ -346,6 +370,32 @@ export const seasonPhaseService = {
     if (!phase.allowedActions.canRunDraft) {
       throw new SeasonPhaseServiceError(
         `Draft execution is only available during DRAFT_PHASE. Current phase: ${phase.season.leaguePhase}.`,
+        409
+      );
+    }
+
+    return phase;
+  },
+
+  async assertPhaseAllowsDraftWorkspaceManagement(seasonId: string) {
+    const phase = await this.getSeasonPhaseContext(seasonId);
+
+    if (!phase.allowedActions.canManageDraftWorkspace) {
+      throw new SeasonPhaseServiceError(
+        `Draft workspace management is only available during DROP_PHASE or DRAFT_PHASE. Current phase: ${phase.season.leaguePhase}.`,
+        409
+      );
+    }
+
+    return phase;
+  },
+
+  async assertPhaseAllowsKeeperReleaseEditing(seasonId: string) {
+    const phase = await this.getSeasonPhaseContext(seasonId);
+
+    if (!phase.allowedActions.canEditKeepers) {
+      throw new SeasonPhaseServiceError(
+        `Keeper and release editing is only available during DROP_PHASE. Current phase: ${phase.season.leaguePhase}.`,
         409
       );
     }

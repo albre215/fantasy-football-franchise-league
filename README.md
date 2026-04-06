@@ -4,8 +4,9 @@ GM Fantasy is a commissioner-first web app for a long-running fantasy football l
 
 The app preserves:
 - season-scoped NFL team ownership
-- manual final standings by season
-- offseason keeper and slow draft history
+- final fantasy standings by season
+- season ledger balances and payouts
+- offseason keeper and slow-draft history
 - long-term franchise and owner analytics
 
 ## Current Stack
@@ -24,22 +25,32 @@ The app preserves:
 - There are 32 NFL teams.
 - Each season ends with 3 NFL teams per owner and 2 unassigned teams.
 - `TeamOwnership` is the source of truth for season ownership.
-- `SeasonStanding` is the source of truth for final standings.
-- Offseason draft order is generated from the immediately previous season's saved final standings.
+- `SeasonStanding` is the source of truth for final fantasy standings.
+- `LedgerEntry` is the financial source of truth for season winnings.
+- Recommended offseason draft order derives from the immediately previous season's ledger totals, not standings alone.
+- Cross-season owner continuity resolves through `userId`, not raw `LeagueMember.id`.
 - `Draft`, `DraftPick`, and `KeeperSelection` remain historically queryable offseason records.
-- Cross-season owner continuity should resolve through `userId`, not raw `LeagueMember.id`.
+- `Season.leaguePhase` is the workflow source of truth for where a season sits in the lifecycle.
 
-## Main Product Flow
+## Current Product Flow
 
 1. Sign in or create an account.
 2. Create or open a league.
 3. Create seasons and set the active season.
-4. Record final standings for the completed season.
-5. Let the app prepare the offseason keeper workspace for the new active season.
-6. Save two keepers for each owner.
-7. Start and run the offseason slow draft.
-8. Finalize the draft into target-season `TeamOwnership`.
-9. Review history and analytics across seasons.
+4. Use bootstrap tools to manage members and season ownership.
+5. NFL results for the active season import automatically.
+6. Save final fantasy standings for the completed season.
+7. Fantasy payouts are posted into the ledger from those standings.
+8. Review offseason draft recommendation from previous-season ledger totals.
+9. Move the active season through league phases:
+   - `IN_SEASON`
+   - `POST_SEASON`
+   - `DROP_PHASE`
+   - `DRAFT_PHASE`
+10. In `DRAFT_PHASE`, save two keepers per owner.
+11. Start and run the offseason slow draft.
+12. Finalize the draft into target-season `TeamOwnership`.
+13. Review ledger, history, and analytics across seasons.
 
 ## Important Folders
 
@@ -66,16 +77,54 @@ docs/
   *.md                        Project handoff documentation
 ```
 
-## Authentication
+## Current Major Systems
 
-Prompt 10 replaces the old mock commissioner identity with a real session-backed flow.
+- Authentication:
+  - registration
+  - credentials sign-in
+  - session-derived acting user on mutation routes
+- League bootstrap:
+  - league creation and joining
+  - member management
+  - season creation, activation, and lock/unlock
+- Ownership:
+  - active-season ownership table and workspace
+  - manual assignment/removal
+- NFL performance:
+  - provider-backed NFL result imports
+  - automatic import for the active season
+  - commissioner review/correction
+- Results:
+  - manual final standings
+  - season-scoped fantasy payout config
+  - ledger posting for fantasy payouts
+- Ledger:
+  - persisted ledger entries
+  - season balances
+  - manual commissioner adjustments
+- Draft:
+  - keeper workflow
+  - offseason slow draft lifecycle
+  - ledger-based draft recommendation
+  - phase-gated draft preparation and execution
+- History & analytics:
+  - ownership history
+  - owner/franchise analytics
+  - draft history and summaries
 
-Current auth setup:
-- credentials-based sign-in with email + password
-- user registration via `/api/auth/register`
-- protected league and dashboard pages
-- mutation routes derive the acting user from the authenticated session
-- league/season commissioner checks still happen server-side inside services
+## League Phase System
+
+Each season now has a persisted `leaguePhase`:
+
+- `IN_SEASON`
+- `POST_SEASON`
+- `DROP_PHASE`
+- `DRAFT_PHASE`
+
+Important notes:
+- phase controls workflow availability
+- phase does not replace standings, ownership, or ledger truth
+- draft prep and draft execution are gated to `DRAFT_PHASE`
 
 ## Local Development
 
@@ -85,13 +134,7 @@ Current auth setup:
    npm install
    ```
 
-2. Copy the environment template:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-3. Set required environment variables in `.env`:
+2. Set required environment variables in `.env`:
 
    ```env
    DATABASE_URL="postgresql://..."
@@ -99,20 +142,16 @@ Current auth setup:
    NEXTAUTH_SECRET="use-a-long-random-string"
    ```
 
-4. Update Prisma and generate the client.
-
-   Preferred if your local migration history is healthy:
+3. Generate Prisma client:
 
    ```bash
-   npx prisma migrate dev
    npm run prisma:generate
    ```
 
-   If your local migration history is already out of sync, use:
+4. Start the app:
 
    ```bash
-   npx prisma db push
-   npm run prisma:generate
+   npm run dev
    ```
 
 5. Seed NFL teams if needed:
@@ -121,24 +160,34 @@ Current auth setup:
    npm run prisma:seed
    ```
 
-6. Start the app:
-
-   ```bash
-   npm run dev
-   ```
-
-7. Run the auth/authorization regression tests when you make auth-sensitive changes:
+6. Run tests/build when making changes:
 
    ```bash
    npm test
+   npm run build
    ```
 
-Open `http://localhost:3000`.
+## Prisma / Migration Notes
+
+Current repo state:
+- Phase 5 `leaguePhase` is part of the real schema
+- the duplicate `add_season_league_phase` migration was removed
+- the current migration chain in the repo is the authoritative one
+
+Important local guidance:
+- stop `npm run dev` before running Prisma commands on Windows
+- if local DB schema and migration history are already out of sync, do not blindly accept a destructive reset
+- inspect migration state first
+- `db push` can be a practical local recovery tool, but if drift exists it should be followed by migration-history repair
 
 ## Developer Notes
 
-- The repo still contains some dormant ingestion code, but manual final standings are the active product direction.
 - Keep routes thin and business rules in `server/services`.
 - Do not flatten `User` and `LeagueMember` together.
 - Do not move commissioner authorization into client-only checks.
-- Be careful with Prisma migration history in local development; `db push` may be safer than forcing a broken migration chain.
+- Do not move workflow gating into React components.
+- Preserve these domain boundaries:
+  - `TeamOwnership` = ownership truth
+  - `SeasonStanding` = standings truth
+  - `LedgerEntry` = money truth
+  - `Season.leaguePhase` = workflow truth

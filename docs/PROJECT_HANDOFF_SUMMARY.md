@@ -13,61 +13,79 @@ GM Fantasy is a commissioner-first web app for managing a long-running fantasy f
 - Node.js
 
 ## Current Completed Functionality
-- Real authentication and session-backed commissioner access
-- League bootstrap and season management
-- Active-season team ownership management
-- Season lock/unlock validation
-- Manual final standings entry
-- Reverse draft-order generation from final standings
-- Offseason keeper workflow
-- Offseason slow draft lifecycle
-- Draft finalization into season ownership
-- History and analytics views for ownership and draft history
+- real authentication and session-backed commissioner access
+- league bootstrap and season management
+- active-season team ownership management
+- season lock/unlock validation
+- provider-backed NFL performance engine with automatic active-season imports
+- manual final standings entry
+- fantasy payout posting into the ledger
+- season ledger balances and commissioner adjustments
+- ledger-based offseason draft recommendation
+- offseason keeper workflow
+- offseason slow draft lifecycle
+- league phase system
+- draft finalization into season ownership
+- history and analytics views for ownership and draft history
 
 ## Current Source-of-Truth Rules
 - `TeamOwnership` is the source of truth for season ownership
-- `SeasonStanding` is the source of truth for final standings
-- Draft order is derived from the immediately previous season's saved final standings
+- `SeasonStanding` is the source of truth for final fantasy standings
+- `LedgerEntry` is the source of truth for money / winnings
+- `Season.leaguePhase` is the source of truth for workflow phase
+- recommended offseason draft order is derived from the immediately previous season's ledger totals
 - `Draft`, `DraftPick`, and `KeeperSelection` preserve offseason history
-- Cross-season owner continuity should be mapped through `userId`
+- cross-season owner continuity maps through `userId`
 
 ## Current Workflow
 1. Sign in or create an account
-2. Save final standings for the completed season
-3. Activate the next season
-4. Offseason draft workspace is prepared automatically from the immediately previous season
-5. Owners save 2 keepers each
-6. Generated draft order appears after keepers are complete
-7. Commissioner starts the draft
-8. Picks are recorded
-9. Draft is finalized into `TeamOwnership`
+2. Create/open a league
+3. Create seasons and set active season
+4. Manage members and season ownership
+5. Let active-season NFL results import automatically
+6. Save final fantasy standings for the completed season
+7. Publish fantasy payouts into the ledger
+8. Review ledger-based offseason draft recommendation for the next season
+9. Move the target season through phases
+10. In `DRAFT_PHASE`, save keepers
+11. Start the draft
+12. Record picks
+13. Finalize the draft into `TeamOwnership`
+14. Review ledger, history, and analytics
 
 ## Next Recommended Prompt
-Prompt 11 — Owner Dashboard
+Implement the real `DROP_PHASE` keeper/release workflow.
 
 ## Why That Is Next
-- Authentication now exists and sensitive mutations are session-backed
-- The app has enough owner-relevant data to support a dedicated owner experience
-- Commissioner workflows can stay focused while owner-specific views are introduced cleanly
+- `DROP_PHASE` is now persisted and visible but not yet backed by full keeper/release mechanics
+- phase infrastructure, ledger-based recommendation, and draft gating are already in place
+- this is the most natural next product step before replacement draft or inaugural auction work
 
 ## Top Risks / Caveats
-- Prisma migration workflow may need care in local development
-- Provider ingestion code still exists but is not the active product workflow
-- Historical semantics must be preserved; do not flatten current-state shortcuts into core models
-- Password reset and email verification are not implemented yet
+- Windows can lock Git and Prisma files while `next dev` is running
+- stop the dev server before Prisma migrate/generate work
+- do not casually accept destructive Prisma reset prompts against a populated local DB
+- provider ingestion code still exists but manual fantasy standings remain the active workflow
+- historical semantics must be preserved; do not flatten ownership, standings, ledger, and phase state together
 
-## Exact Instructions For Seeding A New ChatGPT Conversation
+## Exact Instructions For Seeding A New AI Review
 Start the new conversation with:
 
 1. The current branch name
-2. A note that this is a fantasy franchise league app where owners control NFL teams
-3. A note that final standings are manual and drive draft order automation
-4. A note that `TeamOwnership` is the source of truth for season ownership
-5. A note that authentication is already implemented and mutation routes derive identity from the session
-6. A request to read:
+2. A note that this is the `GM Fantasy` repo at `C:\Users\Ben\GM Fantasy`
+3. A note that owners control NFL teams, not fantasy players
+4. A note that:
+   - `TeamOwnership` = ownership truth
+   - `SeasonStanding` = standings truth
+   - `LedgerEntry` = money truth
+   - `Season.leaguePhase` = workflow truth
+5. A note that offseason draft recommendation is ledger-based, not standings-based
+6. A note that Phase 5 league phases are implemented
+7. A request to read:
    - `docs/01-project-overview.md`
    - `docs/02-repo-architecture.md`
    - `docs/03-current-state-and-completed-prompts.md`
    - `docs/04-roadmap-and-next-steps.md`
    - `docs/PROJECT_HANDOFF_SUMMARY.md`
-7. The specific next prompt or feature you want implemented
+   - `docs/NEW_CHAT_HANDOFF.md`
+8. The specific review or next feature request you want

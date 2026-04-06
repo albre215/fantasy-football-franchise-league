@@ -119,6 +119,9 @@ export interface SeasonPhaseContext {
   allowedActions: {
     canReviewResults: boolean;
     canReviewOffseasonRecommendation: boolean;
+    canReviewDropPhase: boolean;
+    canManageDraftWorkspace: boolean;
+    canEditKeepers: boolean;
     canPrepareDraft: boolean;
     canEditDraft: boolean;
     canRunDraft: boolean;
@@ -133,6 +136,9 @@ export interface SeasonPhaseContext {
     ledgerCoverageStatus: "NONE" | "PARTIAL" | "FULL";
     hasDraftWorkspace: boolean;
     draftStatus: DraftStatus | null;
+    ownersWithCompletedKeeperSelections: number;
+    ownersTotalCount: number;
+    isReadyForDraftPhase: boolean;
   };
   availableTransitions: Array<{
     phase: LeaguePhase;

@@ -11,6 +11,8 @@ const { mockPrisma, mockSeasonPhaseService } = vi.hoisted(() => ({
     }
   },
   mockSeasonPhaseService: {
+    assertPhaseAllowsDraftWorkspaceManagement: vi.fn(),
+    assertPhaseAllowsKeeperReleaseEditing: vi.fn(),
     assertPhaseAllowsDraftPreparation: vi.fn(),
     assertPhaseAllowsDraftExecution: vi.fn()
   }
@@ -54,9 +56,9 @@ describe("draftService phase gating", () => {
   });
 
   it("blocks draft initialization outside DRAFT_PHASE", async () => {
-    mockSeasonPhaseService.assertPhaseAllowsDraftPreparation.mockRejectedValueOnce(
+    mockSeasonPhaseService.assertPhaseAllowsDraftWorkspaceManagement.mockRejectedValueOnce(
       new SeasonPhaseServiceError(
-        "Offseason draft actions are only available during DRAFT_PHASE. Current phase: POST_SEASON.",
+        "Draft workspace management is only available during DROP_PHASE or DRAFT_PHASE. Current phase: POST_SEASON.",
         409
       )
     );
@@ -70,10 +72,44 @@ describe("draftService phase gating", () => {
       })
     ).rejects.toMatchObject({
       statusCode: 409,
-      message: "Offseason draft actions are only available during DRAFT_PHASE. Current phase: POST_SEASON."
+      message: "Draft workspace management is only available during DROP_PHASE or DRAFT_PHASE. Current phase: POST_SEASON."
     });
 
     expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("blocks keeper saves outside DROP_PHASE", async () => {
+    mockPrisma.$transaction.mockImplementationOnce(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) => {
+      mockPrisma.draft.findUnique.mockResolvedValueOnce({
+        id: "draft-1",
+        leagueId: "league-1",
+        targetSeasonId: "target-season"
+      });
+      mockPrisma.leagueMember.findUnique.mockResolvedValueOnce({
+        id: "member-1",
+        role: "COMMISSIONER"
+      });
+
+      return callback(mockPrisma);
+    });
+    mockSeasonPhaseService.assertPhaseAllowsKeeperReleaseEditing.mockRejectedValueOnce(
+      new SeasonPhaseServiceError(
+        "Keeper and release editing is only available during DROP_PHASE. Current phase: DRAFT_PHASE.",
+        409
+      )
+    );
+
+    await expect(
+      draftService.saveKeepers({
+        draftId: "draft-1",
+        leagueMemberId: "member-2",
+        nflTeamIds: ["team-1", "team-2"],
+        actingUserId: "commissioner-1"
+      })
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: "Keeper and release editing is only available during DROP_PHASE. Current phase: DRAFT_PHASE."
+    });
   });
 
   it("blocks draft start outside DRAFT_PHASE", async () => {

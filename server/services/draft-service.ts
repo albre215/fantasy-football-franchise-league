@@ -119,6 +119,7 @@ async function getDraftWithContextOrThrow(tx: PrismaClientLike, draftId: string)
           leagueId: true,
           year: true,
           name: true,
+          leaguePhase: true,
           isLocked: true,
           league: {
             select: {
@@ -303,7 +304,19 @@ function assertSeasonIsEditable(isLocked: boolean) {
 
 async function assertDraftPreparationPhase(seasonId: string) {
   try {
-    await seasonPhaseService.assertPhaseAllowsDraftPreparation(seasonId);
+    await seasonPhaseService.assertPhaseAllowsDraftWorkspaceManagement(seasonId);
+  } catch (error) {
+    if (error instanceof SeasonPhaseServiceError) {
+      throw new DraftServiceError(error.message, error.statusCode);
+    }
+
+    throw error;
+  }
+}
+
+async function assertKeeperReleaseEditingPhase(seasonId: string) {
+  try {
+    await seasonPhaseService.assertPhaseAllowsKeeperReleaseEditing(seasonId);
   } catch (error) {
     if (error instanceof SeasonPhaseServiceError) {
       throw new DraftServiceError(error.message, error.statusCode);
@@ -382,6 +395,11 @@ async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<D
 
   const members: DraftMemberSummary[] = draft.targetSeason.league.members.map((member) => {
     const keepers = keepersByMemberId.get(member.id) ?? [];
+    const previousSeasonTeams = previousSeasonTeamsByUserId.get(member.userId) ?? [];
+    const releasedTeam =
+      previousSeasonTeams.length === 3 && keepers.length === KEEPERS_PER_OWNER
+        ? previousSeasonTeams.find((team) => !keepers.some((keeper) => keeper.nflTeam.id === team.id)) ?? null
+        : null;
 
     return {
       leagueMemberId: member.id,
@@ -389,11 +407,12 @@ async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<D
       displayName: member.user.displayName,
       email: member.user.email,
       role: member.role,
-      previousSeasonTeams: previousSeasonTeamsByUserId.get(member.userId) ?? [],
+      previousSeasonTeams,
       keepers,
+      releasedTeam,
       draftedTeam: draftedTeamsByMemberId.get(member.id) ?? null,
       keeperCount: keepers.length,
-      isKeeperComplete: keepers.length === KEEPERS_PER_OWNER
+      isKeeperComplete: keepers.length === KEEPERS_PER_OWNER && releasedTeam !== null
     };
   });
 
@@ -409,8 +428,11 @@ async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<D
 
   const picks = draft.picks.map(mapDraftPick);
   const picksCompleted = picks.filter((pick) => pick.selectedNflTeam !== null).length;
-  const completeOwners = members.filter((member) => member.keeperCount === KEEPERS_PER_OWNER).length;
-  const keeperLockReason = getKeeperLockReason(draft.status, draft.targetSeason.isLocked);
+  const completeOwners = members.filter((member) => member.isKeeperComplete).length;
+  const keeperLockReason =
+    draft.targetSeason.leaguePhase !== "DROP_PHASE"
+      ? `Keeper selections can only be changed during DROP_PHASE. Current phase: ${draft.targetSeason.leaguePhase}.`
+      : getKeeperLockReason(draft.status, draft.targetSeason.isLocked);
   const keeperProgress = {
     completeOwners,
     totalOwners: members.length,
@@ -434,6 +456,10 @@ async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<D
     draft: mapDraftSummary(draft),
     members,
     draftPool: activeTeams.filter((team) => !reservedTeamIds.has(team.id)).map(mapDraftTeam),
+    releasedTeamPool: members
+      .map((member) => member.releasedTeam)
+      .filter((team): team is DraftTeamSummary => team !== null)
+      .sort((left, right) => left.name.localeCompare(right.name)),
     picks,
     currentPick,
     canFinalize,
@@ -642,7 +668,6 @@ async function validateKeeperSave(
     throw new DraftServiceError("League member not found for this draft.", 404);
   }
 
-  const sourceTeams = draft.sourceSeason.teamOwnerships.filter((ownership) => ownership.leagueMemberId === leagueMemberId);
   const memberSourceTeams = draft.sourceSeason.teamOwnerships.filter(
     (ownership) => ownership.leagueMember.userId === member.userId
   );
@@ -942,7 +967,7 @@ export const draftService = {
   async saveKeepers(input: SaveKeepersInput) {
     return prisma.$transaction(async (tx) => {
       const draftRecord = await assertCommissionerAccessForDraft(tx, input.draftId, input.actingUserId);
-      await assertDraftPreparationPhase(draftRecord.targetSeasonId);
+      await assertKeeperReleaseEditingPhase(draftRecord.targetSeasonId);
       const { draft, leagueMemberId, nflTeamIds } = await validateKeeperSave(tx, input);
 
       if (draftRecord.id !== draft.id) {

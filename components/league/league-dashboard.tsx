@@ -1160,7 +1160,7 @@ export function LeagueDashboard({
                               {season.status === "ACTIVE" && availablePhaseTransitions.length ? (
                                 availablePhaseTransitions.map((transition) => (
                                   <Button
-                                    disabled={isSubmitting || !canManageLeague}
+                                    disabled={isSubmitting || !canManageLeague || !transition.isAvailable}
                                     key={transition.phase}
                                     onClick={() => void handleUpdateLeaguePhase(transition.phase)}
                                     type="button"

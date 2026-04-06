@@ -1,159 +1,95 @@
 # Roadmap and Next Steps
 
-This roadmap reflects the intended progression of the current codebase from its present state.
+This roadmap reflects the repo after Phases 1 through 5 and the recent schema/error-resolution work.
 
-## Prompt 10 — Authentication System
+## Current Baseline
 
-### Current State
-Implemented.
+Already implemented:
+- real authentication
+- league bootstrap and season management
+- active-season ownership management
+- NFL performance engine
+- ledger engine
+- fantasy standings -> ledger integration
+- ledger-based offseason draft recommendation
+- league phase system
+- offseason keeper and slow-draft lifecycle
+- history and analytics views
 
-### What Landed
-- credentials-based sign-in
-- account registration
-- protected commissioner pages
-- session-derived acting user identity for sensitive mutations
-- preserved service-layer commissioner role checks
+## Recommended Next Product Work
 
-## Prompt 11 — Owner Dashboard
+### Phase 6 - Drop / Keeper Workflow
 
-### Intended Goal
-Create an owner-facing experience distinct from the commissioner bootstrap console.
+#### Goal
+Use the existing `DROP_PHASE` to implement the explicit keeper/release window.
 
-### What It Should Enable
+#### What It Should Enable
+- each owner keeps 2 teams and releases 1
+- keeper/release review before draft prep
+- explicit transition from `DROP_PHASE` into `DRAFT_PHASE`
+
+#### Why It Is Next
+- `DROP_PHASE` now exists but is only a gating/state layer
+- phase infrastructure is in place
+- draft recommendation and draft prep are already phase-aware
+
+### Phase 7 - Owner-Facing Views
+
+#### Goal
+Add a non-commissioner experience rooted in the current historical and season data.
+
+#### What It Should Enable
 - owner portfolio view
 - owner history
-- keeper awareness
-- season standing visibility
-- eventually owner-facing draft participation context
+- season balances and results visibility
+- future owner-facing draft context
 
-### How the Current Repo Prepares For It
-- ownership, history, standings, and draft state already have read models
-- `history-service` and `team-ownership-service` already expose owner-relevant data
-- auth now provides a real session-backed `userId` to anchor owner-specific screens
+## Important Technical Follow-Up
 
-### Constraints To Preserve
-- do not move commissioner workflow logic into owner screens
-- keep active-season ownership canonical from `TeamOwnership`
-- continue resolving cross-season continuity through `userId`
+### Performance
+Slow endpoints still worth profiling:
+- ownership
+- draft
+- NFL overview/week reads
+- phase context
 
-## Prompt 12 — Commissioner Tools
+### Testing
+Good next test targets:
+- season-service paths involving active season / year updates
+- season-phase-service transition coverage
+- NFL auto-import and import concurrency behavior
+- ledger + results integration edge cases
 
-### Intended Goal
-Add richer commissioner tooling beyond the current basic console.
-
-### What It Should Enable
-- corrections and exception handling
-- stronger review workflows
-- safer administrative actions
-- better draft and standings management ergonomics
-
-### How the Current Repo Prepares For It
-- commissioner routes and service checks already exist
-- season, standings, and draft workflows are already centralized in services
-- auth now gives those tools a real permission boundary
-
-### Constraints To Preserve
-- commissioner overrides should be explicit and historically meaningful
-- do not bypass core validation rules in the name of convenience
-
-## Prompt 13 — Visualization & Analytics UI
-
-### Intended Goal
-Turn historical data into stronger visual reporting and richer analytics presentation.
-
-### What It Should Enable
-- charts and trends
-- championship and drought views once richer results exist
-- decade-level summaries
-- stronger comparative analytics for owners and franchises
-
-### How the Current Repo Prepares For It
-- `history-service` already builds structured read models
-- standings, ownership, and draft records are already historically queryable
-- manual standings now give results-based analytics a stable source of truth
-
-### Constraints To Preserve
-- visualization should consume existing read models or carefully added read models
-- do not push analytics derivation into UI components
-
-## Prompt 14 — Long-Term Stability & Performance
-
-### Intended Goal
-Harden the application for longer-term maintainability and operational safety.
-
-### What It Should Enable
-- better test coverage
-- more predictable migrations
-- safer production rollout
-- improved query efficiency and state handling
-
-### How the Current Repo Prepares For It
-- domain logic is already relatively centralized
-- services and types are reasonably separated by concern
-- auth is now integrated without collapsing the existing domain model
-
-### Constraints To Preserve
-- avoid flattening historical models for short-term optimization
-- keep domain boundaries clean while improving reliability
-
-## Recommended Next Prompt
-Prompt 11 — Owner Dashboard
-
-## Why Prompt 11 Should Be Next
-- Authentication is now in place, so owner-specific screens can be built on real session identity instead of mock assumptions.
-- The repo already has the necessary read models for ownership, standings, history, and offseason draft context.
-- This is the right point to separate owner-facing experience from the commissioner bootstrap console without redesigning the underlying domain.
-
-## Technical Debt / Cleanup Worth Addressing Alongside Prompt 11
-- Review local Prisma migration workflow and document the safest dev path
-- Revisit dormant ingestion code and decide whether to keep it dormant, hide it further, or remove it later
-- Add tests around:
-  - authentication and authenticated route access
-  - commissioner authorization
-  - standings save validation
-  - draft order generation
-  - keeper locking
-  - draft finalization
-- Add password reset and email verification later if product scope calls for them
+### Migration Hygiene
+The repo-side Phase 5 migration chain is now cleaned up, but this remains important:
+- stop `next dev` before Prisma migration/generate work on Windows
+- do not casually accept destructive Prisma reset prompts against a populated local DB
+- if drift appears again, inspect migration history before resetting
 
 ## Important Constraints For Future Work
-- Preserve `TeamOwnership` as the source of truth for season ownership
-- Preserve `SeasonStanding` as the source of truth for final finishing order
-- Preserve `Draft`, `DraftPick`, and `KeeperSelection` as offseason history records
-- Continue to prefer `userId` for cross-season identity mapping
-- Keep service-layer business rules centralized and routes thin
-- Keep `User` separate from `LeagueMember`
 
-## How To Continue This Project In A Fresh ChatGPT Conversation
+- preserve `TeamOwnership` as ownership truth
+- preserve `SeasonStanding` as final fantasy standings truth
+- preserve `LedgerEntry` as money truth
+- preserve `Season.leaguePhase` as workflow truth
+- keep draft logic in `draft-service`
+- keep routes thin and services authoritative
+- keep `User` separate from `LeagueMember`
 
-### Suggested Seed Prompt
-Use the current repo plus the docs in `docs/` as the starting context.
+## Suggested Files To Read First In A New Chat
 
-Include:
-- current branch name
-- whether `main` is the target branch
-- the current active prompt you want to implement
-- any recent UI or workflow decisions that must be preserved
-
-### Best Files To Reference First
-- `docs/01-project-overview.md`
-- `docs/02-repo-architecture.md`
-- `docs/03-current-state-and-completed-prompts.md`
-- `docs/04-roadmap-and-next-steps.md`
-- `docs/PROJECT_HANDOFF_SUMMARY.md`
-
-### Suggested Opening Context For A New Assistant
-- This is a commissioner-first fantasy franchise league app
-- Owners control NFL teams, not fantasy players
-- Final standings are entered manually
-- Draft order is generated from final standings
-- Keeper selection happens before draft start
-- `TeamOwnership` remains the source of truth for season ownership
-- Authentication is already implemented with session-backed route protection
+1. `docs/01-project-overview.md`
+2. `docs/02-repo-architecture.md`
+3. `docs/03-current-state-and-completed-prompts.md`
+4. `docs/04-roadmap-and-next-steps.md`
+5. `docs/PROJECT_HANDOFF_SUMMARY.md`
+6. `docs/NEW_CHAT_HANDOFF.md`
 
 ## Short Continuation Checklist
+
 - confirm branch and git status
-- inspect current prompt target files before editing
-- preserve current offseason order of operations
-- preserve historical data semantics
-- avoid schema redesign unless clearly necessary
+- confirm the work is happening in `C:\Users\Ben\GM Fantasy`
+- inspect current phase/results/draft services before editing
+- preserve ledger-based offseason recommendation
+- preserve phase-gated draft workflow
+- preserve historical semantics and source-of-truth boundaries

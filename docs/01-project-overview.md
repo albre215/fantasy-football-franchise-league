@@ -6,43 +6,56 @@ GM Fantasy
 ## What This App Is For
 GM Fantasy is a commissioner-first web application for running a long-lived fantasy football league where owners control NFL franchises instead of fantasy player rosters.
 
-The application is built around preserving historical league state over many years:
+The application is built around preserving historical league state:
 - which owner controlled which NFL teams in each season
+- how final fantasy standings finished each season
+- how season money results accumulated in the ledger
 - how offseason keeper and draft decisions changed ownership
-- what the final standings were for each season
 - how those records feed history, analytics, and future automation
 
 ## Core League Concept
 - 10 owners in the league
-- Owners control NFL teams, not fantasy players
+- owners control NFL teams, not fantasy players
 - 32 NFL teams total
-- Each owner ends each season with exactly 3 teams
+- each owner ends each season with exactly 3 teams
 - 2 NFL teams remain unassigned each season
-- Ownership is season-scoped and historically preserved
+- ownership is season-scoped and historically preserved
 
-## Main Yearly Lifecycle
-The current codebase models the yearly workflow roughly as:
+## Current Yearly Lifecycle
 
-1. Final standings entry
-- The commissioner manually records the final 1st through 10th place standings for the completed season.
+1. In-season operations
+- a season is active and typically in `IN_SEASON`
+- NFL results import automatically for the active season
+- commissioner can review or correct weekly NFL outcomes if needed
 
-2. Offseason draft order generation
-- The system derives the next offseason draft order from the immediately previous season's saved final standings.
-- The draft order is reverse standings order.
+2. End-of-season results
+- the commissioner manually records the final 1st through 10th place fantasy standings
+- `SeasonStanding` remains the final fantasy-history truth
 
-3. Offseason draft preparation
-- Once the next season is activated and the previous season has saved standings, the offseason planning draft workspace is prepared.
-- Owners then lock in 2 keepers each from their previous season's 3-team portfolio.
+3. Financial posting
+- fantasy placements are converted into `FANTASY_PAYOUT` ledger entries
+- NFL-side season results also contribute to owner-level money outcomes
+- `LedgerEntry` is the money truth for the season
 
-4. Offseason draft execution
-- After keepers are finalized, the generated draft order is shown.
-- The commissioner starts the slow draft and records one pick per owner.
+4. Offseason recommendation
+- the next offseason draft recommendation is derived from the immediately previous season's total ledger winnings
+- order runs from lowest total winnings to highest total winnings
+- standings are used only as a deterministic tie-break fallback
 
-5. Resulting season ownership
-- Finalizing the draft creates the authoritative `TeamOwnership` rows for the target season.
+5. League phase progression
+- the target season moves through explicit workflow phases:
+  - `IN_SEASON`
+  - `POST_SEASON`
+  - `DROP_PHASE`
+  - `DRAFT_PHASE`
 
-6. History and analytics
-- Historical ownership, draft, and standings records are available for league history and analytics views.
+6. Offseason draft execution
+- in `DRAFT_PHASE`, owners keep 2 teams each
+- the commissioner runs the offseason slow draft
+- finalizing the draft creates the authoritative `TeamOwnership` rows for the target season
+
+7. History and analytics
+- historical ownership, ledger, standings, and draft records remain queryable for history and analytics
 
 ## Current Stack
 - Next.js 14 App Router
@@ -50,30 +63,35 @@ The current codebase models the yearly workflow roughly as:
 - Tailwind CSS
 - Prisma
 - PostgreSQL / Neon-style hosted Postgres via `DATABASE_URL`
+- NextAuth credentials authentication
 - Node.js
 
 ## Product Goals
-- Long-term league management
-- Multi-season history
-- Franchise ownership tracking
-- Offseason keeper and draft management
-- Historical analytics
-- Real authentication and safer mutation access
-- Eventual owner-facing dashboards
-- Eventual richer commissioner tools and visualizations
+- long-term league management
+- multi-season history
+- franchise ownership tracking
+- season financial tracking
+- offseason keeper and draft management
+- league lifecycle control through phases
+- historical analytics
+- real authentication and safer mutation access
 
 ## Current Philosophy
-- Preserve clean domain boundaries
-- Avoid redesigning core Prisma models unless absolutely necessary
-- Keep season-scoped ownership historically meaningful
-- Keep `TeamOwnership` as the authoritative source of season ownership
-- Keep final standings as the source of truth for draft-order generation
-- Keep offseason records historically queryable through `Draft`, `DraftPick`, and `KeeperSelection`
+- preserve clean domain boundaries
+- avoid redesigning core Prisma models unless clearly necessary
+- keep season-scoped ownership historically meaningful
+- keep `TeamOwnership` as the authoritative source of season ownership
+- keep `SeasonStanding` as the authoritative source of final fantasy standings
+- keep `LedgerEntry` as the authoritative source of money / winnings
+- keep `Season.leaguePhase` as workflow state
+- keep offseason records historically queryable through `Draft`, `DraftPick`, and `KeeperSelection`
 
 ## Current Product Direction
 The current app favors a commissioner-driven workflow over external integrations:
-- Final standings are entered manually
-- Draft order automation is derived from those saved standings
-- Offseason draft lifecycle is managed directly in the app
+- final fantasy standings are entered manually
+- NFL results are provider-backed and imported automatically for the active season
+- fantasy payouts are posted into the ledger from saved standings
+- offseason draft order is derived from previous-season ledger totals
+- offseason workflow is explicitly gated by persisted league phases
 
-Provider-based ingestion code still exists in the repo, but it is not the active commissioner workflow right now.
+Provider-based ingestion code still exists in the repo, but manual standings remain the primary fantasy-results workflow.
