@@ -25,6 +25,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
     }
 
-    return NextResponse.json({ error: "Unable to finalize offseason draft." }, { status: 500 });
+    return NextResponse.json({ error: "Unable to finalize replacement draft." }, { status: 500 });
   }
 }

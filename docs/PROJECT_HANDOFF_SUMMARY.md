@@ -22,10 +22,11 @@ GM Fantasy is a commissioner-first web app for managing a long-running fantasy f
 - fantasy payout posting into the ledger
 - season ledger balances and commissioner adjustments
 - ledger-based offseason draft recommendation
-- offseason keeper workflow
-- offseason slow draft lifecycle
+- explicit DROP_PHASE keeper / release workflow
+- replacement draft lifecycle
 - league phase system
 - draft finalization into season ownership
+- owner-facing read-only views
 - history and analytics views for ownership and draft history
 
 ## Current Source-of-Truth Rules
@@ -47,19 +48,19 @@ GM Fantasy is a commissioner-first web app for managing a long-running fantasy f
 7. Publish fantasy payouts into the ledger
 8. Review ledger-based offseason draft recommendation for the next season
 9. Move the target season through phases
-10. In `DRAFT_PHASE`, save keepers
-11. Start the draft
-12. Record picks
+10. In `DROP_PHASE`, save 2 keepers and review the released-team pool
+11. In `DRAFT_PHASE`, start the replacement draft
+12. Record one released-team pick per owner
 13. Finalize the draft into `TeamOwnership`
-14. Review ledger, history, and analytics
+14. Review owner views, ledger, history, and analytics
 
 ## Next Recommended Prompt
-Implement the real `DROP_PHASE` keeper/release workflow.
+Implement inaugural auction behavior for leagues that do not have an immediately previous season.
 
 ## Why That Is Next
-- `DROP_PHASE` is now persisted and visible but not yet backed by full keeper/release mechanics
-- phase infrastructure, ledger-based recommendation, and draft gating are already in place
-- this is the most natural next product step before replacement draft or inaugural auction work
+- the continuity-based offseason workflow is now complete through replacement draft finalization
+- the biggest remaining offseason gap is the empty-league / inaugural path
+- that work can build on the same phase-aware architecture without weakening the current source-of-truth boundaries
 
 ## Top Risks / Caveats
 - Windows can lock Git and Prisma files while `next dev` is running

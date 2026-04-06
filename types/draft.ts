@@ -26,8 +26,19 @@ export interface DraftMemberSummary {
   keepers: DraftKeeperSelection[];
   releasedTeam: DraftTeamSummary | null;
   draftedTeam: DraftTeamSummary | null;
+  replacementDraftSlot: number | null;
+  hasPicked: boolean;
   keeperCount: number;
   isKeeperComplete: boolean;
+}
+
+export interface ReplacementDraftOrderEntry {
+  draftSlot: number;
+  leagueMemberId: string;
+  userId: string;
+  displayName: string;
+  hasPicked: boolean;
+  selectedTeam: DraftTeamSummary | null;
 }
 
 export interface DraftPickSummary {
@@ -64,8 +75,11 @@ export interface DraftState {
   members: DraftMemberSummary[];
   draftPool: DraftTeamSummary[];
   releasedTeamPool: DraftTeamSummary[];
+  remainingTeams: DraftTeamSummary[];
+  replacementDraftOrder: ReplacementDraftOrderEntry[];
   picks: DraftPickSummary[];
   currentPick: DraftPickSummary | null;
+  currentDrafter: ReplacementDraftOrderEntry | null;
   canFinalize: boolean;
   canStart: boolean;
   keeperEditing: {
@@ -77,6 +91,10 @@ export interface DraftState {
     completeOwners: number;
     totalOwners: number;
     isComplete: boolean;
+  };
+  readiness: {
+    isReady: boolean;
+    warnings: string[];
   };
 }
 

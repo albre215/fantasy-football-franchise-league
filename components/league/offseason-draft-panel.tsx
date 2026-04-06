@@ -397,10 +397,10 @@ export function OffseasonDraftPanel({
         });
 
         await parseJsonResponse<InitializeDraftResponse>(response);
-        onSuccess("Offseason keeper workspace prepared. Save two keepers for each owner before moving into DRAFT_PHASE.");
+        onSuccess("Replacement draft workspace prepared. Save two keepers for each owner before moving into DRAFT_PHASE.");
         await onRefresh();
       } catch (error) {
-        onError(error instanceof Error ? error.message : "Unable to prepare the offseason draft workspace.");
+        onError(error instanceof Error ? error.message : "Unable to prepare the replacement draft workspace.");
       } finally {
         setIsPreparingDraftWorkspace(false);
       }
@@ -632,17 +632,17 @@ export function OffseasonDraftPanel({
       <CardHeader>
         <CardTitle>Offseason Draft</CardTitle>
         <CardDescription>
-          Initialize the annual slow draft, save keepers, record picks, and finalize the new season.
+          Prepare the keeper workspace, run the released-team replacement draft, and finalize the target season.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {!activeSeason ? (
           <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-            Create or activate a season first. The offseason draft always targets the current active season.
+            Create or activate a season first. The replacement draft always targets the current active season.
           </div>
         ) : isDraftStateLoading ? (
           <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-            Loading offseason draft state for the active season...
+            Loading replacement draft state for the active season...
           </div>
         ) : !draftState ? (
           <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
@@ -654,7 +654,7 @@ export function OffseasonDraftPanel({
                     {previousSeason ? formatSeasonLabel(previousSeason) : "Previous season not found"}
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    The offseason draft always uses the immediately previous season as its source season.
+                    The replacement draft always uses the immediately previous season as its source season.
                   </p>
                 </div>
               </div>
@@ -668,7 +668,7 @@ export function OffseasonDraftPanel({
                   {!canManageDraft ? (
                     <p>
                       {accessMessage ??
-                        "Only the league commissioner can prepare keeper selections and manage the offseason draft."}
+                        "Only the league commissioner can prepare keeper selections and manage the replacement draft."}
                     </p>
                   ) : !phaseAllowsDraftWorkspaceManagement ? (
                     <p>
@@ -763,7 +763,7 @@ export function OffseasonDraftPanel({
               <p>Owners in draft: {members.length} / 10</p>
               <p>Expected keepers: 20 total</p>
               <p>Expected released teams: 10 total</p>
-              <p>Expected draft pool: 12 teams</p>
+              <p>Expected draft pool: 10 released teams</p>
               <p>Expected draft picks: 10</p>
               <p>Commissioner access: {canManageDraft ? "Pass" : "Read-only"}</p>
               <p>DROP_PHASE editing allowed now: {phaseAllowsKeeperEditing ? "Pass" : "Fail"}</p>
@@ -785,7 +785,7 @@ export function OffseasonDraftPanel({
                 <div className="rounded-lg border border-dashed border-border p-3">
                   {previousSeason
                     ? "Complete the previous season's ledger totals and target-season mappings before preparing keeper selections."
-                    : "Create the immediately previous season before preparing the offseason draft workspace."}
+                    : "Create the immediately previous season before preparing the replacement draft workspace."}
                 </div>
               )}
             </div>
@@ -817,7 +817,7 @@ export function OffseasonDraftPanel({
                   {draftState.keeperProgress.completeOwners} / {draftState.keeperProgress.totalOwners} owners complete
                 </p>
                 <p>Keepers saved: {draftState.draft.keeperCount} / 20</p>
-                <p>Draft pool: {draftState.draftPool.length} teams</p>
+                <p>Remaining released teams: {draftState.remainingTeams.length}</p>
               </div>
               <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
                 <p className="font-medium text-foreground">Draft Progress</p>
@@ -841,7 +841,7 @@ export function OffseasonDraftPanel({
                   <CardContent className="space-y-4">
                     {!canManageDraft ? (
                       <div className="rounded-lg border border-dashed border-border bg-secondary/30 p-4 text-sm text-muted-foreground">
-                        <p className="font-medium text-foreground">Read-only offseason draft view</p>
+                        <p className="font-medium text-foreground">Read-only replacement draft view</p>
                         <p>
                           {accessMessage ??
                             "Only the league commissioner can change keeper selections or control the draft for this league."}
@@ -984,11 +984,11 @@ export function OffseasonDraftPanel({
                 {showPlanningDraftOrder ? (
                   <Card>
                     <CardHeader>
-                      <CardTitle>{draftState.draft.status === "PLANNING" ? "Generated Draft Order" : "Draft Board"}</CardTitle>
+                      <CardTitle>{draftState.draft.status === "PLANNING" ? "Replacement Draft Order" : "Replacement Draft Board"}</CardTitle>
                       <CardDescription>
                         {draftState.draft.status === "PLANNING"
-                          ? "Ledger-total order for the upcoming offseason draft."
-                          : "Follow the full order and current pick."}
+                          ? "Ledger-based order for the released-team replacement draft."
+                          : "Follow the one-pick-per-owner replacement draft board."}
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
@@ -1037,7 +1037,7 @@ export function OffseasonDraftPanel({
                 <Card>
                   <CardHeader>
                     <CardTitle>Released Team Pool</CardTitle>
-                    <CardDescription>Teams explicitly released during DROP_PHASE before the offseason draft begins.</CardDescription>
+                    <CardDescription>Teams explicitly released during DROP_PHASE and now eligible for the replacement draft.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {draftState.releasedTeamPool.length === 0 ? (
@@ -1061,7 +1061,7 @@ export function OffseasonDraftPanel({
                   </CardHeader>
                   <CardContent className="space-y-2 lg:min-h-[44rem]">
                     {draftState.draftPool.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Draft pool is empty.</p>
+                      <p className="text-sm text-muted-foreground">All released teams have been drafted.</p>
                     ) : (
                       draftState.draftPool.map((team) => (
                         <div className="rounded-lg border border-border p-3 text-sm" key={team.id}>
@@ -1076,7 +1076,7 @@ export function OffseasonDraftPanel({
                   <CardHeader>
                     <CardTitle>Draft Controls</CardTitle>
                     <CardDescription>
-                      Start, pause, resume, and finalize the slow draft from this panel.
+                      Start, pause, resume, and finalize the replacement draft from this panel.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4 text-sm text-muted-foreground">
@@ -1087,6 +1087,16 @@ export function OffseasonDraftPanel({
                         ? `${draftState.currentPick.overallPickNumber} - ${draftState.currentPick.selectingDisplayName}`
                         : "No current pick"}
                     </p>
+                    <p>
+                      Current drafter: {draftState.currentDrafter ? draftState.currentDrafter.displayName : "No current drafter"}
+                    </p>
+                    {draftState.readiness.warnings.length > 0 ? (
+                      <div className="rounded-lg border border-dashed border-border p-3">
+                        {draftState.readiness.warnings.map((warning) => (
+                          <p key={warning}>{warning}</p>
+                        ))}
+                      </div>
+                    ) : null}
                     {draftState.draft.status === "ACTIVE" && draftState.currentPick && (
                       <div className="space-y-3">
                         <select
@@ -1127,7 +1137,7 @@ export function OffseasonDraftPanel({
                           type="button"
                           variant={canStartDraftFromUi && canManageDraft ? "default" : "secondary"}
                         >
-                          Start Draft
+                          Start Replacement Draft
                         </Button>
                       )}
                       {draftState.draft.status === "ACTIVE" && (
@@ -1156,13 +1166,13 @@ export function OffseasonDraftPanel({
                         type="button"
                         variant="secondary"
                       >
-                        Finalize Draft
+                        Finalize Replacement Draft
                       </Button>
                     </div>
                     <div className="rounded-lg border border-dashed border-border p-3">
                       {!canManageDraft
                         ? accessMessage ??
-                          "You can review this offseason draft, but only the league commissioner can change keeper selections or run draft actions."
+                          "You can review this replacement draft, but only the league commissioner can change keeper selections or run draft actions."
                         : !phaseAllowsDraftExecution
                         ? `Move the season into DRAFT_PHASE before running draft controls. Current phase: ${
                             phaseContext?.season.leaguePhase ?? activeSeason?.leaguePhase ?? "Unknown"
@@ -1173,7 +1183,7 @@ export function OffseasonDraftPanel({
                         ? "Save all keeper changes before starting the draft. Unsaved keeper edits are still on the screen."
                         : draftState.draft.status === "PLANNING" && isAnyKeeperSaveInFlight
                         ? "Wait for keeper saves to finish before starting the draft."
-                        : "Save two keepers for every owner, start the draft, record one pick per owner, then finalize."}
+                        : "Save two keepers for every owner, start the replacement draft, record one pick per owner from the released pool, then finalize."}
                     </div>
                   </CardContent>
                 </Card>

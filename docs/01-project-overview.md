@@ -49,12 +49,17 @@ The application is built around preserving historical league state:
   - `DROP_PHASE`
   - `DRAFT_PHASE`
 
-6. Offseason draft execution
-- in `DRAFT_PHASE`, owners keep 2 teams each
-- the commissioner runs the offseason slow draft
+6. DROP_PHASE keeper / release workflow
+- in `DROP_PHASE`, each owner keeps exactly 2 teams from the previous season
+- each owner explicitly releases exactly 1 team
+- the released-team pool becomes reviewable league-wide before the draft starts
+
+7. Replacement draft execution
+- in `DRAFT_PHASE`, the commissioner runs a one-pick-per-owner replacement draft
+- the draft pool comes only from the explicit released-team pool
 - finalizing the draft creates the authoritative `TeamOwnership` rows for the target season
 
-7. History and analytics
+8. History and analytics
 - historical ownership, ledger, standings, and draft records remain queryable for history and analytics
 
 ## Current Stack

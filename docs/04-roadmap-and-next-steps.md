@@ -1,6 +1,6 @@
 # Roadmap and Next Steps
 
-This roadmap reflects the repo after Phases 1 through 5 and the recent schema/error-resolution work.
+This roadmap reflects the repo after Phases 1 through 8.
 
 ## Current Baseline
 
@@ -13,36 +13,37 @@ Already implemented:
 - fantasy standings -> ledger integration
 - ledger-based offseason draft recommendation
 - league phase system
-- offseason keeper and slow-draft lifecycle
+- explicit DROP_PHASE keeper / release workflow
+- replacement draft lifecycle
+- owner-facing read-only views
 - history and analytics views
 
 ## Recommended Next Product Work
 
-### Phase 6 - Drop / Keeper Workflow
+### Phase 9 - Inaugural Auction / Empty-League Entry Path
 
 #### Goal
-Use the existing `DROP_PHASE` to implement the explicit keeper/release window.
+Support the path where a brand-new or reset league does not have a previous season to inherit from.
 
 #### What It Should Enable
-- each owner keeps 2 teams and releases 1
-- keeper/release review before draft prep
-- explicit transition from `DROP_PHASE` into `DRAFT_PHASE`
+- inaugural auction behavior when there is no immediately previous season
+- an explicit alternative to replacement-draft continuity
+- clean coexistence with the current ledger-based offseason continuity path
 
 #### Why It Is Next
-- `DROP_PHASE` now exists but is only a gating/state layer
-- phase infrastructure is in place
-- draft recommendation and draft prep are already phase-aware
+- the continuing-league offseason workflow is now end-to-end
+- the next major gap is the non-continuity path for brand-new leagues
+- this is the most natural next product step before broader owner actions or deeper automation
 
-### Phase 7 - Owner-Facing Views
+### Owner Experience Follow-Up
 
 #### Goal
-Add a non-commissioner experience rooted in the current historical and season data.
+Build on the Phase 7 read-only owner views without changing the core domain model.
 
 #### What It Should Enable
-- owner portfolio view
-- owner history
-- season balances and results visibility
-- future owner-facing draft context
+- read-only owner replacement-draft context improvements
+- eventual owner confirmations or acknowledgements if the product wants them later
+- better financial and historical comparisons per owner
 
 ## Important Technical Follow-Up
 

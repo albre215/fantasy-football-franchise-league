@@ -1,75 +1,28 @@
 # Current State and Completed Prompts
 
-This file summarizes the repo as it exists now.
+This file summarizes the repo as it exists after Phases 1 through 8.
 
-## Prompt 5 - League Bootstrap Flow
+## Earlier Prompt Baseline
 
-### What Currently Works
-- create leagues
-- join leagues as authenticated users
-- create seasons
-- set active season
-- add/remove league members
-- view active-season ownership
-- assign NFL teams manually
-- remove assignments
-- validate active season readiness
-- lock/unlock active season
+### League bootstrap
+- league creation and joining
+- season creation and active-season management
+- league member add/remove
+- season setup validation
+- lock / unlock workflow
 
-## Prompt 6 - Offseason Slow Draft Engine
-
-### What Currently Works
-- planning draft exists per target season
-- keepers are selected from previous-season teams
-- draft pool derives from non-kept teams
-- one-pick-per-owner offseason draft is supported
-- draft lifecycle supports:
-  - planning
-  - active
-  - paused
-  - completed
-- draft finalization writes authoritative `TeamOwnership`
-
-### Important Guardrails
-- keepers lock once draft leaves `PLANNING`
-- source season must be the immediately previous season
-- target season must be empty before draft finalization
-- draft prep/execution is now gated by season `leaguePhase`
-
-## Prompt 7 - League History & Franchise Analytics
-
-### What Currently Works
+### History / analytics
 - league overview
-- season history
 - franchise history
 - owner history
 - draft history
 - analytics leaderboards and summaries
 
-## Prompt 8 - Manual Final Standings Entry
-
-### What Currently Works
-- commissioner can assign 1st through 10th place
-- standings can be saved, edited, and overwritten
-- saved standings are displayed in ranked order
-- standings remain stored in `SeasonStanding`
-
-## Prompt 9 - Draft Order Automation
-
-### Original Goal
-Automate offseason draft order from end-of-season information.
-
-### Current State
-This prompt's original standings-based implementation has been superseded by later phases.
-
-## Prompt 10 - Authentication System
-
-### What Currently Works
-- account registration
-- credentials sign-in through NextAuth
-- protected league/dashboard pages
-- mutation routes derive acting user from the session
-- commissioner-only actions still enforce role checks server-side
+### Manual standings + auth
+- commissioner-entered final standings
+- standings overwrite flow
+- credentials authentication through NextAuth
+- session-derived acting user on mutation routes
 
 ## Phase 1 - Ledger Engine
 
@@ -84,39 +37,36 @@ This prompt's original standings-based implementation has been superseded by lat
 ### What Landed
 - provider-backed NFL result imports
 - season/year-based NFL import flow
+- automatic active-season imports
 - season import history
 - owner-level NFL rollups from owned teams
-- commissioner weekly review/correction tools
+- commissioner weekly review / correction tools
 
 ### Current Notes
-- active season imports run automatically
-- manual corrections are preserved across provider re-imports
-- import concurrency is guarded season-by-season
+- manual corrections survive provider re-imports
+- imports are concurrency-guarded by season
 
 ## Phase 3 - Fantasy Results -> Ledger Integration
 
 ### What Landed
-- final fantasy standings still persist in `SeasonStanding`
-- standings now publish `FANTASY_PAYOUT` ledger entries
+- final fantasy standings remain stored in `SeasonStanding`
+- saved standings publish `FANTASY_PAYOUT` ledger entries
 - standings corrections safely replace fantasy payout ledger entries
-- season financial results now include fantasy payouts
 
 ## Phase 4 - Offseason Draft Order From Ledger Totals
 
 ### What Landed
 - recommended offseason draft order now derives from season ledger totals
-- standings are still fantasy-history truth
-- ledger is the financial truth
-- source-season owners map into target season by `userId`
+- source-season owners map into the target season by `userId`
 - deterministic tie-breaks:
   - lower ledger total first
   - worse fantasy rank first if tied
   - display name ordering as final fallback
 
 ### Hardening That Landed
-- clearer naming around offseason recommendation
+- clearer recommendation naming
 - stronger recommendation tests
-- readiness and coverage transparency
+- readiness / coverage transparency
 - explicit tie-break output
 
 ## Phase 5 - League Phase System
@@ -128,14 +78,34 @@ This prompt's original standings-based implementation has been superseded by lat
   - `POST_SEASON`
   - `DROP_PHASE`
   - `DRAFT_PHASE`
-- phase service for:
-  - current phase
-  - allowed actions
-  - warnings
-  - readiness
-  - available transitions
-- draft prep and execution are gated by `DRAFT_PHASE`
-- commissioner UI now exposes phase state and transitions
+- service-owned phase context, warnings, readiness, and transitions
+- phase-gated draft preparation and execution
+
+## Phase 6 - Real DROP_PHASE Keeper / Release Workflow
+
+### What Landed
+- `DROP_PHASE` now records exactly 2 keepers and 1 released team per owner
+- released-team pool is explicit and league-wide reviewable
+- transition into `DRAFT_PHASE` depends on valid keeper / release completion
+
+## Phase 7 - Owner-Facing Read-Only Views
+
+### What Landed
+- `/owner` route and read-only owner dashboard
+- owner season detail
+- owner financial rollups
+- owner history
+- read-only draft and phase context
+
+## Phase 8 - Replacement Draft System
+
+### What Landed
+- replacement draft pool derives only from the explicit released-team pool
+- ledger-based offseason recommendation still drives draft order
+- one replacement draft pick per owner
+- duplicate or non-pool team picks are rejected
+- replacement draft execution remains gated by `DRAFT_PHASE`
+- finalization writes exactly 3 authoritative `TeamOwnership` rows per owner into the target season
 
 ## Additional Hardening / Error Resolution Already Landed
 
@@ -159,13 +129,14 @@ This prompt's original standings-based implementation has been superseded by lat
 5. Let active-season NFL results import automatically
 6. Save final standings for the completed season
 7. Publish fantasy payouts into the ledger
-8. Review ledger-based offseason recommendation for the next season
+8. Review the ledger-based offseason recommendation for the next season
 9. Move the target season through league phases
-10. In `DRAFT_PHASE`, save keepers
-11. Start the draft
-12. Record picks
-13. Finalize the draft into target-season ownership
-14. Review history, analytics, NFL performance, and ledger balances
+10. In `DROP_PHASE`, save 2 keepers and review the released-team pool
+11. Move into `DRAFT_PHASE`
+12. Start the replacement draft
+13. Record one released-team pick per owner
+14. Finalize the draft into target-season ownership
+15. Review owner views, history, analytics, NFL performance, and ledger balances
 
 ## Current State Summary
 
@@ -178,13 +149,13 @@ The repo currently supports:
 - fantasy payouts posted into the ledger
 - ledger-based offseason draft recommendation
 - explicit league phase workflow
-- offseason keeper and draft lifecycle
+- real DROP_PHASE keeper / release workflow
+- replacement draft lifecycle
+- owner-facing read-only views
 - season ledger UI and adjustments
 - historical ownership and draft analytics
 
 The repo does not yet support:
-- keeper/release engine for `DROP_PHASE`
 - inaugural auction behavior
-- replacement draft behavior
-- owner-facing app experience
+- owner-facing draft actions
 - password reset / email verification

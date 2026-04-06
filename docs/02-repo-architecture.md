@@ -173,7 +173,7 @@ Additional ingestion-related models still present in the schema.
 ### `server/services/draft-service.ts`
 - read/init draft state
 - save keepers
-- draft lifecycle
+- replacement draft lifecycle
 - finalize into `TeamOwnership`
 - phase-gated draft operations
 
@@ -278,8 +278,8 @@ The immediately previous season's ledger totals are aggregated per owner, tied d
 ### 5. League Phase Control
 `seasonPhaseService` exposes current phase, allowed actions, warnings, readiness, and valid forward transitions.
 
-### 6. Offseason Draft Lifecycle
-In `DRAFT_PHASE`, keepers and draft execution become available. Finalization writes authoritative target-season `TeamOwnership`.
+### 6. Offseason Replacement Draft Lifecycle
+In `DROP_PHASE`, keepers and released teams become explicit and reviewable. In `DRAFT_PHASE`, the replacement draft runs from the released-team pool using the ledger-based order, and finalization writes authoritative target-season `TeamOwnership`.
 
 ### 7. History / Analytics
 Read-only server-side history and analytics aggregate ownership, standings, ledger, and draft records.

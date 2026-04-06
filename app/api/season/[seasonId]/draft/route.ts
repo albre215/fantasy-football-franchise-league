@@ -22,7 +22,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
     }
 
-    return NextResponse.json({ error: "Unable to load offseason draft." }, { status: 500 });
+    return NextResponse.json({ error: "Unable to load replacement draft." }, { status: 500 });
   }
 }
 
@@ -47,6 +47,6 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
     }
 
-    return NextResponse.json({ error: "Unable to initialize offseason draft." }, { status: 500 });
+    return NextResponse.json({ error: "Unable to initialize replacement draft." }, { status: 500 });
   }
 }

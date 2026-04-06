@@ -5,7 +5,7 @@ Use this file to bootstrap a fresh chat quickly without re-explaining the whole 
 ## Repo + Working Context
 - Active repo: `C:\Users\Ben\GM Fantasy`
 - Treat `GM Fantasy` as the only active repo unless explicitly told otherwise
-- Current branch at handoff creation: `main`
+- Current branch at handoff creation: `feature/prompt-8-replacement-draft-system`
 - Stack:
   - Next.js 14 App Router
   - TypeScript
@@ -27,8 +27,10 @@ The app currently supports:
 - season ledger balances and manual adjustments
 - fantasy payout posting into the ledger
 - ledger-based offseason draft recommendation
-- offseason keeper and draft lifecycle
+- explicit DROP_PHASE keeper / release workflow
+- replacement draft lifecycle
 - league phase controls
+- owner-facing read-only views
 - history and analytics views
 
 ## Non-Negotiable Domain Rules
@@ -118,14 +120,15 @@ The app currently supports:
 
 ### Draft
 - tied to target/source seasons
-- owners keep 2 teams
-- the draft fills the third team
+- owners keep 2 teams in `DROP_PHASE`
+- each owner releases 1 team into the replacement draft pool
+- the replacement draft fills the third team in `DRAFT_PHASE`
 - finalization writes target-season `TeamOwnership`
 
 ### Phase system
 - workflow gating is explicit
 - draft workflows are gated to `DRAFT_PHASE`
-- `DROP_PHASE` exists as the foundation for later keeper/release work
+- `DROP_PHASE` is now the real keeper / release stage
 
 ## Local Environment Notes
 - Windows git lock-file / permission friction has happened before on this machine
@@ -162,5 +165,8 @@ Tell the new chat:
   - Phase 4 ledger-based offseason draft recommendation
   - Phase 4 hardening
   - Phase 5 league phase system
+  - Phase 6 real DROP_PHASE keeper / release workflow
+  - Phase 7 owner-facing read-only views
+  - Phase 8 replacement draft system
   - schema/error-resolution work for `leaguePhase`
   - repaired Prisma migration state and cleaned Phase 5 migration chain

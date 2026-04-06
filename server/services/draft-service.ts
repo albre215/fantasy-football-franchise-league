@@ -23,8 +23,6 @@ import type {
 
 const DRAFT_OWNER_COUNT = 10;
 const KEEPERS_PER_OWNER = 2;
-const OFFSEASON_DRAFT_PICK_COUNT = 10;
-const TOTAL_NFL_TEAMS = 32;
 
 class DraftServiceError extends Error {
   constructor(
@@ -96,15 +94,6 @@ function buildDraftOrderEntries(orderLeagueMemberIds: string[]) {
     roundPickNumber: index + 1,
     selectingLeagueMemberId: leagueMemberId
   }));
-}
-
-async function getActiveTeams(tx: PrismaClientLike) {
-  return tx.nFLTeam.findMany({
-    where: {
-      isActive: true
-    },
-    orderBy: [{ conference: "asc" }, { division: "asc" }, { name: "asc" }]
-  });
 }
 
 async function getDraftWithContextOrThrow(tx: PrismaClientLike, draftId: string) {
@@ -358,8 +347,50 @@ function getKeeperLockReason(status: DraftStatus, isTargetSeasonLocked: boolean)
   return "Keeper selections can only be changed before the draft begins.";
 }
 
+function compareTeamsByName(left: DraftTeamSummary, right: DraftTeamSummary) {
+  return left.name.localeCompare(right.name);
+}
+
+function buildReplacementDraftReadinessWarnings(input: {
+  keeperProgressComplete: boolean;
+  releasedTeamPoolSize: number;
+  totalOwners: number;
+  pickCount: number;
+  uniqueParticipantCount: number;
+  picksCompleted: number;
+  remainingTeamsCount: number;
+}) {
+  const warnings: string[] = [];
+
+  if (!input.keeperProgressComplete) {
+    warnings.push("Every owner must keep exactly 2 teams and release exactly 1 team before the replacement draft can run.");
+  }
+
+  if (input.releasedTeamPoolSize !== input.totalOwners) {
+    warnings.push("The replacement draft pool must contain exactly one released team per owner.");
+  }
+
+  if (input.pickCount !== input.totalOwners) {
+    warnings.push("Replacement draft order must contain exactly one pick per owner.");
+  }
+
+  if (input.uniqueParticipantCount !== input.pickCount) {
+    warnings.push("Replacement draft order contains duplicate owners.");
+  }
+
+  if (input.picksCompleted > input.totalOwners) {
+    warnings.push("Replacement draft contains more completed picks than owners.");
+  }
+
+  if (input.remainingTeamsCount + input.picksCompleted !== input.releasedTeamPoolSize) {
+    warnings.push("Replacement draft pool and completed picks are out of sync.");
+  }
+
+  return warnings;
+}
+
 async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<DraftState> {
-  const [draft, activeTeams] = await Promise.all([getDraftWithContextOrThrow(tx, draftId), getActiveTeams(tx)]);
+  const draft = await getDraftWithContextOrThrow(tx, draftId);
 
   const keepersByMemberId = new Map<string, DraftKeeperSelection[]>();
 
@@ -378,8 +409,11 @@ async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<D
   }
 
   const draftedTeamsByMemberId = new Map<string, DraftTeamSummary>();
+  const draftSlotByMemberId = new Map<string, number>();
 
   for (const pick of draft.picks) {
+    draftSlotByMemberId.set(pick.selectingLeagueMemberId, pick.overallPickNumber);
+
     if (pick.selectedNflTeam) {
       draftedTeamsByMemberId.set(pick.selectingLeagueMemberId, mapDraftTeam(pick.selectedNflTeam));
     }
@@ -400,6 +434,7 @@ async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<D
       previousSeasonTeams.length === 3 && keepers.length === KEEPERS_PER_OWNER
         ? previousSeasonTeams.find((team) => !keepers.some((keeper) => keeper.nflTeam.id === team.id)) ?? null
         : null;
+    const draftedTeam = draftedTeamsByMemberId.get(member.id) ?? null;
 
     return {
       leagueMemberId: member.id,
@@ -410,25 +445,35 @@ async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<D
       previousSeasonTeams,
       keepers,
       releasedTeam,
-      draftedTeam: draftedTeamsByMemberId.get(member.id) ?? null,
+      draftedTeam,
+      replacementDraftSlot: draftSlotByMemberId.get(member.id) ?? null,
+      hasPicked: draftedTeam !== null,
       keeperCount: keepers.length,
       isKeeperComplete: keepers.length === KEEPERS_PER_OWNER && releasedTeam !== null
     };
   });
 
-  const reservedTeamIds = new Set<string>();
-  for (const keeper of draft.keeperSelections) {
-    reservedTeamIds.add(keeper.nflTeamId);
-  }
-  for (const pick of draft.picks) {
-    if (pick.selectedNflTeamId) {
-      reservedTeamIds.add(pick.selectedNflTeamId);
-    }
-  }
-
   const picks = draft.picks.map(mapDraftPick);
   const picksCompleted = picks.filter((pick) => pick.selectedNflTeam !== null).length;
   const completeOwners = members.filter((member) => member.isKeeperComplete).length;
+  const releasedTeamPool = members
+    .map((member) => member.releasedTeam)
+    .filter((team): team is DraftTeamSummary => team !== null)
+    .sort(compareTeamsByName);
+  const draftedTeamIds = new Set(
+    draft.picks
+      .map((pick) => pick.selectedNflTeamId)
+      .filter((teamId): teamId is string => Boolean(teamId))
+  );
+  const draftPool = releasedTeamPool.filter((team) => !draftedTeamIds.has(team.id));
+  const replacementDraftOrder = draft.picks.map((pick) => ({
+    draftSlot: pick.overallPickNumber,
+    leagueMemberId: pick.selectingLeagueMemberId,
+    userId: pick.selectingLeagueMember.userId,
+    displayName: pick.selectingLeagueMember.user.displayName,
+    hasPicked: Boolean(pick.selectedNflTeamId),
+    selectedTeam: pick.selectedNflTeam ? mapDraftTeam(pick.selectedNflTeam) : null
+  }));
   const keeperLockReason =
     draft.targetSeason.leaguePhase !== "DROP_PHASE"
       ? `Keeper selections can only be changed during DROP_PHASE. Current phase: ${draft.targetSeason.leaguePhase}.`
@@ -436,32 +481,43 @@ async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<D
   const keeperProgress = {
     completeOwners,
     totalOwners: members.length,
-    isComplete: completeOwners === DRAFT_OWNER_COUNT
+    isComplete: completeOwners === members.length
   };
+  const readinessWarnings = buildReplacementDraftReadinessWarnings({
+    keeperProgressComplete: keeperProgress.isComplete,
+    releasedTeamPoolSize: releasedTeamPool.length,
+    totalOwners: members.length,
+    pickCount: draft.picks.length,
+    uniqueParticipantCount: new Set(draft.picks.map((pick) => pick.selectingLeagueMemberId)).size,
+    picksCompleted,
+    remainingTeamsCount: draftPool.length
+  });
   const currentPick = picks.find((pick) => pick.overallPickNumber === draft.currentPick) ?? null;
+  const currentDrafter = currentPick
+    ? replacementDraftOrder.find((entry) => entry.leagueMemberId === currentPick.selectingLeagueMemberId) ?? null
+    : null;
   const canStart =
     draft.status === "PLANNING" &&
     !draft.targetSeason.isLocked &&
-    keeperProgress.isComplete &&
-    activeTeams.length - draft.keeperSelections.length === 12 &&
-    draft.picks.length === OFFSEASON_DRAFT_PICK_COUNT;
+    readinessWarnings.length === 0;
   const canFinalize =
     (draft.status === "ACTIVE" || draft.status === "PAUSED") &&
     !draft.targetSeason.isLocked &&
     keeperProgress.isComplete &&
-    picksCompleted === OFFSEASON_DRAFT_PICK_COUNT &&
+    picksCompleted === members.length &&
+    members.every((member) => member.draftedTeam !== null) &&
     draft.targetSeason.teamOwnerships.length === 0;
 
   return {
     draft: mapDraftSummary(draft),
     members,
-    draftPool: activeTeams.filter((team) => !reservedTeamIds.has(team.id)).map(mapDraftTeam),
-    releasedTeamPool: members
-      .map((member) => member.releasedTeam)
-      .filter((team): team is DraftTeamSummary => team !== null)
-      .sort((left, right) => left.name.localeCompare(right.name)),
+    draftPool,
+    releasedTeamPool,
+    remainingTeams: draftPool,
+    replacementDraftOrder,
     picks,
     currentPick,
+    currentDrafter,
     canFinalize,
     canStart,
     keeperEditing: {
@@ -469,7 +525,11 @@ async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<D
       isLocked: keeperLockReason !== null,
       lockReason: keeperLockReason
     },
-    keeperProgress
+    keeperProgress,
+    readiness: {
+      isReady: readinessWarnings.length === 0,
+      warnings: readinessWarnings
+    }
   };
 }
 
@@ -708,11 +768,11 @@ async function validateDraftStart(tx: PrismaClientLike, draftId: string) {
   }
 
   if (!draftState.canStart) {
-    throw new DraftServiceError("Complete all keeper selections before starting the draft.", 409);
-  }
-
-  if (draftState.draftPool.length !== TOTAL_NFL_TEAMS - DRAFT_OWNER_COUNT * KEEPERS_PER_OWNER) {
-    throw new DraftServiceError("The draft pool must contain exactly 12 teams before the draft can start.", 409);
+    throw new DraftServiceError(
+      draftState.readiness.warnings[0] ??
+        "Complete all DROP_PHASE keeper and release decisions before starting the replacement draft.",
+      409
+    );
   }
 }
 
@@ -883,8 +943,8 @@ export const draftService = {
         }
       });
 
-      if (picks.length !== OFFSEASON_DRAFT_PICK_COUNT) {
-        throw new DraftServiceError("Draft order override requires all 10 draft picks to exist.", 409);
+      if (picks.length !== draft.targetSeason.league.members.length) {
+        throw new DraftServiceError("Draft order override requires one replacement draft pick per owner.", 409);
       }
 
       if (picks.some((pick) => pick.selectedNflTeamId)) {
@@ -1114,7 +1174,7 @@ export const draftService = {
         }
       });
 
-      const nextPickNumber = Math.min(draft.currentPick + 1, OFFSEASON_DRAFT_PICK_COUNT + 1);
+      const nextPickNumber = Math.min(draft.currentPick + 1, draft.picks.length + 1);
 
       await tx.draft.update({
         where: {
@@ -1133,7 +1193,7 @@ export const draftService = {
     return prisma.$transaction(async (tx) => {
       const draftRecord = await assertCommissionerAccessForDraft(tx, input.draftId, input.actingUserId);
       await assertDraftExecutionPhase(draftRecord.targetSeasonId);
-      const { draft } = await validateDraftFinalization(tx, input.draftId);
+      const { draft, state } = await validateDraftFinalization(tx, input.draftId);
 
       if (draftRecord.id !== draft.id) {
         throw new DraftServiceError("Draft context mismatch.", 409);
@@ -1144,6 +1204,8 @@ export const draftService = {
       }
 
       const finalTeamsByMemberId = new Map<string, string[]>();
+      const globallyAssignedTeamIds = new Set<string>();
+      const releasedTeamIds = new Set(state.releasedTeamPool.map((team) => team.id));
 
       for (const member of draft.targetSeason.league.members) {
         const previousOwnerships = draft.sourceSeason.teamOwnerships
@@ -1159,11 +1221,36 @@ export const draftService = {
           .map((keeper) => keeper.nflTeamId);
         const draftedTeamId =
           draft.picks.find((pick) => pick.selectingLeagueMemberId === member.id)?.selectedNflTeamId ?? null;
+        const validPreviousTeamIds = new Set(previousOwnerships.map((ownership) => ownership.nflTeamId));
 
-        const finalTeamIds = draftedTeamId ? [...keeperIds, draftedTeamId] : keeperIds;
+        if (keeperIds.length !== KEEPERS_PER_OWNER) {
+          throw new DraftServiceError("Each owner must have exactly 2 saved keepers before finalizing the replacement draft.", 409);
+        }
 
-        if (finalTeamIds.length !== 3) {
-          throw new DraftServiceError("Each owner must end the draft with exactly 3 teams.", 409);
+        if (draftedTeamId === null) {
+          throw new DraftServiceError("Each owner must complete exactly one replacement draft pick before finalizing.", 409);
+        }
+
+        if (!releasedTeamIds.has(draftedTeamId)) {
+          throw new DraftServiceError("Replacement draft picks must come from the released-team pool.", 409);
+        }
+
+        const finalTeamIds = [...keeperIds, draftedTeamId];
+
+        if (finalTeamIds.length !== 3 || new Set(finalTeamIds).size !== 3) {
+          throw new DraftServiceError("Each owner must end the replacement draft with exactly 3 unique teams.", 409);
+        }
+
+        if (keeperIds.some((teamId) => !validPreviousTeamIds.has(teamId))) {
+          throw new DraftServiceError("Saved keepers no longer match the owner's previous-season portfolio.", 409);
+        }
+
+        for (const nflTeamId of finalTeamIds) {
+          if (globallyAssignedTeamIds.has(nflTeamId)) {
+            throw new DraftServiceError("Replacement draft finalization found a duplicate team across owners.", 409);
+          }
+
+          globallyAssignedTeamIds.add(nflTeamId);
         }
 
         finalTeamsByMemberId.set(member.id, finalTeamIds);
@@ -1187,7 +1274,7 @@ export const draftService = {
         data: {
           status: "COMPLETED",
           completedAt: new Date(),
-          currentPick: OFFSEASON_DRAFT_PICK_COUNT + 1
+          currentPick: draft.picks.length + 1
         }
       });
 
