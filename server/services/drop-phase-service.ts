@@ -108,6 +108,14 @@ async function getTargetSeasonOrThrow(targetSeasonId: string) {
             id: true,
             status: true,
             sourceSeasonId: true,
+            picks: {
+              select: {
+                selectingLeagueMemberId: true
+              },
+              orderBy: {
+                overallPickNumber: "asc"
+              }
+            },
             keeperSelections: {
               select: {
                 leagueMemberId: true,
@@ -154,6 +162,14 @@ async function getTargetSeasonOrThrow(targetSeasonId: string) {
             id: true,
             status: true,
             sourceSeasonId: true,
+            picks: {
+              select: {
+                selectingLeagueMemberId: true
+              },
+              orderBy: {
+                overallPickNumber: "asc"
+              }
+            },
             keeperSelections: {
               select: {
                 leagueMemberId: true,
@@ -328,6 +344,11 @@ export const dropPhaseService = {
       .sort(compareTeamsByName);
     const ownersCompleteCount = owners.filter((owner) => owner.isComplete).length;
     const ownersTotalCount = owners.length;
+    const hasUsableDraftOrder =
+      Boolean(targetSeason.targetDraft) &&
+      (!sourceSeason || targetSeason.targetDraft!.sourceSeasonId === sourceSeason.id) &&
+      targetSeason.targetDraft!.picks.length === ownersTotalCount &&
+      new Set(targetSeason.targetDraft!.picks.map((pick) => pick.selectingLeagueMemberId)).size === ownersTotalCount;
     const warnings: string[] = [];
 
     if (!sourceSeason) {
@@ -342,7 +363,7 @@ export const dropPhaseService = {
       warnings.push("The current draft workspace is linked to the wrong source season.");
     }
 
-    if (recommendation?.warnings.length) {
+    if (recommendation?.warnings.length && !hasUsableDraftOrder) {
       warnings.push(...recommendation.warnings);
     }
 
@@ -361,6 +382,7 @@ export const dropPhaseService = {
       hasDraftWorkspace: Boolean(targetSeason.targetDraft),
       draftId: targetSeason.targetDraft?.id ?? null,
       draftStatus: targetSeason.targetDraft?.status ?? null,
+      hasUsableDraftOrder,
       ownersCompleteCount,
       ownersTotalCount,
       releasedTeamPool,
@@ -368,7 +390,7 @@ export const dropPhaseService = {
         Boolean(sourceSeason) &&
         Boolean(targetSeason.targetDraft) &&
         ownersCompleteCount === ownersTotalCount &&
-        Boolean(recommendation?.readiness.isReady) &&
+        (Boolean(recommendation?.readiness.isReady) || hasUsableDraftOrder) &&
         Boolean(recommendation?.readiness.allTargetMappingsComplete) &&
         (!sourceSeason || targetSeason.targetDraft?.sourceSeasonId === sourceSeason.id),
       recommendationReadiness: {

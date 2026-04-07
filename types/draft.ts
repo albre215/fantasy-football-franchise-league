@@ -125,6 +125,7 @@ export interface DropPhaseContext {
   hasDraftWorkspace: boolean;
   draftId: string | null;
   draftStatus: DraftStatus | null;
+  hasUsableDraftOrder: boolean;
   ownersCompleteCount: number;
   ownersTotalCount: number;
   releasedTeamPool: DraftTeamSummary[];

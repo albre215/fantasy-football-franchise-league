@@ -140,6 +140,7 @@ describe("seasonPhaseService", () => {
     mockDropPhaseService.getDropPhaseContext.mockResolvedValueOnce({
       hasDraftWorkspace: false,
       draftStatus: null,
+      hasUsableDraftOrder: false,
       ownersCompleteCount: 0,
       ownersTotalCount: 10,
       isReadyForDraftPhase: false,
@@ -196,6 +197,7 @@ describe("seasonPhaseService", () => {
     mockDropPhaseService.getDropPhaseContext.mockResolvedValueOnce({
       hasDraftWorkspace: true,
       draftStatus: "PLANNING",
+      hasUsableDraftOrder: true,
       ownersCompleteCount: 8,
       ownersTotalCount: 10,
       isReadyForDraftPhase: false,
@@ -256,5 +258,76 @@ describe("seasonPhaseService", () => {
       statusCode: 409,
       message: "Invalid season phase transition from IN_SEASON to DRAFT_PHASE."
     });
+  });
+
+  it("allows moving into DRAFT_PHASE when a usable draft workspace exists even if recommendation warnings remain", async () => {
+    mockSeasonService.assertCommissionerAccess.mockResolvedValueOnce(undefined);
+    mockPrisma.season.findUnique
+      .mockResolvedValueOnce({
+        id: "season-2026",
+        leaguePhase: "DROP_PHASE"
+      })
+      .mockResolvedValueOnce({
+        id: "season-2026",
+        leagueId: "league-1",
+        year: 2026,
+        name: null,
+        status: "ACTIVE",
+        leaguePhase: "DROP_PHASE",
+        targetDraft: {
+          id: "draft-1",
+          status: "COMPLETED"
+        }
+      })
+      .mockResolvedValueOnce({
+        id: "season-2026",
+        leagueId: "league-1",
+        year: 2026,
+        name: null,
+        status: "ACTIVE",
+        leaguePhase: "DRAFT_PHASE",
+        targetDraft: {
+          id: "draft-1",
+          status: "COMPLETED"
+        }
+      });
+    mockPrisma.season.update.mockResolvedValueOnce(undefined);
+    mockPrisma.season.findFirst.mockResolvedValue({ id: "season-2025" });
+    mockResultsService.getSeasonResults.mockResolvedValue({
+      availability: {
+        hasFinalStandings: true,
+        hasFantasyPayoutsPublished: true
+      }
+    });
+    mockResultsService.getRecommendedOffseasonDraftOrder.mockResolvedValue({
+      readiness: {
+        isReady: false,
+        allTargetMappingsComplete: true,
+        ledgerCoverageStatus: "NONE"
+      },
+      warnings: ["No season ledger entries exist yet, so the money-based draft order is not trustworthy."]
+    });
+    mockDropPhaseService.getDropPhaseContext.mockResolvedValue({
+      hasDraftWorkspace: true,
+      draftStatus: "COMPLETED",
+      hasUsableDraftOrder: true,
+      ownersCompleteCount: 10,
+      ownersTotalCount: 10,
+      isReadyForDraftPhase: true,
+      warnings: []
+    });
+
+    const context = await seasonPhaseService.updateSeasonLeaguePhase({
+      seasonId: "season-2026",
+      actingUserId: "commissioner-1",
+      nextPhase: "DRAFT_PHASE"
+    });
+
+    expect(mockPrisma.season.update).toHaveBeenCalledWith({
+      where: { id: "season-2026" },
+      data: { leaguePhase: "DRAFT_PHASE" }
+    });
+    expect(context.season.leaguePhase).toBe("DRAFT_PHASE");
+    expect(context.readiness.draftOrderReady).toBe(true);
   });
 });

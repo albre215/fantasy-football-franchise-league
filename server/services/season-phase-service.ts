@@ -66,8 +66,7 @@ function mapAllowedActions(currentPhase: LeaguePhase): SeasonPhaseContext["allow
 function buildTransitionWarnings(
   currentPhase: LeaguePhase,
   nextPhase: LeaguePhase,
-  readiness: SeasonPhaseContext["readiness"],
-  hasRecommendationWarnings: boolean
+  readiness: SeasonPhaseContext["readiness"]
 ) {
   const warnings: string[] = [];
 
@@ -108,7 +107,7 @@ function buildTransitionWarnings(
       warnings.push("Target-season owner mappings are incomplete.");
     }
 
-    if (!readiness.draftOrderReady || hasRecommendationWarnings) {
+    if (!readiness.draftOrderReady) {
       warnings.push("Draft recommendation warnings still exist. Review them before entering DRAFT_PHASE.");
     }
   }
@@ -221,7 +220,7 @@ export const seasonPhaseService = {
       hasPreviousSeason: recommendation !== null,
       hasFinalStandings: results.availability.hasFinalStandings,
       hasFantasyPayoutsPublished: results.availability.hasFantasyPayoutsPublished,
-      draftOrderReady: recommendation?.readiness.isReady ?? false,
+      draftOrderReady: dropPhaseContext?.hasUsableDraftOrder ?? recommendation?.readiness.isReady ?? false,
       allTargetMappingsComplete: recommendation?.readiness.allTargetMappingsComplete ?? false,
       ledgerCoverageStatus: recommendation?.readiness.ledgerCoverageStatus ?? "NONE",
       hasDraftWorkspace: dropPhaseContext?.hasDraftWorkspace ?? Boolean(season.targetDraft),
@@ -242,7 +241,7 @@ export const seasonPhaseService = {
       ...(!readiness.hasPreviousSeason && currentPhase !== "IN_SEASON"
         ? ["The immediately previous season is missing, so offseason review is incomplete."]
         : []),
-      ...(recommendation?.warnings ?? []),
+      ...((dropPhaseContext?.hasUsableDraftOrder ? [] : recommendation?.warnings) ?? []),
       ...(dropPhaseContext?.warnings ?? []),
       ...(currentPhase === "DRAFT_PHASE" && !readiness.hasDraftWorkspace
         ? ["No offseason draft workspace exists yet for this season."]
@@ -263,7 +262,7 @@ export const seasonPhaseService = {
       availableTransitions: FORWARD_TRANSITIONS[currentPhase].map((nextPhase) => ({
         phase: nextPhase,
         isAvailable: nextPhase === "DRAFT_PHASE" ? readiness.isReadyForDraftPhase : true,
-        warnings: buildTransitionWarnings(currentPhase, nextPhase, readiness, Boolean(recommendation?.warnings.length))
+        warnings: buildTransitionWarnings(currentPhase, nextPhase, readiness)
       })),
       warnings
     };
