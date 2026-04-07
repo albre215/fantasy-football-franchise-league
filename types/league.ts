@@ -85,6 +85,15 @@ export interface RemoveLeagueMemberInput {
   actingUserId: string;
 }
 
+export interface ReplaceLeagueMemberInput {
+  leagueId: string;
+  leagueMemberId: string;
+  displayName: string;
+  email: string;
+  actingUserId: string;
+  mockUserKey?: string;
+}
+
 export interface LeagueBootstrapMember {
   id: string;
   userId: string;
@@ -138,6 +147,10 @@ export interface LeagueMembersListResponse {
 
 export interface RemoveLeagueMemberResponse {
   removedLeagueMemberId: string;
+}
+
+export interface ReplaceLeagueMemberResponse {
+  member: LeagueBootstrapMember;
 }
 
 export interface LeagueBootstrapStateResponse {

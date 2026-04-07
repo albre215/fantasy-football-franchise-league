@@ -16,7 +16,7 @@ import type {
   LeagueBootstrapStateResponse,
   LeagueListItem,
   ListLeaguesResponse,
-  RemoveLeagueMemberResponse
+  ReplaceLeagueMemberResponse
 } from "@/types/league";
 import type { SeasonResultsResponse } from "@/types/results";
 import type {
@@ -181,6 +181,9 @@ export function LeagueDashboard({
   const [editingSeasonYear, setEditingSeasonYear] = useState("");
   const [memberDisplayName, setMemberDisplayName] = useState("");
   const [memberEmail, setMemberEmail] = useState("");
+  const [replacementMemberId, setReplacementMemberId] = useState("");
+  const [replacementDisplayName, setReplacementDisplayName] = useState("");
+  const [replacementEmail, setReplacementEmail] = useState("");
   const [selectedOwnerId, setSelectedOwnerId] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(initialErrorMessage);
@@ -653,7 +656,21 @@ export function LeagueDashboard({
     }
   }
 
-  async function handleRemoveMember(leagueMemberId: string) {
+  function startMemberReplacement(leagueMemberId: string) {
+    const member = members.find((entry) => entry.id === leagueMemberId) ?? null;
+
+    setReplacementMemberId(leagueMemberId);
+    setReplacementDisplayName("");
+    setReplacementEmail("");
+
+    if (member) {
+      setSuccessMessage(`Ready to replace ${member.displayName}. Their league history will stay attached to this membership slot.`);
+    }
+  }
+
+  async function handleReplaceMember(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
     if (!leagueId) {
       return;
     }
@@ -663,19 +680,26 @@ export function LeagueDashboard({
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`/api/league/${leagueId}/members/remove`, {
+      const response = await fetch(`/api/league/${leagueId}/members/replace`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ leagueMemberId })
+        body: JSON.stringify({
+          leagueMemberId: replacementMemberId,
+          displayName: replacementDisplayName,
+          email: replacementEmail
+        })
       });
-      const data = await parseJsonResponse<RemoveLeagueMemberResponse>(response);
+      const data = await parseJsonResponse<ReplaceLeagueMemberResponse>(response);
 
-      setSuccessMessage(`Removed member ${data.removedLeagueMemberId}.`);
+      setReplacementMemberId("");
+      setReplacementDisplayName("");
+      setReplacementEmail("");
+      setSuccessMessage(`Updated member slot to ${data.member.displayName}. Historical league records were preserved.`);
       await refreshLeagueDashboard(leagueId, { includeOperationalData: tabNeedsOperationalData });
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to remove member.");
+      setErrorMessage(error instanceof Error ? error.message : "Unable to change member.");
     } finally {
       setIsSubmitting(false);
     }
@@ -1278,7 +1302,7 @@ export function LeagueDashboard({
                   <CardHeader>
                     <CardTitle>Members Management</CardTitle>
                     <CardDescription>
-                      Add league members, review roles, and remove members only when it is safe to do so.
+                      Add new members or replace an existing member while preserving that member slot&apos;s league history.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -1286,18 +1310,12 @@ export function LeagueDashboard({
                       <Input onChange={(event) => setMemberDisplayName(event.target.value)} placeholder="Display name" value={memberDisplayName} />
                       <Input onChange={(event) => setMemberEmail(event.target.value)} placeholder="Email" type="email" value={memberEmail} />
                       <Button
-                        disabled={isSubmitting || !hasActiveSeason || isLocked || !memberDisplayName || !memberEmail || !canManageLeague}
+                        disabled={isSubmitting || !memberDisplayName || !memberEmail || !canManageLeague}
                         type="submit"
                       >
                         Add Member
                       </Button>
                     </form>
-
-                    {!hasActiveSeason ? (
-                      <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                        Create or activate a season first. Member management is tied to the active season workflow.
-                      </div>
-                    ) : null}
 
                     <div className="space-y-3">
                       {members.map((member) => (
@@ -1313,12 +1331,12 @@ export function LeagueDashboard({
                               {member.assignmentCount}/3
                             </span>
                             <Button
-                              disabled={isSubmitting || !member.canRemove || !canManageLeague}
-                              onClick={() => void handleRemoveMember(member.id)}
+                              disabled={isSubmitting || member.role === "COMMISSIONER" || !canManageLeague}
+                              onClick={() => startMemberReplacement(member.id)}
                               type="button"
                               variant="outline"
                             >
-                              Remove
+                              Change Member
                             </Button>
                           </div>
                         </div>
@@ -1329,15 +1347,54 @@ export function LeagueDashboard({
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Membership Notes</CardTitle>
-                    <CardDescription>Keep league people management separate from season operations.</CardDescription>
+                    <CardTitle>Change Member</CardTitle>
+                    <CardDescription>
+                      Replace the person attached to a member slot while preserving teams, stats, ledger history, and current season ownership.
+                    </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-3 text-sm text-muted-foreground">
-                    <p>Commissioner: {bootstrapState.league.commissioner?.displayName ?? "Not assigned"}</p>
-                    <p>Current signed-in role: {currentUserRole ?? "Not a league member"}</p>
-                    <p>League membership count: {bootstrapState.memberCount} / 10</p>
-                    <div className="rounded-lg border border-dashed border-border p-4">
-                      Add and remove members here before relying on season ownership, standings, or offseason draft workflows.
+                  <CardContent className="space-y-4">
+                    <form className="space-y-4" onSubmit={handleReplaceMember}>
+                      <select
+                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        onChange={(event) => setReplacementMemberId(event.target.value)}
+                        value={replacementMemberId}
+                      >
+                        <option value="">Select member to replace</option>
+                        {members
+                          .filter((member) => member.role !== "COMMISSIONER")
+                          .map((member) => (
+                            <option key={member.id} value={member.id}>
+                              {member.displayName} ({member.email})
+                            </option>
+                          ))}
+                      </select>
+                      <Input
+                        onChange={(event) => setReplacementDisplayName(event.target.value)}
+                        placeholder="New member display name"
+                        value={replacementDisplayName}
+                      />
+                      <Input
+                        onChange={(event) => setReplacementEmail(event.target.value)}
+                        placeholder="New member email"
+                        type="email"
+                        value={replacementEmail}
+                      />
+                      <Button
+                        disabled={
+                          isSubmitting ||
+                          !canManageLeague ||
+                          !replacementMemberId ||
+                          !replacementDisplayName ||
+                          !replacementEmail
+                        }
+                        type="submit"
+                      >
+                        Save Member Change
+                      </Button>
+                    </form>
+
+                    <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                      The replacement user inherits this member slot&apos;s teams, season history, standings, ledger records, and draft history.
                     </div>
                   </CardContent>
                 </Card>

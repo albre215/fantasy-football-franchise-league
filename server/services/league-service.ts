@@ -12,6 +12,7 @@ import type {
   LeagueListItem,
   LeagueMemberSummary,
   LeagueSeasonSummary,
+  ReplaceLeagueMemberInput,
   RemoveLeagueMemberInput
 } from "@/types/league";
 
@@ -600,14 +601,6 @@ export const leagueService = {
 
     const activeSeason = await seasonService.getActiveSeason(leagueId);
 
-    if (!activeSeason) {
-      throw new LeagueServiceError("Create or activate a season before bootstrapping league members.", 409);
-    }
-
-    if (activeSeason.isLocked) {
-      throw new LeagueServiceError("The active season is locked and league members can no longer be changed.", 409);
-    }
-
     const league = await prisma.league.findUnique({
       where: {
         id: leagueId
@@ -659,9 +652,15 @@ export const leagueService = {
         include: {
           user: true,
           teamOwnerships: {
-            where: {
-              seasonId: activeSeason.id
-            }
+            where: activeSeason
+              ? {
+                  seasonId: activeSeason.id
+                }
+              : {
+                  id: {
+                    in: []
+                  }
+                }
           }
         }
       });
@@ -711,12 +710,112 @@ export const leagueService = {
     return members.map((member) =>
       mapBootstrapMember(
         member,
-        member.role !== "COMMISSIONER" &&
-          !activeSeason?.isLocked &&
-          (member.teamOwnerships?.length ?? 0) === 0 &&
-          Boolean(activeSeason)
+        member.role !== "COMMISSIONER"
       )
     );
+  },
+
+  async replaceLeagueMember(input: ReplaceLeagueMemberInput) {
+    const leagueId = input.leagueId.trim();
+    const leagueMemberId = input.leagueMemberId.trim();
+    const displayName = input.displayName.trim();
+    const email = input.email.trim().toLowerCase();
+
+    if (!leagueId || !leagueMemberId || !displayName || !email) {
+      throw new LeagueServiceError("leagueId, leagueMemberId, displayName, and email are required.", 400);
+    }
+
+    await assertCommissionerAccessForLeague(prisma, leagueId, input.actingUserId);
+    const activeSeason = await seasonService.getActiveSeason(leagueId);
+
+    const member = await prisma.leagueMember.findUnique({
+      where: {
+        id: leagueMemberId
+      },
+      include: {
+        user: true,
+        teamOwnerships: activeSeason
+          ? {
+              where: {
+                seasonId: activeSeason.id
+              }
+            }
+          : {
+              where: {
+                id: {
+                  in: []
+                }
+              }
+            }
+      }
+    });
+
+    if (!member || member.leagueId !== leagueId) {
+      throw new LeagueServiceError("League member not found.", 404);
+    }
+
+    if (member.role === "COMMISSIONER") {
+      throw new LeagueServiceError("The commissioner account cannot be replaced from member management.", 409);
+    }
+
+    const existingMemberForEmail = await prisma.leagueMember.findFirst({
+      where: {
+        leagueId,
+        user: {
+          email
+        }
+      },
+      select: {
+        id: true
+      }
+    });
+
+    if (existingMemberForEmail && existingMemberForEmail.id !== leagueMemberId) {
+      throw new LeagueServiceError("That user is already a member of this league.", 409);
+    }
+
+    let user = await prisma.user.findUnique({
+      where: {
+        email
+      }
+    });
+
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          id: await generateMockUserId(displayName, email, input.mockUserKey),
+          displayName,
+          email
+        }
+      });
+    }
+
+    const updatedMember = await prisma.leagueMember.update({
+      where: {
+        id: leagueMemberId
+      },
+      data: {
+        userId: user.id
+      },
+      include: {
+        user: true,
+        teamOwnerships: activeSeason
+          ? {
+              where: {
+                seasonId: activeSeason.id
+              }
+            }
+          : {
+              where: {
+                id: {
+                  in: []
+                }
+              }
+            }
+      }
+    });
+
+    return mapBootstrapMember(updatedMember, updatedMember.role !== "COMMISSIONER");
   },
 
   async removeLeagueMember(input: RemoveLeagueMemberInput) {
