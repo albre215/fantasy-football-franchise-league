@@ -197,6 +197,7 @@ export function LeagueDashboard({
 
   const activeSeason = bootstrapState?.activeSeason ?? null;
   const members = bootstrapState?.members ?? [];
+  const replacementTargetMember = members.find((member) => member.id === replacementMemberId) ?? null;
   const ownershipOwners = seasonOwnership?.owners ?? [];
   const availableTeams = seasonOwnership?.availableTeams ?? [];
   const actingUserId = session?.user?.id ?? "";
@@ -668,6 +669,12 @@ export function LeagueDashboard({
     }
   }
 
+  function cancelMemberReplacement() {
+    setReplacementMemberId("");
+    setReplacementDisplayName("");
+    setReplacementEmail("");
+  }
+
   async function handleReplaceMember(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -693,9 +700,7 @@ export function LeagueDashboard({
       });
       const data = await parseJsonResponse<ReplaceLeagueMemberResponse>(response);
 
-      setReplacementMemberId("");
-      setReplacementDisplayName("");
-      setReplacementEmail("");
+      cancelMemberReplacement();
       setSuccessMessage(`Updated member slot to ${data.member.displayName}. Historical league records were preserved.`);
       await refreshLeagueDashboard(leagueId, { includeOperationalData: tabNeedsOperationalData });
     } catch (error) {
@@ -1297,7 +1302,7 @@ export function LeagueDashboard({
             ) : null}
 
             {activeTab === "members" ? (
-              <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+              <div className="space-y-6">
                 <Card>
                   <CardHeader>
                     <CardTitle>Members Management</CardTitle>
@@ -1319,7 +1324,12 @@ export function LeagueDashboard({
 
                     <div className="space-y-3">
                       {members.map((member) => (
-                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4" key={member.id}>
+                        <div
+                          className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4 transition-colors ${
+                            replacementMemberId === member.id ? "border-foreground bg-secondary/20" : "border-border"
+                          }`}
+                          key={member.id}
+                        >
                           <div>
                             <p className="font-medium text-foreground">{member.displayName}</p>
                             <p className="text-sm text-muted-foreground">
@@ -1334,9 +1344,13 @@ export function LeagueDashboard({
                               disabled={isSubmitting || member.role === "COMMISSIONER" || !canManageLeague}
                               onClick={() => startMemberReplacement(member.id)}
                               type="button"
-                              variant="outline"
+                              variant={replacementMemberId === member.id ? "secondary" : "outline"}
                             >
-                              Change Member
+                              {member.role === "COMMISSIONER"
+                                ? "Commissioner"
+                                : replacementMemberId === member.id
+                                ? "Changing Member"
+                                : "Change Member"}
                             </Button>
                           </div>
                         </div>
@@ -1345,59 +1359,76 @@ export function LeagueDashboard({
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Change Member</CardTitle>
-                    <CardDescription>
-                      Replace the person attached to a member slot while preserving teams, stats, ledger history, and current season ownership.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <form className="space-y-4" onSubmit={handleReplaceMember}>
-                      <select
-                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                        onChange={(event) => setReplacementMemberId(event.target.value)}
-                        value={replacementMemberId}
-                      >
-                        <option value="">Select member to replace</option>
-                        {members
-                          .filter((member) => member.role !== "COMMISSIONER")
-                          .map((member) => (
-                            <option key={member.id} value={member.id}>
-                              {member.displayName} ({member.email})
-                            </option>
-                          ))}
-                      </select>
-                      <Input
-                        onChange={(event) => setReplacementDisplayName(event.target.value)}
-                        placeholder="New member display name"
-                        value={replacementDisplayName}
-                      />
-                      <Input
-                        onChange={(event) => setReplacementEmail(event.target.value)}
-                        placeholder="New member email"
-                        type="email"
-                        value={replacementEmail}
-                      />
-                      <Button
-                        disabled={
-                          isSubmitting ||
-                          !canManageLeague ||
-                          !replacementMemberId ||
-                          !replacementDisplayName ||
-                          !replacementEmail
+                {replacementTargetMember ? (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-6">
+                    <div
+                      className="absolute inset-0"
+                      onClick={() => {
+                        if (!isSubmitting) {
+                          cancelMemberReplacement();
                         }
-                        type="submit"
-                      >
-                        Save Member Change
-                      </Button>
-                    </form>
+                      }}
+                    />
+                    <Card className="relative z-10 w-full max-w-lg shadow-2xl">
+                      <CardHeader>
+                        <CardTitle>Change Member</CardTitle>
+                        <CardDescription>
+                          Replace {replacementTargetMember.displayName} while preserving this member slot&apos;s teams, stats,
+                          ledger history, and draft history.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="rounded-lg border border-border bg-secondary/20 px-4 py-3 text-sm text-muted-foreground">
+                          <p className="font-medium text-foreground">{replacementTargetMember.displayName}</p>
+                          <p>{replacementTargetMember.email}</p>
+                          <p>{replacementTargetMember.role}</p>
+                        </div>
 
-                    <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                      The replacement user inherits this member slot&apos;s teams, season history, standings, ledger records, and draft history.
-                    </div>
-                  </CardContent>
-                </Card>
+                        <form className="space-y-4" onSubmit={handleReplaceMember}>
+                          <Input
+                            onChange={(event) => setReplacementDisplayName(event.target.value)}
+                            placeholder="New member display name"
+                            value={replacementDisplayName}
+                          />
+                          <Input
+                            onChange={(event) => setReplacementEmail(event.target.value)}
+                            placeholder="New member email"
+                            type="email"
+                            value={replacementEmail}
+                          />
+
+                          <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                            The replacement user inherits this member slot&apos;s teams, season history, standings, ledger records,
+                            and draft history.
+                          </div>
+
+                          <div className="flex flex-wrap gap-3">
+                            <Button
+                              disabled={
+                                isSubmitting ||
+                                !canManageLeague ||
+                                !replacementMemberId ||
+                                !replacementDisplayName ||
+                                !replacementEmail
+                              }
+                              type="submit"
+                            >
+                              Save Member Change
+                            </Button>
+                            <Button
+                              disabled={isSubmitting}
+                              onClick={() => cancelMemberReplacement()}
+                              type="button"
+                              variant="outline"
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </form>
+                      </CardContent>
+                    </Card>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
