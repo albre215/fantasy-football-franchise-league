@@ -21,6 +21,7 @@ GM Fantasy is a commissioner-first web app for managing a long-running fantasy f
 - manual final standings entry
 - fantasy payout posting into the ledger
 - season ledger balances and commissioner adjustments
+- commissioner-driven member replacement with preserved slot history
 - ledger-based offseason draft recommendation
 - explicit DROP_PHASE keeper / release workflow
 - replacement draft lifecycle
@@ -39,6 +40,7 @@ GM Fantasy is a commissioner-first web app for managing a long-running fantasy f
 - recommended offseason draft order is derived from the immediately previous season's ledger totals
 - `Draft`, `DraftPick`, and `KeeperSelection` preserve offseason history
 - cross-season owner continuity maps through `userId`
+- `LeagueMember` is the durable league slot; changing a member should swap the attached `User`, not recreate history
 
 ## Current Workflow
 1. Sign in or create an account
@@ -56,6 +58,7 @@ GM Fantasy is a commissioner-first web app for managing a long-running fantasy f
 13. Finalize the draft into `TeamOwnership`
 14. Review owner views, ledger, history, and analytics
 15. Use `docs/05-analytics-metric-definitions.md` as the canonical analytics dictionary
+16. Use `docs/06-recent-fixes-and-handoff-notes.md` for the latest UX and operational fixes
 
 ## Next Recommended Prompt
 Implement inaugural auction behavior for leagues that do not have an immediately previous season.
@@ -93,4 +96,5 @@ Start the new conversation with:
    - `docs/PROJECT_HANDOFF_SUMMARY.md`
    - `docs/NEW_CHAT_HANDOFF.md`
    - `docs/05-analytics-metric-definitions.md`
+   - `docs/06-recent-fixes-and-handoff-notes.md`
 8. The specific review or next feature request you want

@@ -5,7 +5,7 @@ Use this file to bootstrap a fresh chat quickly without re-explaining the whole 
 ## Repo + Working Context
 - Active repo: `C:\Users\Ben\GM Fantasy`
 - Treat `GM Fantasy` as the only active repo unless explicitly told otherwise
-- Current branch at handoff creation: `fix/phase-10-5-analytics-hardening`
+- Current branch at handoff creation: `main`
 - Stack:
   - Next.js 14 App Router
   - TypeScript
@@ -20,6 +20,7 @@ GM Fantasy is a commissioner-first fantasy franchise league app where owners con
 The app currently supports:
 - league creation and joining
 - member/bootstrap management
+- commissioner-driven member replacement with history preservation
 - season management and lock/unlock workflow
 - active-season team ownership management
 - provider-backed NFL performance tracking
@@ -42,6 +43,7 @@ The app currently supports:
 - offseason history persists in `Draft`, `DraftPick`, and `KeeperSelection`
 - cross-season identity continuity uses `userId`, not `leagueMemberId`
 - `User` and `LeagueMember` remain separate
+- `LeagueMember` should be treated as the durable league slot; replacing a member swaps the attached `User`
 - services contain business logic
 - routes stay thin
 - UI should not contain business logic
@@ -63,6 +65,12 @@ The app currently supports:
   - `NFL Performance`
   - `Ledger`
   - `History & Analytics`
+
+### Membership management
+- members can be added by the commissioner
+- non-commissioner members can be replaced at any time
+- replacement preserves the member slot's teams, standings, ledger records, and draft history
+- the Members tab now uses a modal-based replacement flow
 
 ### Ownership
 - active-season ownership workspace
@@ -149,6 +157,7 @@ The app currently supports:
 5. `docs/PROJECT_HANDOFF_SUMMARY.md`
 6. `docs/NEW_CHAT_HANDOFF.md`
 7. `docs/05-analytics-metric-definitions.md`
+8. `docs/06-recent-fixes-and-handoff-notes.md`
 
 ## Best Prompt Framing For A New Chat
 Tell the new chat:
@@ -157,6 +166,7 @@ Tell the new chat:
 - preserve the domain rules listed above
 - preserve thin routes + service-owned logic
 - preserve `User` vs `LeagueMember`
+- preserve durable `LeagueMember` slot semantics when changing which user occupies a member slot
 - preserve `TeamOwnership`, `SeasonStanding`, `LedgerEntry`, and `Season.leaguePhase` as distinct source-of-truth layers
 - read the docs listed above before proposing or implementing changes
 
@@ -174,5 +184,7 @@ Tell the new chat:
   - Phase 9 NFL results -> ledger automation
   - Phase 10 analytics & insights layer
   - Phase 10.5 analytics definitions hardening
+  - commissioner-driven member replacement workflow
+  - modal-based Members tab replacement UX
   - schema/error-resolution work for `leaguePhase`
   - repaired Prisma migration state and cleaned Phase 5 migration chain

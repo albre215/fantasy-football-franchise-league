@@ -131,6 +131,8 @@ Additional ingestion-related models still present in the schema.
 - create/join leagues
 - dashboard/bootstrap summary state
 - league-level commissioner access
+- durable member-slot management
+- member replacement that preserves slot history by swapping the linked `userId`
 
 ### `server/services/season-service.ts`
 - create/list seasons
@@ -192,6 +194,7 @@ Additional ingestion-related models still present in the schema.
 - `app/api/league/join`
 - `app/api/league/list`
 - `app/api/league/[leagueId]/...`
+- includes member replacement at `app/api/league/[leagueId]/members/replace`
 
 ### Season / bootstrap routes
 - `app/api/league/[leagueId]/season/create`
@@ -244,6 +247,9 @@ Home-screen auth and league entry experience.
 ### `components/league/league-dashboard.tsx`
 Main commissioner console with the major operational tabs.
 
+Important note:
+- the Members tab now uses a modal-based member replacement flow rather than an always-visible side panel
+
 ### `components/league/season-results-panel.tsx`
 Manual standings + fantasy payout review UI.
 
@@ -266,6 +272,9 @@ History and analytics UI.
 
 ### 1. Season Bootstrap
 Commissioner opens the dashboard, loads bootstrap state, seasons, and season-backed operational data as needed, then manages members, seasons, ownership, and lock state.
+
+Membership-specific rule:
+- member replacement preserves the existing `LeagueMember` slot and its historical references while swapping the linked `User`
 
 ### 2. NFL Performance
 Active-season NFL results import automatically, persist into season-scoped NFL tables, and roll up to owner views. Commissioner can correct weekly outcomes manually.
@@ -290,6 +299,8 @@ Read-only server-side history and analytics aggregate ownership, standings, ledg
 - `SeasonStanding` = final fantasy standings truth
 - `LedgerEntry` = money / winnings truth
 - `Season.leaguePhase` = workflow truth
+- `LeagueMember` = durable league slot inside a league
+- `User` = current authenticated person attached to that slot
 - routes stay thin
 - services stay authoritative
 

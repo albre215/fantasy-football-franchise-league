@@ -7,6 +7,7 @@ This roadmap reflects the repo after Phases 1 through 10.
 Already implemented:
 - real authentication
 - league bootstrap and season management
+- durable member-slot replacement workflow
 - active-season ownership management
 - NFL performance engine
 - ledger engine
@@ -85,6 +86,7 @@ The repo-side Phase 5 migration chain is now cleaned up, but this remains import
 - preserve `SeasonStanding` as final fantasy standings truth
 - preserve `LedgerEntry` as money truth
 - preserve `Season.leaguePhase` as workflow truth
+- preserve `LeagueMember` as a durable league slot and `User` as the current attached person
 - keep draft logic in `draft-service`
 - keep routes thin and services authoritative
 - keep `User` separate from `LeagueMember`
@@ -98,6 +100,7 @@ The repo-side Phase 5 migration chain is now cleaned up, but this remains import
 5. `docs/PROJECT_HANDOFF_SUMMARY.md`
 6. `docs/NEW_CHAT_HANDOFF.md`
 7. `docs/05-analytics-metric-definitions.md`
+8. `docs/06-recent-fixes-and-handoff-notes.md`
 
 ## Short Continuation Checklist
 

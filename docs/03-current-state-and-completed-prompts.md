@@ -1,13 +1,14 @@
 # Current State and Completed Prompts
 
-This file summarizes the repo as it exists after Phases 1 through 10.
+This file summarizes the repo as it exists after Phases 1 through 10.5 plus the recent membership-management and UX fixes.
 
 ## Earlier Prompt Baseline
 
 ### League bootstrap
 - league creation and joining
 - season creation and active-season management
-- league member add/remove
+- league member add workflow
+- commissioner-driven member replacement that preserves slot history
 - season setup validation
 - lock / unlock workflow
 
@@ -143,6 +144,12 @@ This file summarizes the repo as it exists after Phases 1 through 10.
 - duplicate Phase 5 migration was removed
 - local migration history and DB schema were brought back into sync
 
+### Recent membership-management hardening
+- member replacement now preserves the existing `LeagueMember` slot and its full historical references
+- the Members tab now uses a modal-based replacement flow instead of an always-visible side panel
+- selected member rows now show a clearer active state during replacement
+- commissioner rows are explicitly non-replaceable in the UI
+
 ## Current Commissioner Workflow
 
 1. Sign in or create an account
@@ -166,6 +173,7 @@ This file summarizes the repo as it exists after Phases 1 through 10.
 The repo currently supports:
 - real user authentication
 - season bootstrap
+- durable member-slot management with commissioner replacement
 - team ownership management
 - automatic NFL result imports for the active season
 - manual final standings entry
