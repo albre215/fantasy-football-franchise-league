@@ -36,6 +36,21 @@ interface ReplaceFantasyPayoutEntriesInput {
   }>;
 }
 
+interface ReplaceSeasonNflLedgerEntriesInput {
+  seasonId: string;
+  leagueId: string;
+  actingUserId: string;
+  ownerEntries: Array<{
+    leagueMemberId: string;
+    displayName: string;
+    regularSeasonAmount: number;
+    playoffAmount: number;
+    regularSeasonWins: number;
+    playoffWins: number;
+    ownedTeamIds: string[];
+  }>;
+}
+
 function decimalToNumber(value: Prisma.Decimal | number | string) {
   return Number(new Prisma.Decimal(value).toFixed(2));
 }
@@ -334,6 +349,75 @@ async function replaceFantasyPayoutEntriesForSeasonTx(
   }
 }
 
+async function replaceSeasonNflLedgerEntriesForSeasonTx(
+  tx: PrismaClientLike,
+  input: ReplaceSeasonNflLedgerEntriesInput
+) {
+  await tx.ledgerEntry.deleteMany({
+    where: {
+      seasonId: input.seasonId,
+      category: {
+        in: ["NFL_REGULAR_SEASON", "NFL_PLAYOFF"]
+      }
+    }
+  });
+
+  const entriesToCreate = input.ownerEntries.flatMap((ownerEntry) => {
+    const entries: Array<{
+      leagueId: string;
+      seasonId: string;
+      leagueMemberId: string;
+      category: "NFL_REGULAR_SEASON" | "NFL_PLAYOFF";
+      amount: Prisma.Decimal;
+      description: string;
+      metadata: Prisma.InputJsonValue;
+      actingUserId: string;
+    }> = [];
+
+    if (ownerEntry.regularSeasonAmount !== 0) {
+      entries.push({
+        leagueId: input.leagueId,
+        seasonId: input.seasonId,
+        leagueMemberId: ownerEntry.leagueMemberId,
+        category: "NFL_REGULAR_SEASON",
+        amount: new Prisma.Decimal(ownerEntry.regularSeasonAmount.toFixed(2)),
+        description: `NFL regular season posting for ${ownerEntry.displayName}`,
+        metadata: {
+          source: "SEASON_NFL_RESULTS",
+          wins: ownerEntry.regularSeasonWins,
+          ownedTeamIds: ownerEntry.ownedTeamIds
+        } as Prisma.InputJsonValue,
+        actingUserId: input.actingUserId
+      });
+    }
+
+    if (ownerEntry.playoffAmount !== 0) {
+      entries.push({
+        leagueId: input.leagueId,
+        seasonId: input.seasonId,
+        leagueMemberId: ownerEntry.leagueMemberId,
+        category: "NFL_PLAYOFF",
+        amount: new Prisma.Decimal(ownerEntry.playoffAmount.toFixed(2)),
+        description: `NFL playoff posting for ${ownerEntry.displayName}`,
+        metadata: {
+          source: "SEASON_NFL_RESULTS",
+          wins: ownerEntry.playoffWins,
+          ownedTeamIds: ownerEntry.ownedTeamIds
+        } as Prisma.InputJsonValue,
+        actingUserId: input.actingUserId
+      });
+    }
+
+    return entries;
+  });
+
+  if (entriesToCreate.length > 0) {
+    await tx.ledgerEntry.createMany({
+      data: entriesToCreate
+    });
+  }
+}
+
 export const ledgerService = {
   async getSeasonLedgerSummary(seasonId: string, actingUserId: string): Promise<SeasonLedgerSummary> {
     const { season } = await assertViewerMembershipForSeason(prisma, seasonId, actingUserId);
@@ -561,4 +645,5 @@ export const ledgerService = {
 };
 
 export { replaceFantasyPayoutEntriesForSeasonTx };
+export { replaceSeasonNflLedgerEntriesForSeasonTx };
 export { LedgerServiceError };

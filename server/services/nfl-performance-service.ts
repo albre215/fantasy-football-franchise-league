@@ -10,6 +10,7 @@ import { normalizeNflTeamAbbreviation } from "@/lib/nfl-team-aliases";
 import { prisma } from "@/lib/prisma";
 import { nflResultsProviders } from "@/server/providers/nfl";
 import type { NormalizedNflTeamResultRecord } from "@/server/providers/nfl/types";
+import { replaceSeasonNflLedgerEntriesForSeasonTx } from "@/server/services/ledger-service";
 import { NflPerformanceServiceError } from "@/server/services/nfl-performance-errors";
 import {
   createSeasonWeekKey,
@@ -19,10 +20,12 @@ import {
 import { seasonService } from "@/server/services/season-service";
 import type {
   ImportSeasonNflResultsInput,
+  OwnerNflLedgerPostingSummary,
   NflPerformanceOwnerSummary,
   NflPerformanceTeamSummary,
   OwnerNflRecordSummary,
   OwnerWeekPerformanceSummary,
+  SeasonNflLedgerPostingPreview,
   SeasonNflImportRunSummary,
   SeasonNflOverview,
   SeasonNflWeekOption,
@@ -337,6 +340,91 @@ function createEmptyOwnerRecord(member: {
   };
 }
 
+type SeasonContext = Awaited<ReturnType<typeof getSeasonContextOrThrow>>;
+type SeasonResultRow = Awaited<ReturnType<typeof getSeasonResults>>[number];
+
+function buildOwnerResultSummaries(
+  season: SeasonContext,
+  results: SeasonResultRow[]
+) {
+  const statsByMemberId = new Map<
+    string,
+    {
+      record: OwnerNflRecordSummary;
+      ownedTeams: NflPerformanceTeamSummary[];
+      ownedTeamIds: Set<string>;
+    }
+  >();
+  const ownershipByTeamId = new Map(season.teamOwnerships.map((ownership) => [ownership.nflTeamId, ownership] as const));
+
+  for (const member of season.league.members) {
+    statsByMemberId.set(member.id, {
+      record: createEmptyOwnerRecord(member),
+      ownedTeams: [],
+      ownedTeamIds: new Set<string>()
+    });
+  }
+
+  for (const ownership of season.teamOwnerships) {
+    const bucket = statsByMemberId.get(ownership.leagueMemberId);
+
+    if (!bucket) {
+      continue;
+    }
+
+    if (!bucket.ownedTeamIds.has(ownership.nflTeamId)) {
+      bucket.ownedTeamIds.add(ownership.nflTeamId);
+      bucket.ownedTeams.push(mapTeam(ownership.nflTeam));
+    }
+  }
+
+  for (const result of results) {
+    const ownership = ownershipByTeamId.get(result.nflTeamId);
+
+    if (!ownership) {
+      continue;
+    }
+
+    const bucket = statsByMemberId.get(ownership.leagueMemberId);
+
+    if (!bucket) {
+      continue;
+    }
+
+    bucket.record.resultCount += 1;
+    bucket.record.pointsFor += result.pointsFor ?? 0;
+    bucket.record.pointsAgainst += result.pointsAgainst ?? 0;
+
+    if (result.result === "WIN") {
+      bucket.record.wins += 1;
+      if (result.phase === "REGULAR_SEASON") {
+        bucket.record.regularSeasonWins += 1;
+      } else {
+        bucket.record.playoffWins += 1;
+      }
+    } else if (result.result === "LOSS") {
+      bucket.record.losses += 1;
+    } else {
+      bucket.record.ties += 1;
+    }
+  }
+
+  return season.league.members.map((member) => {
+    const bucket = statsByMemberId.get(member.id);
+    const record = bucket?.record ?? createEmptyOwnerRecord(member);
+
+    return {
+      record: {
+        ...record,
+        teamCount: bucket?.ownedTeams.length ?? 0,
+        netPoints: record.pointsFor - record.pointsAgainst
+      },
+      ownedTeams: [...(bucket?.ownedTeams ?? [])].sort((left, right) => left.name.localeCompare(right.name)),
+      ownedTeamIds: [...(bucket?.ownedTeamIds ?? [])].sort()
+    };
+  });
+}
+
 function buildOwnershipMaps(
   season: Awaited<ReturnType<typeof getSeasonContextOrThrow>>
 ) {
@@ -369,59 +457,21 @@ function buildOwnerStandings(
   ownerships: Array<{ leagueMemberId: string; nflTeamId: string }>,
   results: Awaited<ReturnType<typeof getSeasonResults>>
 ) {
-  const standingsByMemberId = new Map<string, OwnerNflRecordSummary>();
-  const distinctTeamsByMemberId = new Map<string, Set<string>>();
-
-  for (const member of members) {
-    standingsByMemberId.set(member.id, createEmptyOwnerRecord(member));
-  }
-
-  for (const ownership of ownerships) {
-    const bucket = distinctTeamsByMemberId.get(ownership.leagueMemberId) ?? new Set<string>();
-    bucket.add(ownership.nflTeamId);
-    distinctTeamsByMemberId.set(ownership.leagueMemberId, bucket);
-  }
-
-  for (const result of results) {
-    const ownership = ownerships.find((entry) => entry.nflTeamId === result.nflTeamId);
-
-    if (!ownership) {
-      continue;
-    }
-
-    const current = standingsByMemberId.get(ownership.leagueMemberId);
-
-    if (!current) {
-      continue;
-    }
-
-    current.resultCount += 1;
-    current.pointsFor += result.pointsFor ?? 0;
-    current.pointsAgainst += result.pointsAgainst ?? 0;
-
-    if (result.result === "WIN") {
-      current.wins += 1;
-      if (result.phase === "REGULAR_SEASON") {
-        current.regularSeasonWins += 1;
-      } else {
-        current.playoffWins += 1;
+  const seasonLike = {
+    league: { members },
+    teamOwnerships: ownerships.map((ownership) => ({
+      nflTeamId: ownership.nflTeamId,
+      leagueMemberId: ownership.leagueMemberId,
+      nflTeam: {
+        id: ownership.nflTeamId,
+        abbreviation: "",
+        name: ""
       }
-    } else if (result.result === "LOSS") {
-      current.losses += 1;
-    } else {
-      current.ties += 1;
-    }
-  }
+    }))
+  } as unknown as SeasonContext;
 
-  return members
-    .map((member) => {
-      const record = standingsByMemberId.get(member.id) ?? createEmptyOwnerRecord(member);
-      return {
-        ...record,
-        teamCount: distinctTeamsByMemberId.get(member.id)?.size ?? 0,
-        netPoints: record.pointsFor - record.pointsAgainst
-      };
-    })
+  return buildOwnerResultSummaries(seasonLike, results)
+    .map((entry) => entry.record)
     .sort((left, right) => {
       if (right.wins !== left.wins) {
         return right.wins - left.wins;
@@ -437,6 +487,168 @@ function buildOwnerStandings(
       }
       return left.displayName.localeCompare(right.displayName);
     });
+}
+
+async function getExistingNflLedgerEntries(tx: PrismaClientLike, seasonId: string) {
+  return tx.ledgerEntry.findMany({
+    where: {
+      seasonId,
+      category: {
+        in: ["NFL_REGULAR_SEASON", "NFL_PLAYOFF"]
+      }
+    },
+    include: {
+      leagueMember: {
+        include: {
+          user: true
+        }
+      }
+    },
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }]
+  });
+}
+
+async function buildSeasonNflLedgerPostingPreview(
+  tx: PrismaClientLike,
+  season: SeasonContext,
+  results: SeasonResultRow[],
+  importRuns: Awaited<ReturnType<typeof getSeasonImportRuns>>
+): Promise<SeasonNflLedgerPostingPreview> {
+  const ownerSummaries = buildOwnerResultSummaries(season, results);
+  const existingEntries = await getExistingNflLedgerEntries(tx, season.id);
+  const latestPostedEntry = existingEntries[0] ?? null;
+  const lastPostedBy =
+    latestPostedEntry?.actingUserId
+      ? await tx.user.findUnique({
+          where: { id: latestPostedEntry.actingUserId },
+          select: {
+            id: true,
+            displayName: true,
+            email: true
+          }
+        })
+      : null;
+  const completedRuns = importRuns.filter((run) => run.status === "COMPLETED");
+  const hasCompletedFullSeasonImport = completedRuns.some((run) => run.mode === "FULL_SEASON");
+  const coverageStatus = results.length === 0 ? "EMPTY" : hasCompletedFullSeasonImport ? "FULL_SEASON_IMPORTED" : "PARTIAL";
+  const expectedOwnershipCount = season.league.members.length * 3;
+  const ownershipCount = season.teamOwnerships.length;
+  const hasValidOwnership = ownershipCount === expectedOwnershipCount;
+  const ownedTeamIds = new Set(season.teamOwnerships.map((ownership) => ownership.nflTeamId));
+  const resultCountsByTeamId = new Map<string, number>();
+
+  for (const result of results) {
+    resultCountsByTeamId.set(result.nflTeamId, (resultCountsByTeamId.get(result.nflTeamId) ?? 0) + 1);
+  }
+
+  const missingOwnedTeamIds = [...ownedTeamIds].filter((teamId) => !resultCountsByTeamId.has(teamId)).sort();
+  const ownerRollups: OwnerNflLedgerPostingSummary[] = ownerSummaries
+    .map(({ record, ownedTeams }) => {
+      const warnings: string[] = [];
+
+      if (ownedTeams.length !== 3) {
+        warnings.push(`Expected 3 owned teams for ${record.displayName}, found ${ownedTeams.length}.`);
+      }
+
+      if (record.resultCount === 0 && ownedTeams.length > 0) {
+        warnings.push("No persisted NFL results were found for this owner's teams.");
+      }
+
+      return {
+        ...mapOwner({
+          id: record.leagueMemberId,
+          userId: record.userId,
+          role: record.role,
+          user: {
+            displayName: record.displayName,
+            email: record.email
+          }
+        }),
+        ownedTeams,
+        nflResultSummary: {
+          teamCount: record.teamCount,
+          resultCount: record.resultCount,
+          wins: record.wins,
+          losses: record.losses,
+          ties: record.ties,
+          regularSeasonWins: record.regularSeasonWins,
+          playoffWins: record.playoffWins,
+          pointsFor: record.pointsFor,
+          pointsAgainst: record.pointsAgainst,
+          netPoints: record.netPoints
+        },
+        regularSeasonAmount: Number(record.regularSeasonWins.toFixed(2)),
+        playoffAmount: Number(record.playoffWins.toFixed(2)),
+        nflLedgerAmount: Number((record.regularSeasonWins + record.playoffWins).toFixed(2)),
+        warnings
+      };
+    })
+    .sort((left, right) => {
+      if (right.nflLedgerAmount !== left.nflLedgerAmount) {
+        return right.nflLedgerAmount - left.nflLedgerAmount;
+      }
+
+      return left.displayName.localeCompare(right.displayName);
+    });
+  const warnings: string[] = [];
+
+  if (!hasValidOwnership) {
+    warnings.push(
+      `Season ownership is incomplete or invalid for posting. Expected ${expectedOwnershipCount} owned-team slots, found ${ownershipCount}.`
+    );
+  }
+
+  if (coverageStatus !== "FULL_SEASON_IMPORTED") {
+    warnings.push("NFL result coverage is not yet marked as a completed full-season import.");
+  }
+
+  if (missingOwnedTeamIds.length > 0) {
+    warnings.push("One or more owned teams have no persisted NFL results for this season.");
+  }
+
+  const entryCount = ownerRollups.reduce((count, owner) => {
+    return count + (owner.regularSeasonAmount !== 0 ? 1 : 0) + (owner.playoffAmount !== 0 ? 1 : 0);
+  }, 0);
+  const totalLeagueAmount = Number(
+    ownerRollups.reduce((total, owner) => total + owner.nflLedgerAmount, 0).toFixed(2)
+  );
+
+  return {
+    season: {
+      id: season.id,
+      leagueId: season.leagueId,
+      year: season.year,
+      name: season.name,
+      status: season.status
+    },
+    isReadyToPost: results.length > 0 && hasCompletedFullSeasonImport && hasValidOwnership && missingOwnedTeamIds.length === 0,
+    postingStatus: existingEntries.length > 0 ? "POSTED" : "NOT_POSTED",
+    warnings,
+    coverageStatus,
+    entryCount,
+    totalLeagueAmount,
+    alreadyPosted: existingEntries.length > 0,
+    canRerun: existingEntries.length > 0,
+    lastPostedAt: latestPostedEntry ? latestPostedEntry.updatedAt.toISOString() : null,
+    lastPostedBy: lastPostedBy
+      ? {
+          userId: lastPostedBy.id,
+          displayName: lastPostedBy.displayName,
+          email: lastPostedBy.email
+        }
+      : null,
+    readiness: {
+      hasImportedResults: results.length > 0,
+      hasCompletedFullSeasonImport,
+      hasValidOwnership,
+      ownershipCount,
+      expectedOwnershipCount,
+      ownedTeamResultCount: results.filter((result) => ownedTeamIds.has(result.nflTeamId)).length,
+      missingOwnedTeamIds,
+      hasMissingOwnedTeamResults: missingOwnedTeamIds.length > 0
+    },
+    ownerRollups
+  };
 }
 
 function mapWeekResult(
@@ -715,6 +927,19 @@ export const nflPerformanceService = {
     return buildSeasonOverviewFromContext(season, results, importRuns);
   },
 
+  async getSeasonNflLedgerPostingPreview(
+    seasonId: string,
+    actingUserId: string
+  ): Promise<SeasonNflLedgerPostingPreview> {
+    const { season } = await assertViewerMembershipForSeason(prisma, seasonId, actingUserId);
+    const [results, importRuns] = await Promise.all([
+      getSeasonResults(prisma, season.id, season.year),
+      getSeasonImportRuns(prisma, season.id, season.year)
+    ]);
+
+    return buildSeasonNflLedgerPostingPreview(prisma, season, results, importRuns);
+  },
+
   async getSeasonWeekNflResults(
     seasonId: string,
     weekNumber: number,
@@ -944,6 +1169,49 @@ export const nflPerformanceService = {
       seasonId,
       actingUserId,
       weekNumber
+    });
+  },
+
+  async postSeasonNflResultsToLedger(
+    seasonId: string,
+    actingUserId: string
+  ): Promise<SeasonNflLedgerPostingPreview> {
+    const normalizedSeasonId = normalizeSeasonId(seasonId);
+    const normalizedActingUserId = normalizeActingUserId(actingUserId);
+
+    await seasonService.assertCommissionerAccess(normalizedSeasonId, normalizedActingUserId);
+
+    return prisma.$transaction(async (tx) => {
+      const season = await getSeasonContextOrThrow(tx, normalizedSeasonId);
+      const [results, importRuns] = await Promise.all([
+        getSeasonResults(tx, season.id, season.year),
+        getSeasonImportRuns(tx, season.id, season.year)
+      ]);
+      const preview = await buildSeasonNflLedgerPostingPreview(tx, season, results, importRuns);
+
+      if (!preview.isReadyToPost) {
+        throw new NflPerformanceServiceError(
+          preview.warnings[0] ?? "NFL results are not ready to post into the ledger yet.",
+          409
+        );
+      }
+
+      await replaceSeasonNflLedgerEntriesForSeasonTx(tx, {
+        seasonId: season.id,
+        leagueId: season.leagueId,
+        actingUserId: normalizedActingUserId,
+        ownerEntries: preview.ownerRollups.map((owner) => ({
+          leagueMemberId: owner.leagueMemberId,
+          displayName: owner.displayName,
+          regularSeasonAmount: owner.regularSeasonAmount,
+          playoffAmount: owner.playoffAmount,
+          regularSeasonWins: owner.nflResultSummary.regularSeasonWins,
+          playoffWins: owner.nflResultSummary.playoffWins,
+          ownedTeamIds: owner.ownedTeams.map((team) => team.nflTeamId)
+        }))
+      });
+
+      return buildSeasonNflLedgerPostingPreview(tx, season, results, importRuns);
     });
   },
 

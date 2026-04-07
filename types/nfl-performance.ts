@@ -58,6 +58,55 @@ export interface OwnerNflRecordSummary extends NflPerformanceOwnerSummary {
   netPoints: number;
 }
 
+export interface OwnerNflLedgerPostingSummary extends NflPerformanceOwnerSummary {
+  ownedTeams: NflPerformanceTeamSummary[];
+  nflResultSummary: {
+    teamCount: number;
+    resultCount: number;
+    wins: number;
+    losses: number;
+    ties: number;
+    regularSeasonWins: number;
+    playoffWins: number;
+    pointsFor: number;
+    pointsAgainst: number;
+    netPoints: number;
+  };
+  regularSeasonAmount: number;
+  playoffAmount: number;
+  nflLedgerAmount: number;
+  warnings: string[];
+}
+
+export interface SeasonNflLedgerPostingPreview {
+  season: SeasonNflOverview["season"];
+  isReadyToPost: boolean;
+  postingStatus: "NOT_POSTED" | "POSTED";
+  warnings: string[];
+  coverageStatus: NflImportCoverageStatus;
+  entryCount: number;
+  totalLeagueAmount: number;
+  alreadyPosted: boolean;
+  canRerun: boolean;
+  lastPostedAt: string | null;
+  lastPostedBy: {
+    userId: string;
+    displayName: string;
+    email: string;
+  } | null;
+  readiness: {
+    hasImportedResults: boolean;
+    hasCompletedFullSeasonImport: boolean;
+    hasValidOwnership: boolean;
+    ownershipCount: number;
+    expectedOwnershipCount: number;
+    ownedTeamResultCount: number;
+    missingOwnedTeamIds: string[];
+    hasMissingOwnedTeamResults: boolean;
+  };
+  ownerRollups: OwnerNflLedgerPostingSummary[];
+}
+
 export interface TeamWeekPerformanceSummary {
   id: string;
   seasonId: string;
@@ -143,6 +192,10 @@ export interface SeasonNflOverviewResponse {
   nfl: SeasonNflOverview;
 }
 
+export interface SeasonNflLedgerPostingPreviewResponse {
+  nflLedger: SeasonNflLedgerPostingPreview;
+}
+
 export interface SeasonWeekNflResultsResponse {
   nfl: SeasonWeekNflResults;
 }
@@ -153,4 +206,8 @@ export interface ImportSeasonNflResultsResponse {
 
 export interface UpsertSeasonWeekTeamResultResponse {
   nfl: SeasonWeekNflResults;
+}
+
+export interface PostSeasonNflResultsToLedgerResponse {
+  nflLedger: SeasonNflLedgerPostingPreview;
 }

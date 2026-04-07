@@ -8,7 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import type {
   ImportSeasonNflResultsResponse,
+  PostSeasonNflResultsToLedgerResponse,
   SeasonNflGameResult,
+  SeasonNflLedgerPostingPreviewResponse,
   SeasonNflOverviewResponse,
   SeasonNflResultPhase,
   SeasonWeekNflResultsResponse,
@@ -93,6 +95,7 @@ export function SeasonNflPerformancePanel({
   onSuccess
 }: SeasonNflPerformancePanelProps) {
   const [summary, setSummary] = useState<SeasonNflOverviewResponse["nfl"] | null>(null);
+  const [ledgerPosting, setLedgerPosting] = useState<SeasonNflLedgerPostingPreviewResponse["nflLedger"] | null>(null);
   const [weekDetails, setWeekDetails] = useState<SeasonWeekNflResultsResponse["nfl"] | null>(null);
   const [selectedWeekKey, setSelectedWeekKey] = useState<string>("");
   const [formTeamId, setFormTeamId] = useState("");
@@ -104,8 +107,10 @@ export function SeasonNflPerformancePanel({
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
   const [isLoadingWeek, setIsLoadingWeek] = useState(false);
   const [isImportingSeason, setIsImportingSeason] = useState(false);
+  const [isPostingLedger, setIsPostingLedger] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [ledgerPostingError, setLedgerPostingError] = useState<string | null>(null);
   const [weekError, setWeekError] = useState<string | null>(null);
   const [autoImportSeasonId, setAutoImportSeasonId] = useState<string | null>(null);
 
@@ -127,9 +132,11 @@ export function SeasonNflPerformancePanel({
 
   useEffect(() => {
     setSummary(null);
+    setLedgerPosting(null);
     setWeekDetails(null);
     setSelectedWeekKey("");
     setSummaryError(null);
+    setLedgerPostingError(null);
     setWeekError(null);
     setFormTeamId(teamOptions[0]?.id ?? "");
     setFormOpponentId("");
@@ -147,15 +154,24 @@ export function SeasonNflPerformancePanel({
       setIsLoadingSummary(true);
 
       try {
-        const response = await fetch(`/api/season/${seasonId}/nfl`, {
-          cache: "no-store",
-          signal: controller.signal
-        });
+        const [response, ledgerResponse] = await Promise.all([
+          fetch(`/api/season/${seasonId}/nfl`, {
+            cache: "no-store",
+            signal: controller.signal
+          }),
+          fetch(`/api/season/${seasonId}/nfl/ledger`, {
+            cache: "no-store",
+            signal: controller.signal
+          })
+        ]);
         const data = await parseJsonResponse<SeasonNflOverviewResponse>(response);
+        const ledgerData = await parseJsonResponse<SeasonNflLedgerPostingPreviewResponse>(ledgerResponse);
         setSummary(data.nfl);
+        setLedgerPosting(ledgerData.nflLedger);
         setSelectedWeekKey(getInitialWeekKey(data.nfl));
         setFormPhase(getInitialWeekPhase(data.nfl));
         setSummaryError(null);
+        setLedgerPostingError(null);
         onError(null);
       } catch (error) {
         if ((error as Error).name === "AbortError") {
@@ -163,6 +179,7 @@ export function SeasonNflPerformancePanel({
         }
 
         setSummary(null);
+        setLedgerPosting(null);
         setSummaryError(error instanceof Error ? error.message : "Unable to load NFL performance.");
       } finally {
         setIsLoadingSummary(false);
@@ -232,8 +249,9 @@ export function SeasonNflPerformancePanel({
 
     const seasonId = activeSeason.id;
     const requestedWeek = summary?.availableWeeks.find((week) => week.key === nextWeekKey) ?? null;
-    const [summaryResponse, weekResponse] = await Promise.all([
+    const [summaryResponse, ledgerResponse, weekResponse] = await Promise.all([
       fetch(`/api/season/${seasonId}/nfl`, { cache: "no-store" }),
+      fetch(`/api/season/${seasonId}/nfl/ledger`, { cache: "no-store" }),
       requestedWeek
         ? fetch(`/api/season/${seasonId}/nfl/week/${requestedWeek.weekNumber}?phase=${requestedWeek.phase}`, {
             cache: "no-store"
@@ -242,7 +260,9 @@ export function SeasonNflPerformancePanel({
     ]);
 
     const summaryData = await parseJsonResponse<SeasonNflOverviewResponse>(summaryResponse);
+    const ledgerData = await parseJsonResponse<SeasonNflLedgerPostingPreviewResponse>(ledgerResponse);
     setSummary(summaryData.nfl);
+    setLedgerPosting(ledgerData.nflLedger);
     onError(null);
 
     const resolvedWeek = nextWeekKey
@@ -262,6 +282,35 @@ export function SeasonNflPerformancePanel({
       setWeekDetails(weekData.nfl);
     } else {
       setWeekDetails(null);
+    }
+  }
+
+  async function handlePostToLedger() {
+    if (!activeSeason) {
+      return;
+    }
+
+    const seasonId = activeSeason.id;
+    onError(null);
+    onSuccess(null);
+    setIsPostingLedger(true);
+
+    try {
+      const response = await fetch(`/api/season/${seasonId}/nfl/ledger`, {
+        method: "POST"
+      });
+      const data = await parseJsonResponse<PostSeasonNflResultsToLedgerResponse>(response);
+      setLedgerPosting(data.nflLedger);
+      setLedgerPostingError(null);
+      onSuccess(
+        data.nflLedger.alreadyPosted
+          ? "NFL results were posted into the ledger."
+          : "NFL results were prepared for ledger posting."
+      );
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "Unable to post NFL results into the ledger.");
+    } finally {
+      setIsPostingLedger(false);
     }
   }
 
@@ -457,6 +506,86 @@ export function SeasonNflPerformancePanel({
                             {formatPhase(highlight.phase)} - {formatResult(highlight.result)}
                             {highlight.owner ? ` - ${highlight.owner.displayName}` : ""}
                           </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {ledgerPostingError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                    {ledgerPostingError}
+                  </div>
+                ) : ledgerPosting ? (
+                  <div className="space-y-3 rounded-lg border border-border bg-background p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-foreground">NFL Results to Ledger</p>
+                        <p className="text-sm text-muted-foreground">
+                          Status: {ledgerPosting.postingStatus === "POSTED" ? "Posted" : "Not posted"}{" "}
+                          {ledgerPosting.lastPostedAt
+                            ? `- last run ${new Date(ledgerPosting.lastPostedAt).toLocaleString()}`
+                            : ""}
+                        </p>
+                      </div>
+                      <Button
+                        disabled={!canManageNfl || isPostingLedger || !ledgerPosting.isReadyToPost}
+                        onClick={() => void handlePostToLedger()}
+                        type="button"
+                      >
+                        {isPostingLedger
+                          ? "Posting..."
+                          : ledgerPosting.alreadyPosted
+                            ? "Rerun NFL Ledger Posting"
+                            : "Post NFL Results to Ledger"}
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-4">
+                      <div className="rounded-lg border border-border/70 bg-background/80 p-3">
+                        <p className="text-sm text-muted-foreground">Coverage</p>
+                        <p className="mt-1 font-semibold">{ledgerPosting.coverageStatus}</p>
+                      </div>
+                      <div className="rounded-lg border border-border/70 bg-background/80 p-3">
+                        <p className="text-sm text-muted-foreground">Ready To Post</p>
+                        <p className="mt-1 font-semibold">{ledgerPosting.isReadyToPost ? "Yes" : "No"}</p>
+                      </div>
+                      <div className="rounded-lg border border-border/70 bg-background/80 p-3">
+                        <p className="text-sm text-muted-foreground">Entries</p>
+                        <p className="mt-1 font-semibold">{ledgerPosting.entryCount}</p>
+                      </div>
+                      <div className="rounded-lg border border-border/70 bg-background/80 p-3">
+                        <p className="text-sm text-muted-foreground">League Total</p>
+                        <p className="mt-1 font-semibold">${ledgerPosting.totalLeagueAmount.toFixed(2)}</p>
+                      </div>
+                    </div>
+
+                    {ledgerPosting.warnings.length > 0 ? (
+                      <div className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+                        {ledgerPosting.warnings.map((warning) => (
+                          <p key={warning}>{warning}</p>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    <div className="space-y-2">
+                      {ledgerPosting.ownerRollups.map((owner) => (
+                        <div className="rounded-lg border border-border/70 bg-background/80 p-3" key={owner.leagueMemberId}>
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="font-medium text-foreground">{owner.displayName}</p>
+                              <p className="text-sm text-muted-foreground">
+                                Regular wins {owner.nflResultSummary.regularSeasonWins} - Playoff wins{" "}
+                                {owner.nflResultSummary.playoffWins}
+                              </p>
+                            </div>
+                            <div className="text-right text-sm">
+                              <p className="font-semibold text-foreground">${owner.nflLedgerAmount.toFixed(2)}</p>
+                              <p className="text-muted-foreground">
+                                ${owner.regularSeasonAmount.toFixed(2)} regular / ${owner.playoffAmount.toFixed(2)} playoff
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
