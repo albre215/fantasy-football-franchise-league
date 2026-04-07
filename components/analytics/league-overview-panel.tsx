@@ -33,6 +33,13 @@ export function LeagueOverviewPanel({ overview }: { overview: LeagueOverviewAnal
         </Card>
         <Card className="brand-surface">
           <CardHeader>
+            <CardTitle className="text-lg">League Payouts</CardTitle>
+            <CardDescription>Net season-scoped ledger total across all tracked seasons.</CardDescription>
+          </CardHeader>
+          <CardContent className="text-3xl font-semibold">${overview.totalLeaguePayouts.toFixed(2)}</CardContent>
+        </Card>
+        <Card className="brand-surface">
+          <CardHeader>
             <CardTitle className="text-lg">Most Owned Team</CardTitle>
             <CardDescription>Most common franchise across all seasons.</CardDescription>
           </CardHeader>
@@ -64,6 +71,35 @@ export function LeagueOverviewPanel({ overview }: { overview: LeagueOverviewAnal
         />
 
         <div className="space-y-6">
+          <Card className="brand-surface">
+            <CardHeader>
+              <CardTitle className="text-xl">Career Ledger Extremes</CardTitle>
+              <CardDescription>Biggest long-term winners and losers from posted season ledger totals.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {overview.biggestCareerWinner ? (
+                <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm">
+                  <div className="text-muted-foreground">Biggest Winner</div>
+                  <div className="text-lg font-semibold">{overview.biggestCareerWinner.ownerDisplayName}</div>
+                  <div className="text-muted-foreground">${overview.biggestCareerWinner.totalEarnings.toFixed(2)}</div>
+                </div>
+              ) : null}
+              {overview.biggestCareerLoser ? (
+                <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm">
+                  <div className="text-muted-foreground">Biggest Loser</div>
+                  <div className="text-lg font-semibold">{overview.biggestCareerLoser.ownerDisplayName}</div>
+                  <div className="text-muted-foreground">${overview.biggestCareerLoser.totalEarnings.toFixed(2)}</div>
+                </div>
+              ) : null}
+              <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm">
+                <div className="text-muted-foreground">Average Parity Gap</div>
+                <div className="text-lg font-semibold">
+                  {overview.averageSeasonParityGap !== null ? `$${overview.averageSeasonParityGap.toFixed(2)}` : "Not available"}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="brand-surface">
             <CardHeader>
               <CardTitle className="text-xl">Most Recent Champion</CardTitle>
@@ -117,6 +153,38 @@ export function LeagueOverviewPanel({ overview }: { overview: LeagueOverviewAnal
           </Card>
         </div>
       </div>
+
+      <Card className="brand-surface">
+        <CardHeader>
+          <CardTitle className="text-xl">Season Summaries</CardTitle>
+          <CardDescription>Winner/loser and parity snapshot from each tracked season ledger.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {overview.seasonSummaries.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No season summary analytics are available yet.</div>
+          ) : (
+            overview.seasonSummaries.map((season) => (
+              <div className="rounded-lg border border-border p-4 text-sm" key={season.seasonId}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="font-medium text-foreground">
+                    {season.seasonName ?? `${season.seasonYear} Season`}
+                  </div>
+                  <div className="text-muted-foreground">${season.totalLeaguePayouts.toFixed(2)} total</div>
+                </div>
+                <div className="mt-2 grid gap-2 text-muted-foreground md:grid-cols-3">
+                  <div>
+                    Winner: {season.biggestWinner ? `${season.biggestWinner.ownerDisplayName} ($${season.biggestWinner.amount.toFixed(2)})` : "N/A"}
+                  </div>
+                  <div>
+                    Loser: {season.biggestLoser ? `${season.biggestLoser.ownerDisplayName} ($${season.biggestLoser.amount.toFixed(2)})` : "N/A"}
+                  </div>
+                  <div>Parity gap: {season.parityGap !== null ? `$${season.parityGap.toFixed(2)}` : "N/A"}</div>
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
     </section>
   );
 }

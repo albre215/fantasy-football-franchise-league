@@ -27,6 +27,26 @@ export function FranchiseAnalyticsPanel({ analytics }: { analytics: FranchiseAna
           valueLabel="seasons"
         />
 
+        <AnalyticsBarChart
+          color="#2BBE5A"
+          data={analytics.mostProfitableTeamsChart}
+          description="Teams contributing the most NFL-derived ledger wins across tracked seasons."
+          emptyMessage="No team profitability analytics are available yet."
+          title="Most Profitable Teams"
+          valueLabel="ledger wins"
+        />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <AnalyticsBarChart
+          color="#E0B24A"
+          data={analytics.bestHistoricalTeamsChart}
+          description="Historic NFL win totals from persisted season NFL results."
+          emptyMessage="No historical team performance is available yet."
+          title="Best Historical Teams"
+          valueLabel="wins"
+        />
+
         <Card className="brand-surface">
           <CardHeader>
             <CardTitle className="text-xl">Longest Team Ownership Streaks</CardTitle>
@@ -80,6 +100,15 @@ export function FranchiseAnalyticsPanel({ analytics }: { analytics: FranchiseAna
                 </div>
                 <div className="mt-1 text-sm text-muted-foreground">
                   {selectedFranchise.ownershipCount} ownership records tracked
+                </div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  {selectedFranchise.totalRegularSeasonWins} regular wins | {selectedFranchise.totalPlayoffWins} playoff wins
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  ${selectedFranchise.totalNflLedgerAmount.toFixed(2)} NFL ledger contribution
+                  {selectedFranchise.averageNflLedgerAmountPerSeason !== null
+                    ? ` | ${selectedFranchise.averageNflLedgerAmountPerSeason.toFixed(2)} avg/season`
+                    : ""}
                 </div>
                 {selectedFranchise.longestOwnershipStreak ? (
                   <div className="text-sm text-muted-foreground">

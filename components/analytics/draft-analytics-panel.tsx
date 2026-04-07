@@ -25,6 +25,15 @@ export function DraftAnalyticsPanel({ analytics }: { analytics: DraftAnalytics }
         />
       </div>
 
+      <AnalyticsBarChart
+        color="#4A7BE0"
+        data={analytics.draftSlotOutcomeChart}
+        description="Average final ledger outcome by replacement draft slot."
+        emptyMessage="No draft-slot outcome analytics are available yet."
+        title="Draft Slot Outcomes"
+        valueLabel="avg ledger"
+      />
+
       <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <Card className="brand-surface">
           <CardHeader>
@@ -78,6 +87,56 @@ export function DraftAnalyticsPanel({ analytics }: { analytics: DraftAnalytics }
           </CardContent>
         </Card>
       </div>
+
+      <Card className="brand-surface">
+        <CardHeader>
+          <CardTitle className="text-xl">Replacement Draft Effectiveness</CardTitle>
+          <CardDescription>How each replacement pick translated into season outcomes.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {analytics.replacementDraftEffectiveness.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No completed replacement draft outcomes are available yet.</div>
+          ) : (
+            analytics.replacementDraftEffectiveness.map((draft) => (
+              <div className="rounded-lg border border-border p-4 text-sm" key={draft.draftId}>
+                <div className="font-medium text-foreground">
+                  {draft.targetSeasonName ?? `${draft.targetSeasonYear} Season`}
+                </div>
+                <div className="mt-3 space-y-2">
+                  {draft.entries.map((entry) => (
+                    <div
+                      className="rounded-lg border border-border bg-background px-4 py-3"
+                      key={`${draft.draftId}-${entry.draftSlot}-${entry.ownerUserId}`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="font-medium text-foreground">
+                            Pick {entry.draftSlot}: {entry.ownerDisplayName}
+                          </div>
+                          <div className="text-muted-foreground">
+                            {entry.selectedTeam ? (
+                              <NFLTeamLabel size="detail" team={entry.selectedTeam} />
+                            ) : (
+                              "No selected team"
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right text-muted-foreground">
+                          <div>Finish: {entry.finalFinish ?? "N/A"}</div>
+                          <div>Ledger: {entry.finalLedgerTotal !== null ? `$${entry.finalLedgerTotal.toFixed(2)}` : "N/A"}</div>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-muted-foreground">
+                        Team wins: {entry.selectedTeamRegularSeasonWins} regular / {entry.selectedTeamPlayoffWins} playoff | Team NFL amount: ${entry.selectedTeamNflLedgerAmount.toFixed(2)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
     </section>
   );
 }

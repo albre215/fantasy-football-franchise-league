@@ -1,3 +1,5 @@
+import { Prisma } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
 import type {
   DraftAnalytics,
@@ -43,9 +45,14 @@ async function getLeagueAnalyticsContext(leagueId: string) {
   const [league, seasons, drafts, teams] = await Promise.all([
     prisma.league.findUnique({
       where: { id: normalizedLeagueId },
-      include: {
+      select: {
+        id: true,
+        name: true,
         members: {
-          include: {
+          select: {
+            id: true,
+            userId: true,
+            role: true,
             user: true
           },
           orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
@@ -77,14 +84,33 @@ async function getLeagueAnalyticsContext(leagueId: string) {
             leagueMemberId: true,
             rank: true,
             isChampion: true,
+            wins: true,
+            losses: true,
+            ties: true,
             leagueMember: {
               select: {
+                id: true,
                 userId: true,
                 user: true
               }
             }
           },
           orderBy: [{ rank: "asc" }, { updatedAt: "asc" }]
+        },
+        ledgerEntries: {
+          select: {
+            leagueMemberId: true,
+            category: true,
+            amount: true
+          }
+        },
+        nflTeamResults: {
+          select: {
+            nflTeamId: true,
+            leagueMemberId: true,
+            phase: true,
+            result: true
+          }
         }
       },
       orderBy: { year: "desc" }
@@ -150,85 +176,6 @@ async function getLeagueAnalyticsContext(leagueId: string) {
     seasons,
     drafts,
     teams
-  };
-}
-
-async function getLeagueOverviewContext(leagueId: string) {
-  const normalizedLeagueId = leagueId.trim();
-
-  if (!normalizedLeagueId) {
-    throw new AnalyticsServiceError("leagueId is required.", 400);
-  }
-
-  const [league, seasons] = await Promise.all([
-    prisma.league.findUnique({
-      where: { id: normalizedLeagueId },
-      select: {
-        id: true,
-        name: true
-      }
-    }),
-    prisma.season.findMany({
-      where: { leagueId: normalizedLeagueId },
-      select: {
-        id: true,
-        year: true,
-        name: true,
-        teamOwnerships: {
-          select: {
-            nflTeamId: true,
-            nflTeam: {
-              select: {
-                id: true,
-                name: true,
-                abbreviation: true,
-                conference: true,
-                division: true
-              }
-            },
-            leagueMember: {
-              select: {
-                userId: true,
-                user: {
-                  select: {
-                    displayName: true,
-                    email: true
-                  }
-                }
-              }
-            }
-          }
-        },
-        seasonStandings: {
-          select: {
-            rank: true,
-            isChampion: true,
-            leagueMember: {
-              select: {
-                userId: true,
-                user: {
-                  select: {
-                    displayName: true,
-                    email: true
-                  }
-                }
-              }
-            }
-          },
-          orderBy: [{ rank: "asc" }, { updatedAt: "asc" }]
-        }
-      },
-      orderBy: { year: "desc" }
-    })
-  ]);
-
-  if (!league) {
-    throw new AnalyticsServiceError("League not found.", 404);
-  }
-
-  return {
-    league,
-    seasons
   };
 }
 
@@ -352,9 +299,85 @@ function toChartData<T extends { key?: string; label: string; value: number }>(r
   }));
 }
 
+function decimalToNumber(value: Prisma.Decimal | number | string) {
+  return Number(new Prisma.Decimal(value).toFixed(2));
+}
+
+function calculateRate(wins: number, losses: number, ties: number) {
+  const total = wins + losses + ties;
+
+  if (total === 0) {
+    return null;
+  }
+
+  return Number(((wins + ties * 0.5) / total).toFixed(3));
+}
+
+function buildSeasonLedgerTotalsByMember(
+  entries: Array<{
+    leagueMemberId: string;
+    amount: Prisma.Decimal;
+  }>
+) {
+  const totals = new Map<string, number>();
+
+  for (const entry of entries) {
+    totals.set(
+      entry.leagueMemberId,
+      Number(((totals.get(entry.leagueMemberId) ?? 0) + decimalToNumber(entry.amount)).toFixed(2))
+    );
+  }
+
+  return totals;
+}
+
+function buildSeasonNflTotalsByMember(
+  results: Array<{
+    leagueMemberId: string | null;
+    phase: "REGULAR_SEASON" | "WILD_CARD" | "DIVISIONAL" | "CONFERENCE" | "SUPER_BOWL";
+    result: "WIN" | "LOSS" | "TIE";
+  }>
+) {
+  const totals = new Map<
+    string,
+    { wins: number; losses: number; ties: number; regularSeasonWins: number; playoffWins: number }
+  >();
+
+  for (const row of results) {
+    if (!row.leagueMemberId) {
+      continue;
+    }
+
+    const current = totals.get(row.leagueMemberId) ?? {
+      wins: 0,
+      losses: 0,
+      ties: 0,
+      regularSeasonWins: 0,
+      playoffWins: 0
+    };
+
+    if (row.result === "WIN") {
+      current.wins += 1;
+      if (row.phase === "REGULAR_SEASON") {
+        current.regularSeasonWins += 1;
+      } else {
+        current.playoffWins += 1;
+      }
+    } else if (row.result === "LOSS") {
+      current.losses += 1;
+    } else {
+      current.ties += 1;
+    }
+
+    totals.set(row.leagueMemberId, current);
+  }
+
+  return totals;
+}
+
 export const analyticsService = {
   async getLeagueOverview(leagueId: string): Promise<LeagueOverviewAnalytics> {
-    const { league, seasons } = await getLeagueOverviewContext(leagueId);
+    const { league, seasons } = await getLeagueAnalyticsContext(leagueId);
     const teamById = new Map(
       seasons.flatMap((season) =>
         season.teamOwnerships.map((ownership) => [ownership.nflTeamId, ownership.nflTeam] as const)
@@ -418,6 +441,81 @@ export const analyticsService = {
     const championCounts = [...championCountsByOwner.values()].sort(
       (left, right) => right.championshipCount - left.championshipCount
     );
+    const ownerEarnings = new Map<string, { ownerUserId: string; ownerDisplayName: string; totalEarnings: number }>();
+    const seasonSummaries = seasons.map((season) => {
+      const ledgerTotals = buildSeasonLedgerTotalsByMember(season.ledgerEntries);
+      const totalsWithNames = league.members
+        .map((member) => ({
+          ownerUserId: member.userId,
+          ownerDisplayName: member.user.displayName,
+          amount: ledgerTotals.get(member.id) ?? 0
+        }))
+        .sort((left, right) => {
+          if (right.amount !== left.amount) {
+            return right.amount - left.amount;
+          }
+
+          return left.ownerDisplayName.localeCompare(right.ownerDisplayName);
+        });
+
+      for (const row of totalsWithNames) {
+        const current = ownerEarnings.get(row.ownerUserId) ?? {
+          ownerUserId: row.ownerUserId,
+          ownerDisplayName: row.ownerDisplayName,
+          totalEarnings: 0
+        };
+        current.totalEarnings = Number((current.totalEarnings + row.amount).toFixed(2));
+        ownerEarnings.set(row.ownerUserId, current);
+      }
+
+      const totalLeaguePayouts = Number(
+        season.ledgerEntries.reduce((total, entry) => total + decimalToNumber(entry.amount), 0).toFixed(2)
+      );
+      const biggestWinner = totalsWithNames[0] ?? null;
+      const biggestLoser = totalsWithNames[totalsWithNames.length - 1] ?? null;
+      const parityGap =
+        biggestWinner && biggestLoser ? Number((biggestWinner.amount - biggestLoser.amount).toFixed(2)) : null;
+
+      return {
+        seasonId: season.id,
+        seasonYear: season.year,
+        seasonName: season.name,
+        totalLeaguePayouts,
+        biggestWinner: biggestWinner
+          ? {
+              ownerUserId: biggestWinner.ownerUserId,
+              ownerDisplayName: biggestWinner.ownerDisplayName,
+              amount: biggestWinner.amount
+            }
+          : null,
+        biggestLoser: biggestLoser
+          ? {
+              ownerUserId: biggestLoser.ownerUserId,
+              ownerDisplayName: biggestLoser.ownerDisplayName,
+              amount: biggestLoser.amount
+            }
+          : null,
+        parityGap
+      };
+    });
+    const totalLeaguePayouts = Number(
+      seasonSummaries.reduce((total, season) => total + season.totalLeaguePayouts, 0).toFixed(2)
+    );
+    const averageSeasonParityGap =
+      seasonSummaries.length > 0
+        ? Number(
+            (
+              seasonSummaries.reduce((total, season) => total + (season.parityGap ?? 0), 0) / seasonSummaries.length
+            ).toFixed(2)
+          )
+        : null;
+    const rankedEarnings = [...ownerEarnings.values()].sort((left, right) => {
+      if (right.totalEarnings !== left.totalEarnings) {
+        return right.totalEarnings - left.totalEarnings;
+      }
+
+      return left.ownerDisplayName.localeCompare(right.ownerDisplayName);
+    });
 
     return {
       leagueId: league.id,
@@ -429,6 +527,8 @@ export const analyticsService = {
       totalOwnersAcrossHistory: new Set(
         seasons.flatMap((season) => season.teamOwnerships.map((ownership) => ownership.leagueMember.userId))
       ).size,
+      totalLeaguePayouts,
+      averageSeasonParityGap,
       mostRecentChampion: championRows[0] ?? null,
       mostCommonChampion: championCounts[0] ?? null,
       championCounts,
@@ -445,7 +545,10 @@ export const analyticsService = {
               team: mapTeam(teamById.get(mostOwnedTeamEntry[0])!),
               ownershipCount: mostOwnedTeamEntry[1]
             }
-          : null
+          : null,
+      biggestCareerWinner: rankedEarnings[0] ?? null,
+      biggestCareerLoser: rankedEarnings.length > 0 ? rankedEarnings[rankedEarnings.length - 1] : null,
+      seasonSummaries
     };
   },
 
@@ -453,6 +556,34 @@ export const analyticsService = {
     const { league, seasons, drafts, teams } = await getLeagueAnalyticsContext(leagueId);
     const resolveAcquisition = buildAcquisitionTypeResolver(drafts);
     const teamById = new Map(teams.map((team) => [team.id, team] as const));
+    const teamNflStats = new Map<
+      string,
+      { regularSeasonWins: number; playoffWins: number; totalNflLedgerAmount: number; seasonsTracked: Set<string> }
+    >();
+
+    for (const season of seasons) {
+      for (const result of season.nflTeamResults) {
+        const current = teamNflStats.get(result.nflTeamId) ?? {
+          regularSeasonWins: 0,
+          playoffWins: 0,
+          totalNflLedgerAmount: 0,
+          seasonsTracked: new Set<string>()
+        };
+
+        if (result.result === "WIN") {
+          if (result.phase === "REGULAR_SEASON") {
+            current.regularSeasonWins += 1;
+            current.totalNflLedgerAmount = Number((current.totalNflLedgerAmount + 1).toFixed(2));
+          } else {
+            current.playoffWins += 1;
+            current.totalNflLedgerAmount = Number((current.totalNflLedgerAmount + 1).toFixed(2));
+          }
+        }
+
+        current.seasonsTracked.add(season.id);
+        teamNflStats.set(result.nflTeamId, current);
+      }
+    }
 
     const groupedRows = new Map<
       string,
@@ -506,6 +637,18 @@ export const analyticsService = {
           {
             team: mapTeam(team),
             ownershipCount: rows.length,
+            totalRegularSeasonWins: teamNflStats.get(teamId)?.regularSeasonWins ?? 0,
+            totalPlayoffWins: teamNflStats.get(teamId)?.playoffWins ?? 0,
+            totalNflLedgerAmount: teamNflStats.get(teamId)?.totalNflLedgerAmount ?? 0,
+            averageNflLedgerAmountPerSeason:
+              (teamNflStats.get(teamId)?.seasonsTracked.size ?? 0) > 0
+                ? Number(
+                    (
+                      (teamNflStats.get(teamId)?.totalNflLedgerAmount ?? 0) /
+                      (teamNflStats.get(teamId)?.seasonsTracked.size ?? 1)
+                    ).toFixed(2)
+                  )
+                : null,
             longestOwnershipStreak: longestStreak
               ? {
                   ownerUserId: longestStreak.userId,
@@ -520,6 +663,38 @@ export const analyticsService = {
         ];
       })
       .sort((left, right) => right.ownershipCount - left.ownershipCount);
+    const mostProfitableTeams = [...franchises]
+      .sort((left, right) => {
+        if (right.totalNflLedgerAmount !== left.totalNflLedgerAmount) {
+          return right.totalNflLedgerAmount - left.totalNflLedgerAmount;
+        }
+
+        return left.team.name.localeCompare(right.team.name);
+      })
+      .slice(0, 8)
+      .map((entry) => ({
+        team: entry.team,
+        totalNflLedgerAmount: entry.totalNflLedgerAmount,
+        averageNflLedgerAmountPerSeason: entry.averageNflLedgerAmountPerSeason
+      }));
+    const bestHistoricalTeams = [...franchises]
+      .sort((left, right) => {
+        const rightWins = right.totalRegularSeasonWins + right.totalPlayoffWins;
+        const leftWins = left.totalRegularSeasonWins + left.totalPlayoffWins;
+
+        if (rightWins !== leftWins) {
+          return rightWins - leftWins;
+        }
+
+        return left.team.name.localeCompare(right.team.name);
+      })
+      .slice(0, 8)
+      .map((entry) => ({
+        team: entry.team,
+        totalWins: entry.totalRegularSeasonWins + entry.totalPlayoffWins,
+        regularSeasonWins: entry.totalRegularSeasonWins,
+        playoffWins: entry.totalPlayoffWins
+      }));
 
     const longestOwnershipStreaks = franchises
       .filter((entry) => entry.longestOwnershipStreak)
@@ -547,6 +722,22 @@ export const analyticsService = {
           value: entry.ownershipCount
         }))
       ),
+      mostProfitableTeams,
+      mostProfitableTeamsChart: toChartData(
+        mostProfitableTeams.map((entry) => ({
+          key: entry.team.id,
+          label: entry.team.abbreviation,
+          value: entry.totalNflLedgerAmount
+        }))
+      ),
+      bestHistoricalTeams,
+      bestHistoricalTeamsChart: toChartData(
+        bestHistoricalTeams.map((entry) => ({
+          key: entry.team.id,
+          label: entry.team.abbreviation,
+          value: entry.totalWins
+        }))
+      ),
       longestOwnershipStreaks,
       franchises
     };
@@ -569,6 +760,36 @@ export const analyticsService = {
 
     const owners = [...ownerByUserId.values()]
       .map((owner) => {
+        const seasonMemberIdBySeasonId = new Map(
+          seasons.map((season) => {
+            const standingMemberId =
+              season.seasonStandings.find((standing) => standing.leagueMember.userId === owner.ownerUserId)?.leagueMemberId ??
+              null;
+            const ownershipMemberId =
+              season.teamOwnerships.find((ownership) => ownership.leagueMember.userId === owner.ownerUserId)?.leagueMember.id ??
+              null;
+
+            return [season.id, standingMemberId ?? ownershipMemberId] as const;
+          })
+        );
+        const ledgerTotalBySeasonId = new Map(
+          seasons.map((season) => [
+            season.id,
+            seasonMemberIdBySeasonId.get(season.id)
+              ? (buildSeasonLedgerTotalsByMember(season.ledgerEntries).get(seasonMemberIdBySeasonId.get(season.id)!) ?? 0)
+              : 0
+          ] as const)
+        );
+        const standingBySeasonId = new Map(
+          seasons.flatMap((season) =>
+            season.seasonStandings
+              .filter((standing) => standing.leagueMember.userId === owner.ownerUserId)
+              .map((standing) => [season.id, standing] as const)
+          )
+        );
+        const nflTotalsBySeasonId = new Map(
+          seasons.map((season) => [season.id, buildSeasonNflTotalsByMember(season.nflTeamResults)] as const)
+        );
         const seasonsForOwner = seasons
           .map((season) => {
             const teamsForSeason = season.teamOwnerships
@@ -589,8 +810,34 @@ export const analyticsService = {
               teams: teamsForSeason
             };
           })
-          .filter((row) => row.teams.length > 0)
+          .filter((row) => row.teams.length > 0 || standingBySeasonId.has(row.seasonId) || (ledgerTotalBySeasonId.get(row.seasonId) ?? 0) !== 0)
           .sort((left, right) => right.seasonYear - left.seasonYear);
+        const performanceTrend = seasonsForOwner
+          .map((season) => {
+            const standing = standingBySeasonId.get(season.seasonId) ?? null;
+            const seasonMemberId = seasonMemberIdBySeasonId.get(season.seasonId) ?? null;
+            const nflTotals = seasonMemberId
+              ? nflTotalsBySeasonId.get(season.seasonId)?.get(seasonMemberId) ?? null
+              : null;
+            const fantasyWinRate =
+              standing && standing.wins !== null && standing.losses !== null && standing.ties !== null
+                ? calculateRate(standing.wins, standing.losses, standing.ties)
+                : null;
+            const nflWinRate = nflTotals
+              ? calculateRate(nflTotals.wins, nflTotals.losses, nflTotals.ties)
+              : null;
+
+            return {
+              seasonId: season.seasonId,
+              seasonYear: season.seasonYear,
+              seasonName: season.seasonName,
+              ledgerTotal: ledgerTotalBySeasonId.get(season.seasonId) ?? 0,
+              finish: standing?.rank ?? null,
+              fantasyWinRate,
+              nflWinRate
+            };
+          })
+          .sort((left, right) => left.seasonYear - right.seasonYear);
 
         const teamCounts = new Map<string, number>();
         for (const season of seasonsForOwner) {
@@ -624,6 +871,34 @@ export const analyticsService = {
           totalSeasonsParticipated: seasonsForOwner.length,
           totalUniqueFranchisesOwned: teamCounts.size,
           ownershipDiversity: teamCounts.size,
+          totalEarnings: Number(performanceTrend.reduce((total, row) => total + row.ledgerTotal, 0).toFixed(2)),
+          averageFinish:
+            performanceTrend.filter((row) => row.finish !== null).length > 0
+              ? Number(
+                  (
+                    performanceTrend.reduce((total, row) => total + (row.finish ?? 0), 0) /
+                    performanceTrend.filter((row) => row.finish !== null).length
+                  ).toFixed(2)
+                )
+              : null,
+          fantasyWinRate:
+            performanceTrend.filter((row) => row.fantasyWinRate !== null).length > 0
+              ? Number(
+                  (
+                    performanceTrend.reduce((total, row) => total + (row.fantasyWinRate ?? 0), 0) /
+                    performanceTrend.filter((row) => row.fantasyWinRate !== null).length
+                  ).toFixed(3)
+                )
+              : null,
+          nflWinRate:
+            performanceTrend.filter((row) => row.nflWinRate !== null).length > 0
+              ? Number(
+                  (
+                    performanceTrend.reduce((total, row) => total + (row.nflWinRate ?? 0), 0) /
+                    performanceTrend.filter((row) => row.nflWinRate !== null).length
+                  ).toFixed(3)
+                )
+              : null,
           mostFrequentlyOwnedTeam: sortedTeamCounts[0] ?? null,
           longestContinuousOwnership:
             longestStreak && teamById.get(longestStreak.teamId)
@@ -640,6 +915,14 @@ export const analyticsService = {
               key: entry.team.id,
               label: entry.team.abbreviation,
               value: entry.count
+            }))
+          ),
+          performanceTrend,
+          earningsTrendChart: toChartData(
+            performanceTrend.map((entry) => ({
+              key: entry.seasonId,
+              label: String(entry.seasonYear),
+              value: entry.ledgerTotal
             }))
           ),
           seasons: seasonsForOwner
@@ -660,16 +943,64 @@ export const analyticsService = {
             value: owner.ownershipDiversity
           }))
       ),
+      totalEarningsChart: toChartData(
+        owners
+          .slice()
+          .sort((left, right) => right.totalEarnings - left.totalEarnings)
+          .slice(0, 8)
+          .map((owner) => ({
+            key: owner.ownerUserId,
+            label: owner.ownerDisplayName,
+            value: owner.totalEarnings
+          }))
+      ),
+      averageFinishChart: toChartData(
+        owners
+          .slice()
+          .filter((owner) => owner.averageFinish !== null)
+          .sort((left, right) => (left.averageFinish ?? 999) - (right.averageFinish ?? 999))
+          .slice(0, 8)
+          .map((owner) => ({
+            key: owner.ownerUserId,
+            label: owner.ownerDisplayName,
+            value: Number((11 - (owner.averageFinish ?? 10)).toFixed(2))
+          }))
+      ),
       owners
     };
   },
 
   async getDraftAnalytics(leagueId: string): Promise<DraftAnalytics> {
-    const { league, drafts, teams } = await getLeagueAnalyticsContext(leagueId);
+    const { league, drafts, teams, seasons } = await getLeagueAnalyticsContext(leagueId);
     const teamById = new Map(teams.map((team) => [team.id, team] as const));
+    const standingsBySeasonId = new Map(seasons.map((season) => [season.id, season.seasonStandings] as const));
+    const ledgerTotalsBySeasonId = new Map(
+      seasons.map((season) => [season.id, buildSeasonLedgerTotalsByMember(season.ledgerEntries)] as const)
+    );
+    const nflResultStatsBySeasonAndTeam = new Map<
+      string,
+      Map<string, { regularSeasonWins: number; playoffWins: number; nflLedgerAmount: number }>
+    >();
 
     const keepCountByTeam = new Map<string, number>();
     const draftPickStatsByTeam = new Map<string, { count: number; totalPickNumber: number }>();
+
+    for (const season of seasons) {
+      const byTeam = new Map<string, { regularSeasonWins: number; playoffWins: number; nflLedgerAmount: number }>();
+      for (const result of season.nflTeamResults) {
+        const current = byTeam.get(result.nflTeamId) ?? { regularSeasonWins: 0, playoffWins: 0, nflLedgerAmount: 0 };
+        if (result.result === "WIN") {
+          if (result.phase === "REGULAR_SEASON") {
+            current.regularSeasonWins += 1;
+          } else {
+            current.playoffWins += 1;
+          }
+          current.nflLedgerAmount = Number((current.nflLedgerAmount + 1).toFixed(2));
+        }
+        byTeam.set(result.nflTeamId, current);
+      }
+      nflResultStatsBySeasonAndTeam.set(season.id, byTeam);
+    }
 
     for (const draft of drafts) {
       for (const keeper of draft.keeperSelections) {
@@ -710,6 +1041,85 @@ export const analyticsService = {
         return team ? [{ team: mapTeam(team), keepCount }] : [];
       })
       .sort((left, right) => right.keepCount - left.keepCount);
+    const completedPickRows = drafts.flatMap((draft) =>
+      draft.picks
+        .filter((pick) => Boolean(pick.selectedNflTeamId))
+        .map((pick) => {
+          const targetStandings = standingsBySeasonId.get(draft.targetSeasonId) ?? [];
+          const targetLedgerTotals = ledgerTotalsBySeasonId.get(draft.targetSeasonId) ?? new Map<string, number>();
+          const standing = targetStandings.find(
+            (entry) => entry.leagueMember.userId === pick.selectingLeagueMember.userId
+          ) ?? null;
+
+          return {
+            draftId: draft.id,
+            targetSeasonId: draft.targetSeasonId,
+            targetSeasonYear: draft.targetSeason.year,
+            targetSeasonName: draft.targetSeason.name,
+            draftSlot: pick.overallPickNumber,
+            ownerUserId: pick.selectingLeagueMember.userId,
+            ownerDisplayName: pick.selectingLeagueMember.user.displayName,
+            leagueMemberId: pick.selectingLeagueMemberId,
+            selectedTeamId: pick.selectedNflTeamId!,
+            selectedTeam: pick.selectedNflTeam ? mapTeam(pick.selectedNflTeam) : null,
+            finalFinish: standing?.rank ?? null,
+            finalLedgerTotal: targetLedgerTotals.get(pick.selectingLeagueMemberId) ?? null,
+            selectedTeamStats:
+              nflResultStatsBySeasonAndTeam.get(draft.targetSeasonId)?.get(pick.selectedNflTeamId!) ?? {
+                regularSeasonWins: 0,
+                playoffWins: 0,
+                nflLedgerAmount: 0
+              }
+          };
+        })
+    );
+    const draftSlotOutcomes = [...new Set(completedPickRows.map((row) => row.draftSlot))]
+      .sort((left, right) => left - right)
+      .map((draftSlot) => {
+        const rows = completedPickRows.filter((row) => row.draftSlot === draftSlot);
+        const finishRows = rows.filter((row) => row.finalFinish !== null);
+        const ledgerRows = rows.filter((row) => row.finalLedgerTotal !== null);
+
+        return {
+          draftSlot,
+          averageFinish:
+            finishRows.length > 0
+              ? Number(
+                  (finishRows.reduce((total, row) => total + (row.finalFinish ?? 0), 0) / finishRows.length).toFixed(2)
+                )
+              : null,
+          averageLedgerTotal:
+            ledgerRows.length > 0
+              ? Number(
+                  (ledgerRows.reduce((total, row) => total + (row.finalLedgerTotal ?? 0), 0) / ledgerRows.length).toFixed(2)
+                )
+              : null,
+          sampleSize: rows.length
+        };
+      });
+    const replacementDraftEffectiveness = drafts
+      .filter((draft) => draft.picks.some((pick) => Boolean(pick.selectedNflTeamId)))
+      .slice(0, 6)
+      .map((draft) => ({
+        draftId: draft.id,
+        targetSeasonId: draft.targetSeasonId,
+        targetSeasonYear: draft.targetSeason.year,
+        targetSeasonName: draft.targetSeason.name,
+        entries: completedPickRows
+          .filter((row) => row.draftId === draft.id)
+          .sort((left, right) => left.draftSlot - right.draftSlot)
+          .map((row) => ({
+            draftSlot: row.draftSlot,
+            ownerUserId: row.ownerUserId,
+            ownerDisplayName: row.ownerDisplayName,
+            selectedTeam: row.selectedTeam,
+            finalFinish: row.finalFinish,
+            finalLedgerTotal: row.finalLedgerTotal,
+            selectedTeamRegularSeasonWins: row.selectedTeamStats.regularSeasonWins,
+            selectedTeamPlayoffWins: row.selectedTeamStats.playoffWins,
+            selectedTeamNflLedgerAmount: row.selectedTeamStats.nflLedgerAmount
+          }))
+      }));
 
     return {
       leagueId: league.id,
@@ -729,6 +1139,15 @@ export const analyticsService = {
           value: entry.keepCount
         }))
       ),
+      draftSlotOutcomes,
+      draftSlotOutcomeChart: toChartData(
+        draftSlotOutcomes.map((entry) => ({
+          key: String(entry.draftSlot),
+          label: `Pick ${entry.draftSlot}`,
+          value: entry.averageLedgerTotal ?? 0
+        }))
+      ),
+      replacementDraftEffectiveness,
       recentDrafts: drafts.slice(0, 6).map((draft) => ({
         draftId: draft.id,
         targetSeasonId: draft.targetSeasonId,
