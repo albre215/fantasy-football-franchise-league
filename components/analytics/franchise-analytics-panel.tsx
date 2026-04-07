@@ -30,10 +30,10 @@ export function FranchiseAnalyticsPanel({ analytics }: { analytics: FranchiseAna
         <AnalyticsBarChart
           color="#2BBE5A"
           data={analytics.mostProfitableTeamsChart}
-          description="Teams contributing the most NFL-derived ledger wins across tracked seasons."
+          description="Teams with the highest cumulative NFL-derived ledger amount across tracked seasons."
           emptyMessage="No team profitability analytics are available yet."
           title="Most Profitable Teams"
-          valueLabel="ledger wins"
+          valueLabel="ledger amount"
         />
       </div>
 
@@ -41,7 +41,7 @@ export function FranchiseAnalyticsPanel({ analytics }: { analytics: FranchiseAna
         <AnalyticsBarChart
           color="#E0B24A"
           data={analytics.bestHistoricalTeamsChart}
-          description="Historic NFL win totals from persisted season NFL results."
+          description="Historic persisted NFL win totals across regular season and playoffs."
           emptyMessage="No historical team performance is available yet."
           title="Best Historical Teams"
           valueLabel="wins"
@@ -105,7 +105,7 @@ export function FranchiseAnalyticsPanel({ analytics }: { analytics: FranchiseAna
                   {selectedFranchise.totalRegularSeasonWins} regular wins | {selectedFranchise.totalPlayoffWins} playoff wins
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  ${selectedFranchise.totalNflLedgerAmount.toFixed(2)} NFL ledger contribution
+                  ${selectedFranchise.totalNflLedgerAmount.toFixed(2)} cumulative NFL-derived ledger amount
                   {selectedFranchise.averageNflLedgerAmountPerSeason !== null
                     ? ` | ${selectedFranchise.averageNflLedgerAmountPerSeason.toFixed(2)} avg/season`
                     : ""}

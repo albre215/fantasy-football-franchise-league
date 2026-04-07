@@ -31,7 +31,7 @@ export function OwnerAnalyticsPanel({ analytics }: { analytics: OwnerAnalytics }
         <AnalyticsBarChart
           color="#2BBE5A"
           data={analytics.totalEarningsChart}
-          description="Cumulative ledger earnings by owner across tracked seasons."
+          description="Cumulative posted ledger totals by owner across tracked seasons."
           emptyMessage="Owner earnings analytics are not available yet."
           title="Total Earnings"
           valueLabel="dollars"
@@ -42,7 +42,7 @@ export function OwnerAnalyticsPanel({ analytics }: { analytics: OwnerAnalytics }
         <AnalyticsBarChart
           color="#4A7BE0"
           data={analytics.averageFinishChart}
-          description="Better average finishes rank higher on this chart."
+          description="Average saved final standing rank, inverted visually so better finishes rank higher."
           emptyMessage="Average finish analytics are not available yet."
           title="Average Finish"
           valueLabel="finish score"
@@ -150,7 +150,7 @@ export function OwnerAnalyticsPanel({ analytics }: { analytics: OwnerAnalytics }
             <AnalyticsBarChart
               color="#E0B24A"
               data={selectedOwner.earningsTrendChart}
-              description="Season-by-season ledger trend for the selected owner."
+              description="Season-by-season posted ledger total for the selected owner."
               emptyMessage="No earnings trend is available for this owner yet."
               title={`${selectedOwner.ownerDisplayName}'s Earnings Trend`}
               valueLabel="dollars"
@@ -161,7 +161,7 @@ export function OwnerAnalyticsPanel({ analytics }: { analytics: OwnerAnalytics }
             <Card className="brand-surface">
               <CardHeader>
                 <CardTitle className="text-xl">Performance Trend</CardTitle>
-                <CardDescription>Finish, ledger, and win-rate trend by season.</CardDescription>
+                <CardDescription>Per-season finish, posted ledger total, and win-rate metrics.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {selectedOwner.performanceTrend.map((season) => (

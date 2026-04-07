@@ -28,7 +28,7 @@ export function DraftAnalyticsPanel({ analytics }: { analytics: DraftAnalytics }
       <AnalyticsBarChart
         color="#4A7BE0"
         data={analytics.draftSlotOutcomeChart}
-        description="Average final ledger outcome by replacement draft slot."
+        description="Average target-season posted ledger total by replacement draft slot."
         emptyMessage="No draft-slot outcome analytics are available yet."
         title="Draft Slot Outcomes"
         valueLabel="avg ledger"
@@ -62,7 +62,7 @@ export function DraftAnalyticsPanel({ analytics }: { analytics: DraftAnalytics }
         <Card className="brand-surface">
           <CardHeader>
             <CardTitle className="text-xl">Recent Draft Activity</CardTitle>
-            <CardDescription>How recent offseason drafts have played out by season.</CardDescription>
+            <CardDescription>Operational summary of recent replacement drafts by target season.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {analytics.recentDrafts.length === 0 ? (
@@ -91,7 +91,7 @@ export function DraftAnalyticsPanel({ analytics }: { analytics: DraftAnalytics }
       <Card className="brand-surface">
         <CardHeader>
           <CardTitle className="text-xl">Replacement Draft Effectiveness</CardTitle>
-          <CardDescription>How each replacement pick translated into season outcomes.</CardDescription>
+          <CardDescription>How each replacement pick mapped to target-season outcomes and team-level NFL results.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {analytics.replacementDraftEffectiveness.length === 0 ? (

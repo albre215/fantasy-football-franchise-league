@@ -61,6 +61,7 @@ The application is built around preserving historical league state:
 
 8. History and analytics
 - historical ownership, ledger, standings, and draft records remain queryable for history and analytics
+- analytics metrics are read-only derived views and now have a shared metric dictionary
 
 ## Current Stack
 - Next.js 14 App Router
@@ -98,5 +99,6 @@ The current app favors a commissioner-driven workflow over external integrations
 - fantasy payouts are posted into the ledger from saved standings
 - offseason draft order is derived from previous-season ledger totals
 - offseason workflow is explicitly gated by persisted league phases
+- analytics definitions are standardized in `docs/05-analytics-metric-definitions.md`
 
 Provider-based ingestion code still exists in the repo, but manual standings remain the primary fantasy-results workflow.

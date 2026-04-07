@@ -179,6 +179,7 @@ Additional ingestion-related models still present in the schema.
 
 ### `server/services/history-service.ts` / `analytics-service.ts`
 - cross-season history and analytics read models
+- analytics metric definitions are documented in `docs/05-analytics-metric-definitions.md`
 
 ## Important API Route Areas
 
@@ -282,7 +283,7 @@ The immediately previous season's ledger totals are aggregated per owner, tied d
 In `DROP_PHASE`, keepers and released teams become explicit and reviewable. In `DRAFT_PHASE`, the replacement draft runs from the released-team pool using the ledger-based order, and finalization writes authoritative target-season `TeamOwnership`.
 
 ### 7. History / Analytics
-Read-only server-side history and analytics aggregate ownership, standings, ledger, and draft records.
+Read-only server-side history and analytics aggregate ownership, standings, ledger, and draft records. Metric definitions are standardized in `docs/05-analytics-metric-definitions.md`.
 
 ## Architectural Boundaries To Preserve
 - `TeamOwnership` = season ownership truth

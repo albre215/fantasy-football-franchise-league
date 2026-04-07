@@ -27,7 +27,9 @@ GM Fantasy is a commissioner-first web app for managing a long-running fantasy f
 - league phase system
 - draft finalization into season ownership
 - owner-facing read-only views
-- history and analytics views for ownership and draft history
+- NFL results -> ledger posting
+- history and analytics views
+- analytics metric definitions hardening
 
 ## Current Source-of-Truth Rules
 - `TeamOwnership` is the source of truth for season ownership
@@ -53,6 +55,7 @@ GM Fantasy is a commissioner-first web app for managing a long-running fantasy f
 12. Record one released-team pick per owner
 13. Finalize the draft into `TeamOwnership`
 14. Review owner views, ledger, history, and analytics
+15. Use `docs/05-analytics-metric-definitions.md` as the canonical analytics dictionary
 
 ## Next Recommended Prompt
 Implement inaugural auction behavior for leagues that do not have an immediately previous season.
@@ -89,4 +92,5 @@ Start the new conversation with:
    - `docs/04-roadmap-and-next-steps.md`
    - `docs/PROJECT_HANDOFF_SUMMARY.md`
    - `docs/NEW_CHAT_HANDOFF.md`
+   - `docs/05-analytics-metric-definitions.md`
 8. The specific review or next feature request you want

@@ -303,6 +303,9 @@ function decimalToNumber(value: Prisma.Decimal | number | string) {
   return Number(new Prisma.Decimal(value).toFixed(2));
 }
 
+// Winning percentage definition used across fantasy and NFL analytics:
+// (wins + 0.5 * ties) / total games.
+// Null means the metric is unavailable because no games were recorded.
 function calculateRate(wins: number, losses: number, ties: number) {
   const total = wins + losses + ties;
 
@@ -319,6 +322,10 @@ function buildSeasonLedgerTotalsByMember(
     amount: Prisma.Decimal;
   }>
 ) {
+  // Season ledger total:
+  // Sum of every posted LedgerEntry amount for one league member within
+  // one season. Analytics intentionally use the ledger as the financial
+  // source of truth, so all persisted categories are included.
   const totals = new Map<string, number>();
 
   for (const entry of entries) {
@@ -338,6 +345,9 @@ function buildSeasonNflTotalsByMember(
     result: "WIN" | "LOSS" | "TIE";
   }>
 ) {
+  // Owner NFL totals:
+  // Aggregate persisted SeasonNflTeamResult rows by owning league member.
+  // This powers read-only analytics for NFL win rates and team performance.
   const totals = new Map<
     string,
     { wins: number; losses: number; ties: number; regularSeasonWins: number; playoffWins: number }
@@ -397,6 +407,9 @@ export const analyticsService = {
     const mostOwnedTeamEntry =
       [...ownershipCountByTeam.entries()].sort((left, right) => right[1] - left[1])[0] ?? null;
 
+    // Champion metrics:
+    // A season champion comes from the first saved standing flagged as
+    // isChampion, or rank 1 when that explicit flag is absent.
     const championRows = seasons
       .map((season) => {
         const championStanding =
@@ -441,6 +454,8 @@ export const analyticsService = {
     const championCounts = [...championCountsByOwner.values()].sort(
       (left, right) => right.championshipCount - left.championshipCount
     );
+    // Career earnings metrics:
+    // Sum of posted season ledger totals by owner across all tracked seasons.
     const ownerEarnings = new Map<string, { ownerUserId: string; ownerDisplayName: string; totalEarnings: number }>();
     const seasonSummaries = seasons.map((season) => {
       const ledgerTotals = buildSeasonLedgerTotalsByMember(season.ledgerEntries);
@@ -468,11 +483,15 @@ export const analyticsService = {
         ownerEarnings.set(row.ownerUserId, current);
       }
 
+      // totalLeaguePayouts:
+      // Net posted ledger total for this season across all persisted categories.
       const totalLeaguePayouts = Number(
         season.ledgerEntries.reduce((total, entry) => total + decimalToNumber(entry.amount), 0).toFixed(2)
       );
       const biggestWinner = totalsWithNames[0] ?? null;
       const biggestLoser = totalsWithNames[totalsWithNames.length - 1] ?? null;
+      // parityGap:
+      // Spread between the highest and lowest owner season ledger totals.
       const parityGap =
         biggestWinner && biggestLoser ? Number((biggestWinner.amount - biggestLoser.amount).toFixed(2)) : null;
 
@@ -498,9 +517,13 @@ export const analyticsService = {
         parityGap
       };
     });
+    // totalLeaguePayouts:
+    // Sum of every season's net ledger total across the league history.
     const totalLeaguePayouts = Number(
       seasonSummaries.reduce((total, season) => total + season.totalLeaguePayouts, 0).toFixed(2)
     );
+    // averageSeasonParityGap:
+    // Average parity gap across seasons with ledger totals.
     const averageSeasonParityGap =
       seasonSummaries.length > 0
         ? Number(
@@ -556,6 +579,7 @@ export const analyticsService = {
     const { league, seasons, drafts, teams } = await getLeagueAnalyticsContext(leagueId);
     const resolveAcquisition = buildAcquisitionTypeResolver(drafts);
     const teamById = new Map(teams.map((team) => [team.id, team] as const));
+    // Franchise performance metrics use only persisted NFL team results.
     const teamNflStats = new Map<
       string,
       { regularSeasonWins: number; playoffWins: number; totalNflLedgerAmount: number; seasonsTracked: Set<string> }
@@ -637,9 +661,17 @@ export const analyticsService = {
           {
             team: mapTeam(team),
             ownershipCount: rows.length,
+            // totalRegularSeasonWins / totalPlayoffWins:
+            // Historical persisted win counts for this franchise by phase.
             totalRegularSeasonWins: teamNflStats.get(teamId)?.regularSeasonWins ?? 0,
             totalPlayoffWins: teamNflStats.get(teamId)?.playoffWins ?? 0,
+            // totalNflLedgerAmount:
+            // Analytics mirror of the current NFL posting formula:
+            // one unit per persisted regular-season or playoff win.
             totalNflLedgerAmount: teamNflStats.get(teamId)?.totalNflLedgerAmount ?? 0,
+            // averageNflLedgerAmountPerSeason:
+            // Average NFL-derived ledger amount across seasons where the team
+            // has persisted NFL results.
             averageNflLedgerAmountPerSeason:
               (teamNflStats.get(teamId)?.seasonsTracked.size ?? 0) > 0
                 ? Number(
@@ -663,6 +695,8 @@ export const analyticsService = {
         ];
       })
       .sort((left, right) => right.ownershipCount - left.ownershipCount);
+    // mostProfitableTeams:
+    // Franchises ranked by cumulative NFL-derived ledger amount.
     const mostProfitableTeams = [...franchises]
       .sort((left, right) => {
         if (right.totalNflLedgerAmount !== left.totalNflLedgerAmount) {
@@ -677,6 +711,8 @@ export const analyticsService = {
         totalNflLedgerAmount: entry.totalNflLedgerAmount,
         averageNflLedgerAmountPerSeason: entry.averageNflLedgerAmountPerSeason
       }));
+    // bestHistoricalTeams:
+    // Franchises ranked by total persisted wins across all phases.
     const bestHistoricalTeams = [...franchises]
       .sort((left, right) => {
         const rightWins = right.totalRegularSeasonWins + right.totalPlayoffWins;
@@ -760,6 +796,9 @@ export const analyticsService = {
 
     const owners = [...ownerByUserId.values()]
       .map((owner) => {
+        // seasonMemberIdBySeasonId:
+        // Resolve the season-scoped member id for this owner, preferring the
+        // final standings record and falling back to ownership when needed.
         const seasonMemberIdBySeasonId = new Map(
           seasons.map((season) => {
             const standingMemberId =
@@ -812,6 +851,10 @@ export const analyticsService = {
           })
           .filter((row) => row.teams.length > 0 || standingBySeasonId.has(row.seasonId) || (ledgerTotalBySeasonId.get(row.seasonId) ?? 0) !== 0)
           .sort((left, right) => right.seasonYear - left.seasonYear);
+        // performanceTrend:
+        // One analytics row per season where this owner had ownership,
+        // standings, or ledger participation. This is the canonical source for
+        // owner earnings, average finish, and average win-rate metrics.
         const performanceTrend = seasonsForOwner
           .map((season) => {
             const standing = standingBySeasonId.get(season.seasonId) ?? null;
@@ -871,7 +914,11 @@ export const analyticsService = {
           totalSeasonsParticipated: seasonsForOwner.length,
           totalUniqueFranchisesOwned: teamCounts.size,
           ownershipDiversity: teamCounts.size,
+          // totalEarnings:
+          // Sum of season ledger totals across the owner's tracked seasons.
           totalEarnings: Number(performanceTrend.reduce((total, row) => total + row.ledgerTotal, 0).toFixed(2)),
+          // averageFinish:
+          // Average final standing rank across seasons where a saved finish exists.
           averageFinish:
             performanceTrend.filter((row) => row.finish !== null).length > 0
               ? Number(
@@ -881,6 +928,9 @@ export const analyticsService = {
                   ).toFixed(2)
                 )
               : null,
+          // fantasyWinRate:
+          // Average of per-season fantasy winning percentages derived from
+          // saved SeasonStanding wins/losses/ties.
           fantasyWinRate:
             performanceTrend.filter((row) => row.fantasyWinRate !== null).length > 0
               ? Number(
@@ -890,6 +940,9 @@ export const analyticsService = {
                   ).toFixed(3)
                 )
               : null,
+          // nflWinRate:
+          // Average of per-season NFL winning percentages derived from
+          // persisted SeasonNflTeamResult rows tied to this owner's teams.
           nflWinRate:
             performanceTrend.filter((row) => row.nflWinRate !== null).length > 0
               ? Number(
@@ -1020,6 +1073,8 @@ export const analyticsService = {
       }
     }
 
+    // mostDraftedTeams:
+    // Frequency of non-keeper teams selected through replacement draft picks.
     const mostDraftedTeams = [...draftPickStatsByTeam.entries()]
       .flatMap(([teamId, stats]) => {
         const team = teamById.get(teamId);
@@ -1035,6 +1090,8 @@ export const analyticsService = {
       })
       .sort((left, right) => right.draftCount - left.draftCount);
 
+    // mostKeptTeams:
+    // Frequency of explicit keeper selections recorded before the replacement draft.
     const mostKeptTeams = [...keepCountByTeam.entries()]
       .flatMap(([teamId, keepCount]) => {
         const team = teamById.get(teamId);
@@ -1073,6 +1130,9 @@ export const analyticsService = {
           };
         })
     );
+    // draftSlotOutcomes:
+    // Average target-season finish and full season ledger total by replacement
+    // draft slot after the owner made that pick.
     const draftSlotOutcomes = [...new Set(completedPickRows.map((row) => row.draftSlot))]
       .sort((left, right) => left - right)
       .map((draftSlot) => {
@@ -1097,6 +1157,9 @@ export const analyticsService = {
           sampleSize: rows.length
         };
       });
+    // replacementDraftEffectiveness:
+    // Draft-by-draft audit view pairing each replacement draft pick with the
+    // owner's target-season outcome and the selected team's persisted NFL results.
     const replacementDraftEffectiveness = drafts
       .filter((draft) => draft.picks.some((pick) => Boolean(pick.selectedNflTeamId)))
       .slice(0, 6)

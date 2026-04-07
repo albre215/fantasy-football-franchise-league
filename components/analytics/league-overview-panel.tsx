@@ -34,7 +34,7 @@ export function LeagueOverviewPanel({ overview }: { overview: LeagueOverviewAnal
         <Card className="brand-surface">
           <CardHeader>
             <CardTitle className="text-lg">League Payouts</CardTitle>
-            <CardDescription>Net season-scoped ledger total across all tracked seasons.</CardDescription>
+            <CardDescription>Sum of each season&apos;s net posted ledger total across tracked seasons.</CardDescription>
           </CardHeader>
           <CardContent className="text-3xl font-semibold">${overview.totalLeaguePayouts.toFixed(2)}</CardContent>
         </Card>
@@ -74,7 +74,7 @@ export function LeagueOverviewPanel({ overview }: { overview: LeagueOverviewAnal
           <Card className="brand-surface">
             <CardHeader>
               <CardTitle className="text-xl">Career Ledger Extremes</CardTitle>
-              <CardDescription>Biggest long-term winners and losers from posted season ledger totals.</CardDescription>
+              <CardDescription>Cumulative owner ledger totals across all tracked seasons.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {overview.biggestCareerWinner ? (
@@ -96,6 +96,7 @@ export function LeagueOverviewPanel({ overview }: { overview: LeagueOverviewAnal
                 <div className="text-lg font-semibold">
                   {overview.averageSeasonParityGap !== null ? `$${overview.averageSeasonParityGap.toFixed(2)}` : "Not available"}
                 </div>
+                <div className="text-muted-foreground">Average spread between the highest and lowest season ledger totals.</div>
               </div>
             </CardContent>
           </Card>
@@ -157,7 +158,7 @@ export function LeagueOverviewPanel({ overview }: { overview: LeagueOverviewAnal
       <Card className="brand-surface">
         <CardHeader>
           <CardTitle className="text-xl">Season Summaries</CardTitle>
-          <CardDescription>Winner/loser and parity snapshot from each tracked season ledger.</CardDescription>
+          <CardDescription>Winner, loser, and parity snapshot from each season&apos;s posted ledger totals.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {overview.seasonSummaries.length === 0 ? (

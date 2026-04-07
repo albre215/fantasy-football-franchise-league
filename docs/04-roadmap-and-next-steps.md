@@ -1,6 +1,6 @@
 # Roadmap and Next Steps
 
-This roadmap reflects the repo after Phases 1 through 8.
+This roadmap reflects the repo after Phases 1 through 10.
 
 ## Current Baseline
 
@@ -16,11 +16,13 @@ Already implemented:
 - explicit DROP_PHASE keeper / release workflow
 - replacement draft lifecycle
 - owner-facing read-only views
+- NFL results -> ledger posting
 - history and analytics views
+- analytics metric definitions hardening
 
 ## Recommended Next Product Work
 
-### Phase 9 - Inaugural Auction / Empty-League Entry Path
+### Phase 11 - Inaugural Auction / Empty-League Entry Path
 
 #### Goal
 Support the path where a brand-new or reset league does not have a previous season to inherit from.
@@ -44,6 +46,16 @@ Build on the Phase 7 read-only owner views without changing the core domain mode
 - read-only owner replacement-draft context improvements
 - eventual owner confirmations or acknowledgements if the product wants them later
 - better financial and historical comparisons per owner
+
+### Analytics Follow-Up
+
+#### Goal
+Extend the analytics layer carefully without changing metric semantics that are now standardized.
+
+#### Guardrails
+- preserve the definitions in `docs/05-analytics-metric-definitions.md`
+- treat analytics as read-only derived views
+- update service comments, DTO comments, UI copy, and the metric dictionary together if a definition changes
 
 ## Important Technical Follow-Up
 
@@ -85,6 +97,7 @@ The repo-side Phase 5 migration chain is now cleaned up, but this remains import
 4. `docs/04-roadmap-and-next-steps.md`
 5. `docs/PROJECT_HANDOFF_SUMMARY.md`
 6. `docs/NEW_CHAT_HANDOFF.md`
+7. `docs/05-analytics-metric-definitions.md`
 
 ## Short Continuation Checklist
 

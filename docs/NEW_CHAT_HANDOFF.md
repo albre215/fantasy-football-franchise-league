@@ -5,7 +5,7 @@ Use this file to bootstrap a fresh chat quickly without re-explaining the whole 
 ## Repo + Working Context
 - Active repo: `C:\Users\Ben\GM Fantasy`
 - Treat `GM Fantasy` as the only active repo unless explicitly told otherwise
-- Current branch at handoff creation: `feature/prompt-8-replacement-draft-system`
+- Current branch at handoff creation: `fix/phase-10-5-analytics-hardening`
 - Stack:
   - Next.js 14 App Router
   - TypeScript
@@ -31,6 +31,7 @@ The app currently supports:
 - replacement draft lifecycle
 - league phase controls
 - owner-facing read-only views
+- NFL results -> ledger posting
 - history and analytics views
 
 ## Non-Negotiable Domain Rules
@@ -101,6 +102,7 @@ The app currently supports:
 ### History & Analytics
 - overview / franchise / owner / draft analytics
 - server-side aggregation
+- metric definitions are standardized in `docs/05-analytics-metric-definitions.md`
 
 ## Current Product Shape
 
@@ -146,6 +148,7 @@ The app currently supports:
 4. `docs/04-roadmap-and-next-steps.md`
 5. `docs/PROJECT_HANDOFF_SUMMARY.md`
 6. `docs/NEW_CHAT_HANDOFF.md`
+7. `docs/05-analytics-metric-definitions.md`
 
 ## Best Prompt Framing For A New Chat
 Tell the new chat:
@@ -168,5 +171,8 @@ Tell the new chat:
   - Phase 6 real DROP_PHASE keeper / release workflow
   - Phase 7 owner-facing read-only views
   - Phase 8 replacement draft system
+  - Phase 9 NFL results -> ledger automation
+  - Phase 10 analytics & insights layer
+  - Phase 10.5 analytics definitions hardening
   - schema/error-resolution work for `leaguePhase`
   - repaired Prisma migration state and cleaned Phase 5 migration chain

@@ -1,6 +1,6 @@
 # Current State and Completed Prompts
 
-This file summarizes the repo as it exists after Phases 1 through 8.
+This file summarizes the repo as it exists after Phases 1 through 10.
 
 ## Earlier Prompt Baseline
 
@@ -106,6 +106,29 @@ This file summarizes the repo as it exists after Phases 1 through 8.
 - duplicate or non-pool team picks are rejected
 - replacement draft execution remains gated by `DRAFT_PHASE`
 - finalization writes exactly 3 authoritative `TeamOwnership` rows per owner into the target season
+
+## Phase 9 - NFL Results -> Ledger Automation
+
+### What Landed
+- persisted NFL team results can be previewed as owner-level ledger rollups
+- commissioners can post NFL-derived ledger entries explicitly
+- reruns safely replace only prior NFL-derived entries for the same season
+
+## Phase 10 - Analytics & Insights Layer
+
+### What Landed
+- richer owner analytics
+- richer franchise analytics
+- season payout and parity analytics
+- draft slot and replacement-draft effectiveness analytics
+
+## Phase 10.5 - Analytics Definitions Hardening
+
+### What Landed
+- explicit metric-definition comments in `analytics-service.ts`
+- clarified analytics DTO documentation in `types/analytics.ts`
+- standardized analytics UI wording
+- dedicated analytics data dictionary in `docs/05-analytics-metric-definitions.md`
 
 ## Additional Hardening / Error Resolution Already Landed
 
