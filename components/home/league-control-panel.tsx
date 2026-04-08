@@ -10,7 +10,13 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { CreateLeagueResponse, JoinLeagueResponse, LeagueListItem } from "@/types/league";
+import type {
+  CreateLeagueResponse,
+  JoinLeagueResponse,
+  JoinLeagueSuggestion,
+  JoinLeagueSuggestionsResponse,
+  LeagueListItem
+} from "@/types/league";
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   const payload = (await response.json()) as T & { error?: string };
@@ -35,6 +41,9 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
   const [leagues, setLeagues] = useState<LeagueListItem[]>(initialLeagues);
   const [leagueName, setLeagueName] = useState("");
   const [joinLeagueId, setJoinLeagueId] = useState("");
+  const [joinSuggestions, setJoinSuggestions] = useState<JoinLeagueSuggestion[]>([]);
+  const [isLoadingJoinSuggestions, setIsLoadingJoinSuggestions] = useState(false);
+  const [selectedJoinSuggestionCode, setSelectedJoinSuggestionCode] = useState<string | null>(null);
   const [registerFirstName, setRegisterFirstName] = useState("");
   const [registerLastName, setRegisterLastName] = useState("");
   const [registerDisplayName, setRegisterDisplayName] = useState("");
@@ -43,6 +52,7 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
   const [registerPassword, setRegisterPassword] = useState("");
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState("");
   const [authMode, setAuthMode] = useState<"sign-in" | "register">("sign-in");
+  const [leagueActionMode, setLeagueActionMode] = useState<"join" | "create">("join");
   const [hasManuallyEditedDisplayName, setHasManuallyEditedDisplayName] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -75,6 +85,50 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
       setLeagues([]);
     }
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated || leagueActionMode !== "join") {
+      setJoinSuggestions([]);
+      setIsLoadingJoinSuggestions(false);
+      return;
+    }
+
+    const query = joinLeagueId.trim();
+
+    if (!query) {
+      setJoinSuggestions([]);
+      setIsLoadingJoinSuggestions(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        setIsLoadingJoinSuggestions(true);
+        const response = await fetch(`/api/league/join/suggestions?query=${encodeURIComponent(query)}`, {
+          cache: "no-store",
+          signal: controller.signal
+        });
+        const data = await parseJsonResponse<JoinLeagueSuggestionsResponse>(response);
+        setJoinSuggestions(data.suggestions);
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setJoinSuggestions([]);
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoadingJoinSuggestions(false);
+        }
+      }
+    }, 180);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [isAuthenticated, joinLeagueId, leagueActionMode]);
 
   useEffect(() => {
     setLeagues(initialLeagues);
@@ -209,6 +263,8 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
 
     await handleJoinLeague(joinLeagueId.trim());
     setJoinLeagueId("");
+    setJoinSuggestions([]);
+    setSelectedJoinSuggestionCode(null);
   }
 
   async function handleRegister(event: React.FormEvent<HTMLFormElement>) {
@@ -285,7 +341,6 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
 
       setLoginEmail("");
       setLoginPassword("");
-      setSuccessMessage("Signed in.");
       router.refresh();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to sign in.");
@@ -569,13 +624,68 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
               )}
             </CardContent>
           </Card>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card className="brand-surface">
-              <CardHeader>
-                <CardTitle>Create League</CardTitle>
-                <CardDescription>Create a league and make your authenticated user the commissioner.</CardDescription>
-              </CardHeader>
-              <CardContent>
+          <Card className="brand-surface">
+            <CardHeader>
+              <CardTitle>{leagueActionMode === "join" ? "Join League" : "Create League"}</CardTitle>
+              <CardDescription>
+                {leagueActionMode === "join"
+                  ? "Use a league code to join an existing league with your authenticated user."
+                  : "Create a league and make your authenticated user the commissioner."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {leagueActionMode === "join" ? (
+                <form className="space-y-4" onSubmit={handleJoinById}>
+                  <div className="space-y-3">
+                    <Input
+                      onChange={(event) => {
+                        setJoinLeagueId(event.target.value);
+                        setSelectedJoinSuggestionCode(null);
+                      }}
+                      placeholder="League code (for example, GMF-1)"
+                      value={joinLeagueId}
+                    />
+                    {isLoadingJoinSuggestions ? (
+                      <div className="rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+                        Searching league codes...
+                      </div>
+                    ) : joinSuggestions.length > 0 ? (
+                      <div className="overflow-hidden rounded-xl border border-border bg-background">
+                        {joinSuggestions.map((suggestion) => (
+                          <button
+                            className="flex w-full items-start justify-between gap-3 border-b border-border px-3 py-3 text-left transition hover:bg-secondary/40 last:border-b-0"
+                            key={suggestion.id}
+                            onClick={() => {
+                              setJoinLeagueId(suggestion.leagueCode);
+                              setJoinSuggestions([]);
+                              setSelectedJoinSuggestionCode(suggestion.leagueCode);
+                            }}
+                            type="button"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-medium text-foreground">{suggestion.leagueCode}</p>
+                              <p className="truncate text-sm text-muted-foreground">{suggestion.name}</p>
+                            </div>
+                            <div className="shrink-0 text-right text-xs text-muted-foreground">
+                              <p>{suggestion.memberCount}/10 members</p>
+                              <p>{suggestion.seasonCount} seasons</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : joinLeagueId.trim() && selectedJoinSuggestionCode !== joinLeagueId.trim() ? (
+                      <div className="rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+                        No matching league codes found.
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button disabled={isSubmitting || !joinLeagueId.trim()} type="submit" variant="secondary">
+                      Join League
+                    </Button>
+                  </div>
+                </form>
+              ) : (
                 <form className="space-y-4" onSubmit={handleCreateLeague}>
                   <Input
                     onChange={(event) => setLeagueName(event.target.value)}
@@ -588,32 +698,48 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
                     </Button>
                   </div>
                 </form>
-              </CardContent>
-            </Card>
-            <Card className="brand-surface">
-              <CardHeader>
-                <CardTitle>Join League</CardTitle>
-                <CardDescription>Use a league code to join an existing league with your authenticated user.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form className="space-y-4" onSubmit={handleJoinById}>
-                  <Input
-                    onChange={(event) => setJoinLeagueId(event.target.value)}
-                    placeholder="League code (for example, GMF-1)"
-                    value={joinLeagueId}
-                  />
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <Button disabled={isSubmitting || !joinLeagueId.trim()} type="submit" variant="secondary">
-                      Join League
-                    </Button>
-                    <Link className={buttonVariants({ variant: "outline" })} href="/league">
-                      Open League Hub
-                    </Link>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          </div>
+              )}
+            </CardContent>
+            <CardFooter className="flex flex-col items-start gap-3 border-t border-border/60 pt-5">
+              {leagueActionMode === "join" ? (
+                <>
+                  <button
+                    className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                    onClick={() => {
+                      setErrorMessage(null);
+                      setSuccessMessage(null);
+                      setSelectedJoinSuggestionCode(null);
+                      setLeagueActionMode("create");
+                    }}
+                    type="button"
+                  >
+                    Create a league
+                  </button>
+                  <p className="text-sm text-muted-foreground">
+                    Starting fresh? Create a new league and make yourself the commissioner.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                    onClick={() => {
+                      setErrorMessage(null);
+                      setSuccessMessage(null);
+                      setSelectedJoinSuggestionCode(null);
+                      setLeagueActionMode("join");
+                    }}
+                    type="button"
+                  >
+                    Join an existing league
+                  </button>
+                  <p className="text-sm text-muted-foreground">
+                    Already have a code? Switch back to join an existing league.
+                  </p>
+                </>
+              )}
+            </CardFooter>
+          </Card>
           <Card className="brand-surface">
             <CardHeader>
               <CardTitle className="text-base">Owner Links</CardTitle>

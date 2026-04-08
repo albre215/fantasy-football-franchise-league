@@ -6,6 +6,7 @@ import type {
   AddLeagueMemberInput,
   CreateLeagueInput,
   JoinLeagueInput,
+  JoinLeagueSuggestion,
   LeagueBootstrapMember,
   LeagueBootstrapState,
   LeagueDashboard,
@@ -64,6 +65,26 @@ function normalizeLeagueCodeInput(input: string) {
   }
 
   return formatLeagueCode(Number(match[1]));
+}
+
+function buildLeagueCodeSearchPrefixes(input: string) {
+  const trimmed = input.trim().toUpperCase();
+
+  if (!trimmed) {
+    return [];
+  }
+
+  const compact = trimmed.replace(/\s+/g, "");
+  const prefixes = new Set<string>([trimmed, compact]);
+  const codeMatch = compact.match(/^GMF-?(\d*)$/);
+
+  if (codeMatch) {
+    prefixes.add(`GMF-${codeMatch[1]}`);
+  } else if (/^\d+$/.test(compact)) {
+    prefixes.add(`GMF-${compact}`);
+  }
+
+  return Array.from(prefixes).filter(Boolean);
 }
 
 async function getNextLeagueCodeNumber(tx: Prisma.TransactionClient | typeof prisma) {
@@ -565,6 +586,97 @@ export const leagueService = {
     }
 
     return getLeagueDashboard(league.id);
+  },
+
+  async getJoinLeagueSuggestions(userId: string, query: string): Promise<JoinLeagueSuggestion[]> {
+    const normalizedUserId = userId.trim();
+    const trimmedQuery = query.trim();
+
+    if (!normalizedUserId) {
+      throw new LeagueServiceError("A userId is required.", 400);
+    }
+
+    if (!trimmedQuery) {
+      return [];
+    }
+
+    await ensureLeagueCodes(prisma);
+
+    const codePrefixes = buildLeagueCodeSearchPrefixes(trimmedQuery);
+    const uppercaseQuery = trimmedQuery.toUpperCase();
+
+    const leagues = await prisma.league.findMany({
+      where: {
+        members: {
+          none: {
+            userId: normalizedUserId
+          }
+        },
+        OR: [
+          {
+            leagueCode: {
+              in: codePrefixes
+            }
+          },
+          {
+            leagueCode: {
+              startsWith: codePrefixes[0]
+            }
+          },
+          {
+            name: {
+              contains: trimmedQuery
+            }
+          }
+        ]
+      },
+      include: {
+        _count: {
+          select: {
+            members: true,
+            seasons: true
+          }
+        }
+      },
+      take: 6
+    });
+
+    return leagues
+      .filter((league): league is typeof league & { leagueCode: string } => Boolean(league.leagueCode))
+      .sort((left, right) => {
+        const leftCode = left.leagueCode.toUpperCase();
+        const rightCode = right.leagueCode.toUpperCase();
+        const leftExact = codePrefixes.includes(leftCode) ? 1 : 0;
+        const rightExact = codePrefixes.includes(rightCode) ? 1 : 0;
+
+        if (leftExact !== rightExact) {
+          return rightExact - leftExact;
+        }
+
+        const leftStartsWith = leftCode.startsWith(codePrefixes[0] ?? "") ? 1 : 0;
+        const rightStartsWith = rightCode.startsWith(codePrefixes[0] ?? "") ? 1 : 0;
+
+        if (leftStartsWith !== rightStartsWith) {
+          return rightStartsWith - leftStartsWith;
+        }
+
+        const leftNameStartsWith = left.name.toUpperCase().startsWith(uppercaseQuery) ? 1 : 0;
+        const rightNameStartsWith = right.name.toUpperCase().startsWith(uppercaseQuery) ? 1 : 0;
+
+        if (leftNameStartsWith !== rightNameStartsWith) {
+          return rightNameStartsWith - leftNameStartsWith;
+        }
+
+        return right.createdAt.getTime() - left.createdAt.getTime();
+      })
+      .slice(0, 5)
+      .map((league) => ({
+        id: league.id,
+        leagueCode: league.leagueCode,
+        name: league.name,
+        memberCount: league._count.members,
+        seasonCount: league._count.seasons
+      }));
   },
 
   async getLeagueMembers(leagueId: string) {

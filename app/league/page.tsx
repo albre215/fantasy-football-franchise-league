@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+
 import { getServerAuthSession } from "@/auth";
 import { LeagueDashboard } from "@/components/league/league-dashboard";
 import { leagueService } from "@/server/services/league-service";
@@ -15,6 +17,10 @@ export default async function LeaguePage({ searchParams }: LeaguePageProps) {
   const session = await getServerAuthSession();
   const isAuthenticated = Boolean(session?.user?.id);
   const leagueId = searchParams?.leagueId;
+
+  if (!leagueId) {
+    redirect("/");
+  }
 
   let initialLeagueOptions: LeagueListItem[] = [];
   let initialBootstrapState: LeagueBootstrapStateResponse["bootstrapState"] | null = null;

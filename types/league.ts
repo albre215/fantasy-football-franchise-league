@@ -63,6 +63,18 @@ export interface JoinLeagueResponse {
   league: LeagueDashboard;
 }
 
+export interface JoinLeagueSuggestion {
+  id: string;
+  leagueCode: string;
+  name: string;
+  memberCount: number;
+  seasonCount: number;
+}
+
+export interface JoinLeagueSuggestionsResponse {
+  suggestions: JoinLeagueSuggestion[];
+}
+
 export interface ListLeaguesResponse {
   leagues: LeagueListItem[];
 }
