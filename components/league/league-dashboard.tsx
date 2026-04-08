@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 
 import { BrandMasthead } from "@/components/brand/brand-masthead";
+import { LeagueOwnerPanel } from "@/components/league/league-owner-panel";
 import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,6 +55,7 @@ type DashboardTab =
   | "ledger"
   | "history-analytics";
 type ResultsDraftTab = "final-standings" | "offseason-draft" | "commissioner-overrides";
+type DashboardViewMode = "commissioner" | "owner";
 
 function getFallbackPhaseTransitions(currentPhase: SeasonPhaseContextResponse["phase"]["season"]["leaguePhase"] | null) {
   switch (currentPhase) {
@@ -190,6 +192,7 @@ export function LeagueDashboard({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [activeResultsDraftTab, setActiveResultsDraftTab] = useState<ResultsDraftTab>("offseason-draft");
+  const [viewMode, setViewMode] = useState<DashboardViewMode>("commissioner");
   const [operationalDataSeasonId, setOperationalDataSeasonId] = useState<string | null>(null);
   const [hasConsumedInitialData, setHasConsumedInitialData] = useState(
     initialIsAuthenticated && (Boolean(leagueId) || initialLeagueOptions.length > 0 || Boolean(initialErrorMessage))
@@ -204,6 +207,7 @@ export function LeagueDashboard({
   const currentUserMembership = members.find((member) => member.userId === actingUserId) ?? null;
   const currentUserRole = currentUserMembership?.role ?? null;
   const canManageLeague = currentUserRole === "COMMISSIONER";
+  const canToggleOwnerView = canManageLeague;
   const commissionerAccessMessage = currentUserMembership
     ? currentUserRole === "COMMISSIONER"
       ? null
@@ -251,6 +255,10 @@ export function LeagueDashboard({
     initialSeasons,
     leagueId
   ]);
+
+  useEffect(() => {
+    setViewMode(canManageLeague ? "commissioner" : "owner");
+  }, [canManageLeague, leagueId]);
 
   async function loadActiveSeasonOperationalData(seasonId: string) {
     try {
@@ -946,9 +954,13 @@ export function LeagueDashboard({
               Back to Home
             </Link>
           }
-          description="Set up the real current season from an already-completed offseason draft."
-          eyebrow="Commissioner Console"
-          title="League Bootstrap Console"
+          description={
+            viewMode === "commissioner"
+              ? "Set up the real current season from an already-completed offseason draft."
+              : "Review this league from the owner perspective without leaving the league workspace."
+          }
+          eyebrow={viewMode === "commissioner" ? "Commissioner Console" : "Owner View"}
+          title={viewMode === "commissioner" ? "League Bootstrap Console" : "League Owner Workspace"}
         />
 
         {(errorMessage || successMessage) && (
@@ -969,7 +981,34 @@ export function LeagueDashboard({
 
         {bootstrapState && (
           <>
-            {commissionerAccessMessage ? (
+            {canToggleOwnerView ? (
+              <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white/90 p-4 shadow-[0_14px_28px_-24px_rgba(6,32,18,0.2),0_0_0_1px_rgba(24,54,33,0.08)] backdrop-blur-sm">
+                <div>
+                  <p className="font-medium text-foreground">League View</p>
+                  <p className="text-sm text-muted-foreground">
+                    Switch between commissioner controls and the read-only owner experience for this league.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={() => setViewMode("commissioner")}
+                    type="button"
+                    variant={viewMode === "commissioner" ? "default" : "outline"}
+                  >
+                    Commissioner View
+                  </Button>
+                  <Button
+                    onClick={() => setViewMode("owner")}
+                    type="button"
+                    variant={viewMode === "owner" ? "default" : "outline"}
+                  >
+                    Owner View
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {viewMode === "commissioner" && commissionerAccessMessage ? (
               <Card className="border-amber-200 bg-amber-50">
                 <CardContent className="p-4 text-sm text-amber-900">
                   {commissionerAccessMessage}
@@ -977,29 +1016,35 @@ export function LeagueDashboard({
               </Card>
             ) : null}
 
-            <div className="relative z-10 flex flex-wrap gap-2 rounded-2xl border border-border bg-white/90 p-2 shadow-[0_14px_28px_-24px_rgba(6,32,18,0.2),0_0_0_1px_rgba(24,54,33,0.08)] backdrop-blur-sm">
-              {[
-                { id: "overview", label: "Overview" },
-                { id: "seasons", label: "Seasons" },
-                { id: "members", label: "Members" },
-                { id: "ownership", label: "Ownership" },
-                { id: "results-draft", label: "Results & Draft" },
-                { id: "nfl-performance", label: "NFL Performance" },
-                { id: "ledger", label: "Ledger" },
-                { id: "history-analytics", label: "History & Analytics" }
-              ].map((tab) => (
-                <Button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as DashboardTab)}
-                  type="button"
-                  variant={activeTab === tab.id ? "default" : "outline"}
-                >
-                  {tab.label}
-                </Button>
-              ))}
-            </div>
+            {viewMode === "commissioner" ? (
+              <div className="relative z-10 flex flex-wrap gap-2 rounded-2xl border border-border bg-white/90 p-2 shadow-[0_14px_28px_-24px_rgba(6,32,18,0.2),0_0_0_1px_rgba(24,54,33,0.08)] backdrop-blur-sm">
+                {[
+                  { id: "overview", label: "Overview" },
+                  { id: "seasons", label: "Seasons" },
+                  { id: "members", label: "Members" },
+                  { id: "ownership", label: "Ownership" },
+                  { id: "results-draft", label: "Results & Draft" },
+                  { id: "nfl-performance", label: "NFL Performance" },
+                  { id: "ledger", label: "Ledger" },
+                  { id: "history-analytics", label: "History & Analytics" }
+                ].map((tab) => (
+                  <Button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as DashboardTab)}
+                    type="button"
+                    variant={activeTab === tab.id ? "default" : "outline"}
+                  >
+                    {tab.label}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
 
-            {activeTab === "overview" ? (
+            {viewMode === "owner" ? (
+              <LeagueOwnerPanel activeSeason={activeSeason} leagueName={bootstrapState.league.name} />
+            ) : null}
+
+            {viewMode === "commissioner" && activeTab === "overview" ? (
               <div className="grid gap-6 xl:grid-cols-3">
                 <Card>
                   <CardHeader>
@@ -1060,7 +1105,7 @@ export function LeagueDashboard({
               </div>
             ) : null}
 
-            {activeTab === "seasons" ? (
+            {viewMode === "commissioner" && activeTab === "seasons" ? (
               <div className="space-y-6">
                 <Card>
                   <CardHeader>
@@ -1301,7 +1346,7 @@ export function LeagueDashboard({
               </div>
             ) : null}
 
-            {activeTab === "members" ? (
+            {viewMode === "commissioner" && activeTab === "members" ? (
               <div className="space-y-6">
                 <Card>
                   <CardHeader>
@@ -1362,7 +1407,7 @@ export function LeagueDashboard({
               </div>
             ) : null}
 
-            {activeTab === "ownership" ? (
+            {viewMode === "commissioner" && activeTab === "ownership" ? (
               <div className="space-y-6">
                 <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
                   <Card>
@@ -1565,7 +1610,7 @@ export function LeagueDashboard({
               </div>
             ) : null}
 
-            {activeTab === "results-draft" ? (
+            {viewMode === "commissioner" && activeTab === "results-draft" ? (
               <div className="space-y-6">
                 <Card>
                   <CardHeader>
@@ -1651,7 +1696,7 @@ export function LeagueDashboard({
               </div>
             ) : null}
 
-            {activeTab === "nfl-performance" ? (
+            {viewMode === "commissioner" && activeTab === "nfl-performance" ? (
               <SeasonNflPerformancePanel
                 accessMessage={commissionerAccessMessage}
                 activeSeason={activeSeason}
@@ -1662,7 +1707,7 @@ export function LeagueDashboard({
               />
             ) : null}
 
-            {activeTab === "ledger" ? (
+            {viewMode === "commissioner" && activeTab === "ledger" ? (
               <SeasonLedgerPanel
                 accessMessage={commissionerAccessMessage}
                 activeSeason={activeSeason}
@@ -1673,7 +1718,7 @@ export function LeagueDashboard({
               />
             ) : null}
 
-            {activeTab === "history-analytics" ? <LeagueHistoryPanel leagueId={leagueId} /> : null}
+            {viewMode === "commissioner" && activeTab === "history-analytics" ? <LeagueHistoryPanel leagueId={leagueId} /> : null}
           </>
         )}
       </div>

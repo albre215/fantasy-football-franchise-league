@@ -740,20 +740,6 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
               )}
             </CardFooter>
           </Card>
-          <Card className="brand-surface">
-            <CardHeader>
-              <CardTitle className="text-base">Owner Links</CardTitle>
-              <CardDescription>Lower-priority shortcuts for owner-specific pages.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-3">
-              <Link className={buttonVariants({ variant: "outline" })} href="/dashboard">
-                Owner Workflows
-              </Link>
-              <Link className={buttonVariants({ variant: "outline" })} href="/me">
-                My Owner Dashboard
-              </Link>
-            </CardContent>
-          </Card>
           {(errorMessage || successMessage) ? (
             <Card className={cn("brand-surface", errorMessage ? "bg-red-50" : "bg-emerald-50")}>
               <CardContent className="p-4 text-sm">{errorMessage ?? successMessage}</CardContent>
