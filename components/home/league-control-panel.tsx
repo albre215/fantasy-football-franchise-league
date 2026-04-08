@@ -627,24 +627,30 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
           <Card className="brand-surface">
             <CardHeader>
               <CardTitle>{leagueActionMode === "join" ? "Join League" : "Create League"}</CardTitle>
-              <CardDescription>
-                {leagueActionMode === "join"
-                  ? "Use a league code to join an existing league with your authenticated user."
-                  : "Create a league and make your authenticated user the commissioner."}
-              </CardDescription>
             </CardHeader>
             <CardContent>
               {leagueActionMode === "join" ? (
                 <form className="space-y-4" onSubmit={handleJoinById}>
                   <div className="space-y-3">
-                    <Input
-                      onChange={(event) => {
-                        setJoinLeagueId(event.target.value);
-                        setSelectedJoinSuggestionCode(null);
-                      }}
-                      placeholder="League code (for example, GMF-1)"
-                      value={joinLeagueId}
-                    />
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <Input
+                        className="flex-1"
+                        onChange={(event) => {
+                          setJoinLeagueId(event.target.value);
+                          setSelectedJoinSuggestionCode(null);
+                        }}
+                        placeholder="League code (for example, GMF-1)"
+                        value={joinLeagueId}
+                      />
+                      <Button
+                        className="sm:mr-6 sm:shrink-0"
+                        disabled={isSubmitting || !joinLeagueId.trim()}
+                        type="submit"
+                        variant="secondary"
+                      >
+                        Join League
+                      </Button>
+                    </div>
                     {isLoadingJoinSuggestions ? (
                       <div className="rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
                         Searching league codes...
@@ -653,7 +659,7 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
                       <div className="overflow-hidden rounded-xl border border-border bg-background">
                         {joinSuggestions.map((suggestion) => (
                           <button
-                            className="flex w-full items-start justify-between gap-3 border-b border-border px-3 py-3 text-left transition hover:bg-secondary/40 last:border-b-0"
+                            className="flex w-full items-center justify-between gap-3 border-b border-border px-3 py-3 text-left transition hover:bg-secondary/40 last:border-b-0"
                             key={suggestion.id}
                             onClick={() => {
                               setJoinLeagueId(suggestion.leagueCode);
@@ -664,7 +670,6 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
                           >
                             <div className="min-w-0">
                               <p className="font-medium text-foreground">{suggestion.leagueCode}</p>
-                              <p className="truncate text-sm text-muted-foreground">{suggestion.name}</p>
                             </div>
                             <div className="shrink-0 text-right text-xs text-muted-foreground">
                               <p>{suggestion.memberCount}/10 members</p>
@@ -678,11 +683,6 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
                         No matching league codes found.
                       </div>
                     ) : null}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Button disabled={isSubmitting || !joinLeagueId.trim()} type="submit" variant="secondary">
-                      Join League
-                    </Button>
                   </div>
                 </form>
               ) : (
@@ -704,7 +704,7 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
               {leagueActionMode === "join" ? (
                 <>
                   <button
-                    className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                    className="text-sm font-semibold text-blue-800 underline underline-offset-4 transition hover:text-blue-900"
                     onClick={() => {
                       setErrorMessage(null);
                       setSuccessMessage(null);
@@ -715,14 +715,11 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
                   >
                     Create a league
                   </button>
-                  <p className="text-sm text-muted-foreground">
-                    Starting fresh? Create a new league and make yourself the commissioner.
-                  </p>
                 </>
               ) : (
                 <>
                   <button
-                    className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                    className="text-sm font-semibold text-blue-800 underline underline-offset-4 transition hover:text-blue-900"
                     onClick={() => {
                       setErrorMessage(null);
                       setSuccessMessage(null);
@@ -733,9 +730,6 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
                   >
                     Join an existing league
                   </button>
-                  <p className="text-sm text-muted-foreground">
-                    Already have a code? Switch back to join an existing league.
-                  </p>
                 </>
               )}
             </CardFooter>
