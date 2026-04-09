@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { ProfileAvatar } from "@/components/shared/profile-avatar";
 import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -572,12 +573,20 @@ export function SeasonNflPerformancePanel({
                       {ledgerPosting.ownerRollups.map((owner) => (
                         <div className="rounded-lg border border-border/70 bg-background/80 p-3" key={owner.leagueMemberId}>
                           <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
+                            <div className="flex items-center gap-3">
+                              <ProfileAvatar
+                                className="h-9 w-9 border-border bg-slate-100 text-slate-700"
+                                fallbackClassName="text-xs"
+                                imageUrl={owner.profileImageUrl}
+                                name={owner.displayName}
+                              />
+                              <div>
                               <p className="font-medium text-foreground">{owner.displayName}</p>
                               <p className="text-sm text-muted-foreground">
                                 Regular wins {owner.nflResultSummary.regularSeasonWins} - Playoff wins{" "}
                                 {owner.nflResultSummary.playoffWins}
                               </p>
+                              </div>
                             </div>
                             <div className="text-right text-sm">
                               <p className="font-semibold text-foreground">${owner.nflLedgerAmount.toFixed(2)}</p>
@@ -618,7 +627,14 @@ export function SeasonNflPerformancePanel({
               summary.ownerStandings.map((owner, index) => (
                 <div className="rounded-lg border border-border bg-background p-4" key={owner.leagueMemberId}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
+                    <div className="flex items-center gap-3">
+                      <ProfileAvatar
+                        className="h-9 w-9 border-border bg-slate-100 text-slate-700"
+                        fallbackClassName="text-xs"
+                        imageUrl={owner.profileImageUrl}
+                        name={owner.displayName}
+                      />
+                      <div>
                       <p className="font-medium text-foreground">
                         {index + 1}. {owner.displayName}
                       </p>
@@ -626,6 +642,7 @@ export function SeasonNflPerformancePanel({
                         Record {formatRecord(owner.wins, owner.losses, owner.ties)} - Regular Wins {owner.regularSeasonWins}
                         {" - "}Playoff Wins {owner.playoffWins}
                       </p>
+                      </div>
                     </div>
                     <div className="text-right text-sm text-muted-foreground">
                       <p>PF {owner.pointsFor}</p>
@@ -685,11 +702,19 @@ export function SeasonNflPerformancePanel({
                   {weekDetails.ownerResults.map((owner) => (
                     <div className="rounded-lg border border-border bg-background p-4" key={owner.leagueMemberId}>
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
+                        <div className="flex items-center gap-3">
+                          <ProfileAvatar
+                            className="h-9 w-9 border-border bg-slate-100 text-slate-700"
+                            fallbackClassName="text-xs"
+                            imageUrl={owner.profileImageUrl}
+                            name={owner.displayName}
+                          />
+                          <div>
                           <p className="font-medium text-foreground">{owner.displayName}</p>
                           <p className="text-sm text-muted-foreground">
                             {weekDetails.selectedWeek?.label ?? "Selected week"} - {formatRecord(owner.wins, owner.losses, owner.ties)}
                           </p>
+                          </div>
                         </div>
                         <div className="text-right text-sm text-muted-foreground">
                           <p>PF {owner.pointsFor}</p>

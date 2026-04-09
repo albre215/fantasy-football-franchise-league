@@ -259,6 +259,7 @@ function mapBootstrapMember(member: {
   user: {
     displayName: string;
     email: string;
+    profileImageUrl?: string | null;
   };
   teamOwnerships?: Array<{ id: string }>;
 }, canRemove: boolean): LeagueBootstrapMember {
@@ -267,6 +268,7 @@ function mapBootstrapMember(member: {
     userId: member.userId,
     displayName: member.user.displayName,
     email: member.user.email,
+    profileImageUrl: member.user.profileImageUrl ?? null,
     role: member.role,
     joinedAt: member.joinedAt.toISOString(),
     assignmentCount: member.teamOwnerships?.length ?? 0,
@@ -282,6 +284,7 @@ function mapLeagueMember(member: {
     id: string;
     displayName: string;
     email: string;
+    profileImageUrl?: string | null;
   };
 }): LeagueMemberSummary {
   return {
@@ -323,6 +326,7 @@ function mapLeagueDashboard(league: {
       id: string;
       displayName: string;
       email: string;
+      profileImageUrl?: string | null;
     };
   }>;
   seasons: Array<{
@@ -1037,7 +1041,8 @@ export const leagueService = {
               leagueMemberId: commissionerRecord.id,
               userId: commissionerRecord.userId,
               displayName: commissionerRecord.user.displayName,
-              email: commissionerRecord.user.email
+              email: commissionerRecord.user.email,
+              profileImageUrl: commissionerRecord.user.profileImageUrl ?? null
             }
           : null
       },

@@ -20,6 +20,7 @@ export interface LeagueMemberSummary {
     id: string;
     displayName: string;
     email: string;
+    profileImageUrl?: string | null;
   };
 }
 
@@ -111,6 +112,7 @@ export interface LeagueBootstrapMember {
   userId: string;
   displayName: string;
   email: string;
+  profileImageUrl?: string | null;
   role: "COMMISSIONER" | "OWNER";
   joinedAt: string;
   assignmentCount: number;
@@ -129,6 +131,7 @@ export interface LeagueBootstrapState {
       userId: string;
       displayName: string;
       email: string;
+      profileImageUrl?: string | null;
     } | null;
   };
   memberCount: number;

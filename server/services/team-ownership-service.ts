@@ -48,6 +48,7 @@ function mapOwnershipEntry(ownership: {
     user: {
       displayName: string;
       email: string;
+      profileImageUrl?: string | null;
     };
   };
   nflTeam: {
@@ -65,6 +66,7 @@ function mapOwnershipEntry(ownership: {
     userId: ownership.leagueMember.userId,
     displayName: ownership.leagueMember.user.displayName,
     email: ownership.leagueMember.user.email,
+    profileImageUrl: ownership.leagueMember.user.profileImageUrl ?? null,
     team: mapNFLTeam(ownership.nflTeam)
   };
 }
@@ -148,6 +150,7 @@ function buildOwnerGroups(
     user: {
       displayName: string;
       email: string;
+      profileImageUrl?: string | null;
     };
   }>,
   ownerships: Array<{
@@ -176,6 +179,7 @@ function buildOwnerGroups(
       userId: member.userId,
       displayName: member.user.displayName,
       email: member.user.email,
+      profileImageUrl: member.user.profileImageUrl ?? null,
       role: member.role,
       teamCount: memberOwnerships.length,
       teams: memberOwnerships.map((ownership) => ({

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { ProfileAvatar } from "@/components/shared/profile-avatar";
 import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -149,8 +150,15 @@ export function LeagueOwnerPanel({ activeSeason, leagueName }: LeagueOwnerPanelP
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>
-            {seasonDetail.season.leagueName} | {seasonLabel(seasonDetail.season.name, seasonDetail.season.year)}
+          <CardTitle className="flex flex-wrap items-center gap-3">
+            <ProfileAvatar
+              className="h-11 w-11 border-border bg-slate-100 text-slate-700"
+              imageUrl={seasonDetail.user.profileImageUrl}
+              name={seasonDetail.user.displayName}
+            />
+            <span>
+              {seasonDetail.season.leagueName} | {seasonLabel(seasonDetail.season.name, seasonDetail.season.year)}
+            </span>
           </CardTitle>
           <CardDescription>
             Read-only owner view for this league. {seasonDetail.season.status} | {phaseLabel(seasonDetail.season.phase)}

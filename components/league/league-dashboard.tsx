@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { BrandMasthead } from "@/components/brand/brand-masthead";
 import { LeagueOwnerPanel } from "@/components/league/league-owner-panel";
+import { ProfileAvatar } from "@/components/shared/profile-avatar";
 import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1053,7 +1054,22 @@ export function LeagueDashboard({
                   </CardHeader>
                     <CardContent className="space-y-3 text-sm text-muted-foreground">
                       <p>League: {bootstrapState.league.name}</p>
-                      <p>Commissioner: {bootstrapState.league.commissioner?.displayName ?? "Not assigned"}</p>
+                      <p className="flex items-center gap-2">
+                        <span>Commissioner:</span>
+                        {bootstrapState.league.commissioner ? (
+                          <>
+                            <ProfileAvatar
+                              className="h-7 w-7 border-border bg-slate-100 text-slate-700"
+                              fallbackClassName="text-[10px]"
+                              imageUrl={bootstrapState.league.commissioner.profileImageUrl}
+                              name={bootstrapState.league.commissioner.displayName}
+                            />
+                            <span>{bootstrapState.league.commissioner.displayName}</span>
+                          </>
+                        ) : (
+                          <span>Not assigned</span>
+                        )}
+                      </p>
                       <p>Active season: {activeSeason ? activeSeason.name ?? activeSeason.year : "None selected"}</p>
                       <p>League phase: {currentLeaguePhase ?? "Not set"}</p>
                       <p>Members: {bootstrapState.memberCount} / 10</p>
@@ -1376,7 +1392,15 @@ export function LeagueDashboard({
                           key={member.id}
                         >
                           <div>
-                            <p className="font-medium text-foreground">{member.displayName}</p>
+                            <div className="flex items-center gap-3">
+                              <ProfileAvatar
+                                className="h-9 w-9 border-border bg-slate-100 text-slate-700"
+                                fallbackClassName="text-xs"
+                                imageUrl={member.profileImageUrl}
+                                name={member.displayName}
+                              />
+                              <p className="font-medium text-foreground">{member.displayName}</p>
+                            </div>
                             <p className="text-sm text-muted-foreground">
                               {member.email} - {member.role}
                             </p>
@@ -1468,9 +1492,19 @@ export function LeagueDashboard({
                             return (
                               <div className="space-y-4 rounded-lg border border-border p-4 text-sm text-muted-foreground">
                                 <div className="space-y-1">
-                                  <p className="font-medium text-foreground">
-                                    {selectedOwner ? selectedOwner.displayName : "Select an owner to edit"}
-                                  </p>
+                                  <div className="flex items-center gap-3">
+                                    {selectedOwner ? (
+                                      <ProfileAvatar
+                                        className="h-9 w-9 border-border bg-slate-100 text-slate-700"
+                                        fallbackClassName="text-xs"
+                                        imageUrl={selectedOwner.profileImageUrl}
+                                        name={selectedOwner.displayName}
+                                      />
+                                    ) : null}
+                                    <p className="font-medium text-foreground">
+                                      {selectedOwner ? selectedOwner.displayName : "Select an owner to edit"}
+                                    </p>
+                                  </div>
                                   <p>
                                     Current team count: {selectedOwner?.teamCount ?? 0}/3
                                   </p>
@@ -1580,7 +1614,15 @@ export function LeagueDashboard({
                           >
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <div>
-                                <p className="font-medium text-foreground">{owner.displayName}</p>
+                                <div className="flex items-center gap-3">
+                                  <ProfileAvatar
+                                    className="h-9 w-9 border-border bg-slate-100 text-slate-700"
+                                    fallbackClassName="text-xs"
+                                    imageUrl={owner.profileImageUrl}
+                                    name={owner.displayName}
+                                  />
+                                  <p className="font-medium text-foreground">{owner.displayName}</p>
+                                </div>
                                 <p className="text-sm text-muted-foreground">
                                   {owner.role} - {owner.teamCount}/3 teams assigned
                                 </p>

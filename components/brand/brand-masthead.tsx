@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { BrandAccountSlot } from "@/components/brand/brand-account-slot";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +12,7 @@ interface BrandMastheadProps {
   rightSlot?: ReactNode;
   logoSize?: "hero" | "header" | "compact";
   center?: boolean;
+  hideHeadingContent?: boolean;
   className?: string;
 }
 
@@ -22,6 +24,7 @@ export function BrandMasthead({
   rightSlot,
   logoSize = "header",
   center = false,
+  hideHeadingContent = false,
   className
 }: BrandMastheadProps) {
   return (
@@ -32,23 +35,28 @@ export function BrandMasthead({
       )}
     >
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent,rgba(255,204,92,0.06),transparent)] opacity-80" />
+      <BrandAccountSlot />
       <div className={cn("relative flex flex-col gap-8", rightSlot ? "lg:flex-row lg:items-start lg:justify-between" : "")}>
         <div className={cn("space-y-5", center ? "mx-auto max-w-3xl text-center" : "max-w-3xl")}>
           <BrandLogo priority={logoSize === "hero"} size={logoSize} />
-          <div className="space-y-3">
-            {eyebrow ? (
-              <span className="inline-flex rounded-full border border-white/12 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-[#f2c55c]">
-                {eyebrow}
-              </span>
-            ) : null}
-            <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">{title}</h1>
-            {description ? (
-              <p className={cn("text-base text-white/78 sm:text-lg", center ? "mx-auto max-w-2xl" : "max-w-2xl")}>
-                {description}
-              </p>
-            ) : null}
-          </div>
-          {actions ? <div className={cn("flex flex-wrap gap-3", center ? "justify-center" : "")}>{actions}</div> : null}
+          {!hideHeadingContent ? (
+            <>
+              <div className="space-y-3">
+                {eyebrow ? (
+                  <span className="inline-flex rounded-full border border-white/12 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-[#f2c55c]">
+                    {eyebrow}
+                  </span>
+                ) : null}
+                <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">{title}</h1>
+                {description ? (
+                  <p className={cn("text-base text-white/78 sm:text-lg", center ? "mx-auto max-w-2xl" : "max-w-2xl")}>
+                    {description}
+                  </p>
+                ) : null}
+              </div>
+              {actions ? <div className={cn("flex flex-wrap gap-3", center ? "justify-center" : "")}>{actions}</div> : null}
+            </>
+          ) : null}
         </div>
         {rightSlot ? <div className="relative shrink-0">{rightSlot}</div> : null}
       </div>

@@ -71,6 +71,7 @@ function mapSeasonStanding(standing: {
     user: {
       displayName: string;
       email: string;
+      profileImageUrl?: string | null;
     };
   };
 }): SeasonResultStanding {
@@ -79,6 +80,7 @@ function mapSeasonStanding(standing: {
     userId: standing.leagueMember.userId,
     displayName: standing.leagueMember.user.displayName,
     email: standing.leagueMember.user.email,
+    profileImageUrl: standing.leagueMember.user.profileImageUrl ?? null,
     role: standing.leagueMember.role,
     provider: standing.provider,
     rank: standing.rank,
@@ -329,6 +331,7 @@ function buildResultsSummary(
     userId: member.userId,
     displayName: member.user.displayName,
     email: member.user.email,
+    profileImageUrl: member.user.profileImageUrl ?? null,
     role: member.role
   }));
   const seasonStandings = season.seasonStandings.map(mapSeasonStanding);
@@ -394,6 +397,7 @@ function buildResultsSummary(
         userId: entry.leagueMember.userId,
         displayName: entry.leagueMember.user.displayName,
         email: entry.leagueMember.user.email,
+        profileImageUrl: entry.leagueMember.user.profileImageUrl ?? null,
         role: entry.leagueMember.role,
         amount: Number(entry.amount.toFixed(2)),
         rank,

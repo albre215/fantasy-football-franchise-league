@@ -96,8 +96,10 @@ export const authOptions: NextAuthOptions = {
         token.displayName = user.name ?? "";
       }
 
-      if (trigger === "update" && session?.user?.displayName) {
-        token.displayName = session.user.displayName;
+      if (trigger === "update" && session?.user) {
+        if (session.user.displayName) {
+          token.displayName = session.user.displayName;
+        }
       }
 
       return token;

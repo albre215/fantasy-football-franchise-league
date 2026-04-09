@@ -3,6 +3,7 @@ import Image from "next/image";
 import { getServerAuthSession } from "@/auth";
 import { AccountMenu } from "@/components/home/account-menu";
 import { LeagueControlPanel } from "@/components/home/league-control-panel";
+import { accountService } from "@/server/services/account-service";
 import { leagueService } from "@/server/services/league-service";
 
 function getGreetingName(displayName: string | null | undefined) {
@@ -19,6 +20,8 @@ export default async function HomePage() {
   const session = await getServerAuthSession();
   const isAuthenticated = Boolean(session?.user?.id);
   const greetingName = getGreetingName(session?.user?.displayName);
+  const accountProfile =
+    isAuthenticated && session?.user?.id ? await accountService.getAccountProfile(session.user.id) : null;
   const initialLeagues =
     isAuthenticated && session?.user?.id ? await leagueService.listLeaguesForUser(session.user.id) : [];
 
@@ -42,11 +45,13 @@ export default async function HomePage() {
                 </div>
               </div>
               {isAuthenticated && session?.user ? (
-                <div className="absolute right-5 top-5 sm:right-6 sm:top-6">
+                <div className="absolute right-5 top-5 z-20 sm:right-6 sm:top-6">
                   <AccountMenu
+                    displayGreeting
                     displayName={session.user.displayName}
                     email={session.user.email ?? ""}
                     greetingName={greetingName}
+                    imageUrl={accountProfile?.profileImageUrl ?? null}
                   />
                 </div>
               ) : null}

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { ProfileAvatar } from "@/components/shared/profile-avatar";
 import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -896,10 +897,18 @@ export function OffseasonDraftPanel({
                           key={member.leagueMemberId}
                         >
                           <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
+                            <div className="flex items-center gap-3">
+                              <ProfileAvatar
+                                className="h-9 w-9 border-border bg-slate-100 text-slate-700"
+                                fallbackClassName="text-xs"
+                                imageUrl={member.profileImageUrl}
+                                name={member.displayName}
+                              />
+                              <div>
                               <p className="font-medium text-foreground">{member.displayName}</p>
                               <p className="text-sm text-muted-foreground">{selectedCountLabel}</p>
                               <p className="text-sm text-muted-foreground">{statusLabel}</p>
+                              </div>
                             </div>
                             <div className="flex gap-2">
                               <Button

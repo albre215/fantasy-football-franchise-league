@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { ProfileAvatar } from "@/components/shared/profile-avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type {
@@ -203,6 +204,27 @@ export function SeasonResultsPanel({
                       {Array.from({ length: totalPlacements }).map((_, index) => (
                         <label className="space-y-1 text-sm" key={`placement-${index + 1}`}>
                           <span>{formatPlacement(index + 1)}</span>
+                          {orderedLeagueMemberIds[index]
+                            ? (() => {
+                                const selectedMember =
+                                  eligibleMembers.find((member) => member.leagueMemberId === orderedLeagueMemberIds[index]) ?? null;
+
+                                return selectedMember ? (
+                                  <div className="flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-2">
+                                    <ProfileAvatar
+                                      className="h-8 w-8 border-border bg-slate-100 text-slate-700"
+                                      fallbackClassName="text-[11px]"
+                                      imageUrl={selectedMember.profileImageUrl}
+                                      name={selectedMember.displayName}
+                                    />
+                                    <div className="min-w-0">
+                                      <p className="font-medium text-foreground">{selectedMember.displayName}</p>
+                                      <p className="truncate text-xs text-muted-foreground">{selectedMember.email}</p>
+                                    </div>
+                                  </div>
+                                ) : null;
+                              })()
+                            : null}
                           <select
                             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                             onChange={(event) => updatePlacement(index, event.target.value)}
@@ -281,12 +303,20 @@ export function SeasonResultsPanel({
                   results.seasonStandings.map((standing) => (
                     <div className="rounded-lg border border-border p-4 text-sm" key={standing.leagueMemberId}>
                       <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
+                        <div className="flex items-start gap-3">
+                          <ProfileAvatar
+                            className="h-10 w-10 border-border bg-slate-100 text-slate-700"
+                            fallbackClassName="text-xs"
+                            imageUrl={standing.profileImageUrl}
+                            name={standing.displayName}
+                          />
+                          <div>
                           <p className="font-medium text-foreground">
                             {standing.rank ? `${formatPlacement(standing.rank)} - ` : ""}
                             {standing.displayName}
                           </p>
                           <p className="text-muted-foreground">{standing.email}</p>
+                          </div>
                         </div>
                         {standing.isChampion ? (
                           <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-800">
@@ -313,7 +343,15 @@ export function SeasonResultsPanel({
                 ) : (
                   recommendedOffseasonDraftOrder.map((member, index) => (
                     <div className="rounded-lg border border-border p-3 text-sm" key={member.leagueMemberId}>
-                      <p className="font-medium text-foreground">Pick {index + 1}: {member.displayName}</p>
+                      <div className="flex items-center gap-3">
+                        <ProfileAvatar
+                          className="h-9 w-9 border-border bg-slate-100 text-slate-700"
+                          fallbackClassName="text-xs"
+                          imageUrl={member.profileImageUrl}
+                          name={member.displayName}
+                        />
+                        <p className="font-medium text-foreground">Pick {index + 1}: {member.displayName}</p>
+                      </div>
                       <p className="text-muted-foreground">Ledger total: ${member.ledgerTotal.toFixed(2)}</p>
                       <p className="text-muted-foreground">
                         Fantasy rank tie-break: {member.sourceSeasonRank ? `#${member.sourceSeasonRank}` : "Unavailable"}

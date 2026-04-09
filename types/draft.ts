@@ -13,6 +13,7 @@ export interface DraftKeeperSelection {
   leagueMemberId: string;
   userId: string;
   displayName: string;
+  profileImageUrl?: string | null;
   nflTeam: DraftTeamSummary;
 }
 
@@ -21,6 +22,7 @@ export interface DraftMemberSummary {
   userId: string;
   displayName: string;
   email: string;
+  profileImageUrl?: string | null;
   role: "COMMISSIONER" | "OWNER";
   previousSeasonTeams: DraftTeamSummary[];
   keepers: DraftKeeperSelection[];
@@ -37,6 +39,7 @@ export interface ReplacementDraftOrderEntry {
   leagueMemberId: string;
   userId: string;
   displayName: string;
+  profileImageUrl?: string | null;
   hasPicked: boolean;
   selectedTeam: DraftTeamSummary | null;
 }
@@ -104,6 +107,7 @@ export interface DropPhaseOwnerSummary {
   userId: string;
   displayName: string;
   email: string;
+  profileImageUrl?: string | null;
   role: "COMMISSIONER" | "OWNER";
   eligibleTeams: DraftTeamSummary[];
   keptTeamIds: string[];
@@ -146,6 +150,7 @@ export interface DraftOrderRecommendationEntry {
   userId: string;
   displayName: string;
   email: string;
+  profileImageUrl?: string | null;
   role: "COMMISSIONER" | "OWNER";
   sourceSeasonRank: number | null;
   ledgerTotal: number;

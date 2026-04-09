@@ -400,6 +400,7 @@ async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<D
       leagueMemberId: keeper.leagueMemberId,
       userId: keeper.leagueMember.userId,
       displayName: keeper.leagueMember.user.displayName,
+      profileImageUrl: keeper.leagueMember.user.profileImageUrl ?? null,
       nflTeam: mapDraftTeam(keeper.nflTeam)
     };
 
@@ -441,6 +442,7 @@ async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<D
       userId: member.userId,
       displayName: member.user.displayName,
       email: member.user.email,
+      profileImageUrl: member.user.profileImageUrl ?? null,
       role: member.role,
       previousSeasonTeams,
       keepers,
@@ -471,6 +473,7 @@ async function buildDraftState(tx: PrismaClientLike, draftId: string): Promise<D
     leagueMemberId: pick.selectingLeagueMemberId,
     userId: pick.selectingLeagueMember.userId,
     displayName: pick.selectingLeagueMember.user.displayName,
+    profileImageUrl: pick.selectingLeagueMember.user.profileImageUrl ?? null,
     hasPicked: Boolean(pick.selectedNflTeamId),
     selectedTeam: pick.selectedNflTeam ? mapDraftTeam(pick.selectedNflTeam) : null
   }));

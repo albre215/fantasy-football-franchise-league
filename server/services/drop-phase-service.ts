@@ -319,6 +319,7 @@ export const dropPhaseService = {
         userId: member.userId,
         displayName: member.user.displayName,
         email: member.user.email,
+        profileImageUrl: member.user.profileImageUrl ?? null,
         role: member.role,
         eligibleTeams,
         keptTeamIds,

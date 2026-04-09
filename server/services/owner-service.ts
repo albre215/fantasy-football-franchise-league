@@ -96,7 +96,8 @@ async function requireOwnerUser(userId: string) {
     select: {
       id: true,
       displayName: true,
-      email: true
+      email: true,
+      profileImageUrl: true
     }
   });
 

@@ -15,6 +15,7 @@ export interface NflPerformanceOwnerSummary {
   userId: string;
   displayName: string;
   email: string;
+  profileImageUrl?: string | null;
   role: "COMMISSIONER" | "OWNER";
 }
 
@@ -93,6 +94,7 @@ export interface SeasonNflLedgerPostingPreview {
     userId: string;
     displayName: string;
     email: string;
+    profileImageUrl?: string | null;
   } | null;
   readiness: {
     hasImportedResults: boolean;

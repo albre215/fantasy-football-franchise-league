@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 
 import "@/app/globals.css";
 import { BrandSideMarks } from "@/components/brand/brand-side-marks";
+import { GlobalAccountDock } from "@/components/home/global-account-dock";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
 import { ScrollStabilityProvider } from "@/components/providers/scroll-stability-provider";
 
@@ -27,6 +28,7 @@ export default function RootLayout({
         <BrandSideMarks />
         <AuthSessionProvider>
           <ScrollStabilityProvider>
+            <GlobalAccountDock />
             <div className="relative z-10">{children}</div>
           </ScrollStabilityProvider>
         </AuthSessionProvider>

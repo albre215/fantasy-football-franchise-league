@@ -5,6 +5,7 @@ export interface SeasonResultStanding {
   userId: string;
   displayName: string;
   email: string;
+  profileImageUrl?: string | null;
   role: "COMMISSIONER" | "OWNER";
   provider: IngestionProvider;
   rank: number | null;
@@ -24,6 +25,7 @@ export interface SeasonResultsMemberOption {
   userId: string;
   displayName: string;
   email: string;
+  profileImageUrl?: string | null;
   role: "COMMISSIONER" | "OWNER";
 }
 

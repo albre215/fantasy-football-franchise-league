@@ -92,6 +92,7 @@ function mapOwner(member: {
   user: {
     displayName: string;
     email: string;
+    profileImageUrl?: string | null;
   };
 }): LedgerOwnerSummary {
   return {
@@ -99,6 +100,7 @@ function mapOwner(member: {
     userId: member.userId,
     displayName: member.user.displayName,
     email: member.user.email,
+    profileImageUrl: member.user.profileImageUrl ?? null,
     role: member.role
   };
 }
@@ -122,6 +124,7 @@ function mapEntry(entry: {
     user: {
       displayName: string;
       email: string;
+      profileImageUrl?: string | null;
     };
   };
 }): LedgerEntrySummary {
@@ -230,6 +233,7 @@ function buildBalances(
     user: {
       displayName: string;
       email: string;
+      profileImageUrl?: string | null;
     };
   }>,
   entries: Awaited<ReturnType<typeof getSeasonEntries>>

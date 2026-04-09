@@ -31,11 +31,13 @@ export async function PATCH(request: Request) {
     const body = (await request.json()) as {
       displayName?: string;
       phoneNumber?: string;
+      profileImageUrl?: string | null;
     };
 
     const account = await accountService.updateAccountProfile(userId, {
       displayName: body.displayName ?? "",
-      phoneNumber: body.phoneNumber ?? ""
+      phoneNumber: body.phoneNumber ?? "",
+      profileImageUrl: body.profileImageUrl ?? null
     });
 
     return NextResponse.json<AccountProfileResponse>({ account });

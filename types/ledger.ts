@@ -18,6 +18,7 @@ export interface LedgerOwnerSummary {
   userId: string;
   displayName: string;
   email: string;
+  profileImageUrl?: string | null;
   role: "COMMISSIONER" | "OWNER";
 }
 

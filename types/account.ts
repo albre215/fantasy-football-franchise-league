@@ -3,6 +3,7 @@ export interface AccountProfile {
   displayName: string;
   email: string;
   phoneNumber: string | null;
+  profileImageUrl: string | null;
 }
 
 export interface AccountProfileResponse {
@@ -12,4 +13,5 @@ export interface AccountProfileResponse {
 export interface UpdateAccountProfileInput {
   displayName: string;
   phoneNumber?: string;
+  profileImageUrl?: string | null;
 }

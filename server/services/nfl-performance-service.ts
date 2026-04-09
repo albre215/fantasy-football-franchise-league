@@ -124,13 +124,14 @@ function mapOwner(member: {
   id: string;
   userId: string;
   role: "COMMISSIONER" | "OWNER";
-  user: { displayName: string; email: string };
+  user: { displayName: string; email: string; profileImageUrl?: string | null };
 }): NflPerformanceOwnerSummary {
   return {
     leagueMemberId: member.id,
     userId: member.userId,
     displayName: member.user.displayName,
     email: member.user.email,
+    profileImageUrl: member.user.profileImageUrl ?? null,
     role: member.role
   };
 }
@@ -195,7 +196,8 @@ async function getSeasonContextOrThrow(tx: PrismaClientLike, seasonId: string) {
               user: {
                 select: {
                   displayName: true,
-                  email: true
+                  email: true,
+                  profileImageUrl: true
                 }
               }
             },
@@ -222,7 +224,8 @@ async function getSeasonContextOrThrow(tx: PrismaClientLike, seasonId: string) {
               user: {
                 select: {
                   displayName: true,
-                  email: true
+                  email: true,
+                  profileImageUrl: true
                 }
               }
             }

@@ -81,6 +81,7 @@ export interface OwnerDashboardSummary {
     id: string;
     displayName: string;
     email: string;
+    profileImageUrl?: string | null;
   };
   memberships: OwnerLeagueMembershipSummary[];
   currentSeasons: OwnerCurrentSeasonSummary[];
@@ -129,6 +130,7 @@ export interface OwnerSeasonSummary {
     id: string;
     displayName: string;
     email: string;
+    profileImageUrl?: string | null;
   };
   membership: {
     leagueMemberId: string;

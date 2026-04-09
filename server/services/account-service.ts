@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { AccountProfile, UpdateAccountProfileInput } from "@/types/account";
 
 const MAX_DISPLAY_NAME_LENGTH = 100;
+const MAX_PROFILE_IMAGE_URL_LENGTH = 400_000;
 
 class AccountServiceError extends Error {
   constructor(
@@ -41,17 +42,33 @@ function validatePhoneNumber(phoneNumber: string) {
   }
 }
 
+function validateProfileImageUrl(profileImageUrl: string | null) {
+  if (!profileImageUrl) {
+    return;
+  }
+
+  if (profileImageUrl.length > MAX_PROFILE_IMAGE_URL_LENGTH) {
+    throw new AccountServiceError("Profile image is too large.", 400);
+  }
+
+  if (!/^data:image\/(png|jpeg|jpg|webp);base64,/i.test(profileImageUrl)) {
+    throw new AccountServiceError("Profile image must be a PNG, JPEG, or WebP data URL.", 400);
+  }
+}
+
 function mapAccountProfile(user: {
   id: string;
   displayName: string;
   email: string;
   phoneNumber: string | null;
+  profileImageUrl: string | null;
 }): AccountProfile {
   return {
     id: user.id,
     displayName: user.displayName,
     email: user.email,
-    phoneNumber: user.phoneNumber
+    phoneNumber: user.phoneNumber,
+    profileImageUrl: user.profileImageUrl
   };
 }
 
@@ -65,7 +82,8 @@ export const accountService = {
         id: true,
         displayName: true,
         email: true,
-        phoneNumber: true
+        phoneNumber: true,
+        profileImageUrl: true
       }
     });
 
@@ -79,9 +97,11 @@ export const accountService = {
   async updateAccountProfile(userId: string, input: UpdateAccountProfileInput) {
     const displayName = input.displayName.trim();
     const phoneNumber = normalizePhoneNumber(input.phoneNumber ?? "");
+    const profileImageUrl = input.profileImageUrl?.trim() ? input.profileImageUrl.trim() : null;
 
     validateDisplayName(displayName);
     validatePhoneNumber(phoneNumber);
+    validateProfileImageUrl(profileImageUrl);
 
     const user = await prisma.user.update({
       where: {
@@ -89,13 +109,15 @@ export const accountService = {
       },
       data: {
         displayName,
-        phoneNumber: phoneNumber || null
+        phoneNumber: phoneNumber || null,
+        profileImageUrl
       },
       select: {
         id: true,
         displayName: true,
         email: true,
-        phoneNumber: true
+        phoneNumber: true,
+        profileImageUrl: true
       }
     });
 

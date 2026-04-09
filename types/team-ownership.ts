@@ -13,6 +13,7 @@ export interface TeamOwnershipEntry {
   userId: string;
   displayName: string;
   email: string;
+  profileImageUrl?: string | null;
   team: NFLTeamSummary;
 }
 
@@ -21,6 +22,7 @@ export interface OwnerTeamGroup {
   userId: string;
   displayName: string;
   email: string;
+  profileImageUrl?: string | null;
   role: "COMMISSIONER" | "OWNER";
   teamCount: number;
   teams: Array<{
