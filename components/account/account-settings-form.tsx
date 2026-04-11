@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSession } from "next-auth/react";
 
 import { ProfileAvatar } from "@/components/shared/profile-avatar";
@@ -36,11 +37,31 @@ function createImageElement(src: string) {
   });
 }
 
+function formatPhoneNumber(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+
+  if (digits.length === 0) {
+    return "";
+  }
+
+  if (digits.length <= 3) {
+    return `(${digits}`;
+  }
+
+  if (digits.length <= 6) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  }
+
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
 export function AccountSettingsForm({ account }: { account: AccountProfile }) {
   const { update } = useSession();
+  const cropperRef = useRef<HTMLDivElement | null>(null);
   const [savedAccount, setSavedAccount] = useState(account);
   const [displayName, setDisplayName] = useState(account.displayName);
-  const [phoneNumber, setPhoneNumber] = useState(account.phoneNumber ?? "");
+  const [email, setEmail] = useState(account.email);
+  const [phoneNumber, setPhoneNumber] = useState(formatPhoneNumber(account.phoneNumber ?? ""));
   const [profileImageUrl, setProfileImageUrl] = useState(account.profileImageUrl);
   const [editorImageUrl, setEditorImageUrl] = useState<string | null>(account.profileImageUrl);
   const [imageScale, setImageScale] = useState(1);
@@ -48,14 +69,33 @@ export function AccountSettingsForm({ account }: { account: AccountProfile }) {
   const [imageNaturalSize, setImageNaturalSize] = useState({ width: CROPPER_SIZE, height: CROPPER_SIZE });
   const [isDragging, setIsDragging] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+  const [isPasswordSubmitting, setIsPasswordSubmitting] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [nextPassword, setNextPassword] = useState("");
+  const [confirmNextPassword, setConfirmNextPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNextPassword, setShowNextPassword] = useState(false);
+  const [showConfirmNextPassword, setShowConfirmNextPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const dragStartRef = useRef<{ pointerX: number; pointerY: number; startX: number; startY: number } | null>(null);
+  const [passwordErrorMessage, setPasswordErrorMessage] = useState<string | null>(null);
+  const [passwordSuccessMessage, setPasswordSuccessMessage] = useState<string | null>(null);
+  const dragStartRef = useRef<{ pointerId: number; pointerX: number; pointerY: number; startX: number; startY: number } | null>(null);
 
   const hasChanges =
     displayName.trim() !== savedAccount.displayName ||
-    phoneNumber.trim() !== (savedAccount.phoneNumber ?? "") ||
+    email.trim().toLowerCase() !== savedAccount.email.toLowerCase() ||
+    phoneNumber.trim() !== formatPhoneNumber(savedAccount.phoneNumber ?? "") ||
     profileImageUrl !== savedAccount.profileImageUrl;
+  const passwordResetMatches = nextPassword === confirmNextPassword;
+  const canSubmitPasswordReset =
+    currentPassword.length > 0 && nextPassword.length > 0 && confirmNextPassword.length > 0 && passwordResetMatches;
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const scaledImageSize = useMemo(
     () => ({
@@ -108,9 +148,8 @@ export function AccountSettingsForm({ account }: { account: AccountProfile }) {
     }));
   }, [scaledImageSize.height, scaledImageSize.width]);
 
-  async function commitCroppedImage() {
+  async function renderCroppedImage() {
     if (!editorImageUrl) {
-      setProfileImageUrl(null);
       return null;
     }
 
@@ -133,10 +172,37 @@ export function AccountSettingsForm({ account }: { account: AccountProfile }) {
 
     context.clearRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
     context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
-    const nextProfileImageUrl = canvas.toDataURL("image/png");
-    setProfileImageUrl(nextProfileImageUrl);
-    return nextProfileImageUrl;
+    return canvas.toDataURL("image/png");
   }
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function syncCroppedPreview() {
+      if (!editorImageUrl) {
+        setProfileImageUrl(null);
+        return;
+      }
+
+      try {
+        const nextProfileImageUrl = await renderCroppedImage();
+
+        if (isActive) {
+          setProfileImageUrl(nextProfileImageUrl);
+        }
+      } catch (error) {
+        if (isActive) {
+          setErrorMessage(error instanceof Error ? error.message : "Unable to prepare the image crop.");
+        }
+      }
+    }
+
+    void syncCroppedPreview();
+
+    return () => {
+      isActive = false;
+    };
+  }, [editorImageUrl, imageOffset.x, imageOffset.y, imageScale, imageNaturalSize.height, imageNaturalSize.width]);
 
   async function handleFileSelection(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -164,6 +230,76 @@ export function AccountSettingsForm({ account }: { account: AccountProfile }) {
     reader.readAsDataURL(file);
   }
 
+  function handleScaleChange(nextScale: number) {
+    if (!Number.isFinite(nextScale)) {
+      return;
+    }
+
+    setImageScale((currentScale) => {
+      const clampedScale = clamp(nextScale, 1, 2.5);
+
+      setImageOffset((currentOffset) => {
+        const currentWidth = imageNaturalSize.width * currentScale;
+        const currentHeight = imageNaturalSize.height * currentScale;
+        const nextWidth = imageNaturalSize.width * clampedScale;
+        const nextHeight = imageNaturalSize.height * clampedScale;
+        const centerX = CROPPER_SIZE / 2;
+        const centerY = CROPPER_SIZE / 2;
+        const focalX = (centerX - currentOffset.x) / currentWidth;
+        const focalY = (centerY - currentOffset.y) / currentHeight;
+        const minX = Math.min(0, CROPPER_SIZE - nextWidth);
+        const minY = Math.min(0, CROPPER_SIZE - nextHeight);
+
+        return {
+          x: clamp(centerX - focalX * nextWidth, minX, 0),
+          y: clamp(centerY - focalY * nextHeight, minY, 0)
+        };
+      });
+
+      return clampedScale;
+    });
+  }
+
+  function handlePointerStart(event: React.PointerEvent<HTMLDivElement>) {
+    if (!editorImageUrl) {
+      return;
+    }
+
+    dragStartRef.current = {
+      pointerId: event.pointerId,
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      startX: imageOffset.x,
+      startY: imageOffset.y
+    };
+    cropperRef.current?.setPointerCapture(event.pointerId);
+    setIsDragging(true);
+  }
+
+  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (!dragStartRef.current || !editorImageUrl) {
+      return;
+    }
+
+    const nextX = dragStartRef.current.startX + (event.clientX - dragStartRef.current.pointerX);
+    const nextY = dragStartRef.current.startY + (event.clientY - dragStartRef.current.pointerY);
+    const minX = Math.min(0, CROPPER_SIZE - scaledImageSize.width);
+    const minY = Math.min(0, CROPPER_SIZE - scaledImageSize.height);
+
+    setImageOffset({
+      x: clamp(nextX, minX, 0),
+      y: clamp(nextY, minY, 0)
+    });
+  }
+
+  function handlePointerEnd(event: React.PointerEvent<HTMLDivElement>) {
+    if (dragStartRef.current?.pointerId === event.pointerId) {
+      cropperRef.current?.releasePointerCapture(event.pointerId);
+      dragStartRef.current = null;
+      setIsDragging(false);
+    }
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage(null);
@@ -171,7 +307,6 @@ export function AccountSettingsForm({ account }: { account: AccountProfile }) {
     setIsSubmitting(true);
 
     try {
-      const nextProfileImageUrl = editorImageUrl ? await commitCroppedImage() : null;
       const response = await fetch("/api/account", {
         method: "PATCH",
         headers: {
@@ -179,8 +314,9 @@ export function AccountSettingsForm({ account }: { account: AccountProfile }) {
         },
         body: JSON.stringify({
           displayName,
+          email,
           phoneNumber,
-          profileImageUrl: editorImageUrl ? nextProfileImageUrl : profileImageUrl
+          profileImageUrl
         })
       });
 
@@ -188,19 +324,62 @@ export function AccountSettingsForm({ account }: { account: AccountProfile }) {
 
       setSavedAccount(data.account);
       setDisplayName(data.account.displayName);
-      setPhoneNumber(data.account.phoneNumber ?? "");
+      setEmail(data.account.email);
+      setPhoneNumber(formatPhoneNumber(data.account.phoneNumber ?? ""));
       setProfileImageUrl(data.account.profileImageUrl);
       setEditorImageUrl(data.account.profileImageUrl);
       setSuccessMessage("Account settings updated.");
       await update({
         user: {
-          displayName: data.account.displayName
+          displayName: data.account.displayName,
+          email: data.account.email
         }
       });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to update account settings.");
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handlePasswordReset(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPasswordErrorMessage(null);
+    setPasswordSuccessMessage(null);
+
+    if (!passwordResetMatches) {
+      setPasswordErrorMessage("New passwords must match.");
+      return;
+    }
+
+    setIsPasswordSubmitting(true);
+
+    try {
+      const response = await fetch("/api/account/password", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          currentPassword,
+          nextPassword
+        })
+      });
+
+      await parseJsonResponse<{ success: true }>(response);
+      setCurrentPassword("");
+      setNextPassword("");
+      setConfirmNextPassword("");
+      setShowCurrentPassword(false);
+      setShowNextPassword(false);
+      setShowConfirmNextPassword(false);
+      setPasswordSuccessMessage("Password updated.");
+      setSuccessMessage("Password updated.");
+      setIsPasswordModalOpen(false);
+    } catch (error) {
+      setPasswordErrorMessage(error instanceof Error ? error.message : "Unable to update password.");
+    } finally {
+      setIsPasswordSubmitting(false);
     }
   }
 
@@ -225,8 +404,12 @@ export function AccountSettingsForm({ account }: { account: AccountProfile }) {
             <label className="text-sm font-medium text-foreground" htmlFor="account-email">
               Email
             </label>
-            <Input id="account-email" readOnly value={account.email} />
-            <p className="text-sm text-muted-foreground">Email is currently read-only in this account flow.</p>
+            <Input
+              id="account-email"
+              onChange={(event) => setEmail(event.target.value)}
+              type="email"
+              value={email}
+            />
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground" htmlFor="account-phone">
@@ -234,11 +417,36 @@ export function AccountSettingsForm({ account }: { account: AccountProfile }) {
             </label>
             <Input
               id="account-phone"
-              onChange={(event) => setPhoneNumber(event.target.value)}
-              placeholder="Optional phone number"
+              onChange={(event) => setPhoneNumber(formatPhoneNumber(event.target.value))}
+              placeholder="Ex: (555) 123-4567"
               type="tel"
               value={phoneNumber}
             />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground" htmlFor="account-password-saved">
+              Password
+            </label>
+            <Input
+              className="bg-slate-100 text-slate-500"
+              id="account-password-saved"
+              readOnly
+              type="password"
+              value="PasswordSaved123!"
+            />
+            <div>
+              <button
+                className="text-sm font-semibold text-[#1846d1] underline underline-offset-2 transition-colors hover:text-[#0f348f]"
+                onClick={() => {
+                  setPasswordErrorMessage(null);
+                  setPasswordSuccessMessage(null);
+                  setIsPasswordModalOpen(true);
+                }}
+                type="button"
+              >
+                Reset Password
+              </button>
+            </div>
           </div>
           <div className="space-y-3">
             <label className="text-sm font-medium text-foreground">Profile picture</label>
@@ -247,45 +455,14 @@ export function AccountSettingsForm({ account }: { account: AccountProfile }) {
                 <div className="rounded-2xl border border-border bg-background p-5 shadow-sm">
                   <div className="space-y-4">
                     <div className="flex justify-center">
-                      <div
-                        className="relative h-[280px] w-[280px] overflow-hidden rounded-3xl border border-border bg-slate-950/5"
-                        onPointerDown={(event) => {
-                          if (!editorImageUrl) {
-                            return;
-                          }
-
-                          dragStartRef.current = {
-                            pointerX: event.clientX,
-                            pointerY: event.clientY,
-                            startX: imageOffset.x,
-                            startY: imageOffset.y
-                          };
-                          setIsDragging(true);
-                        }}
-                        onPointerMove={(event) => {
-                          if (!dragStartRef.current || !editorImageUrl) {
-                            return;
-                          }
-
-                          const nextX = dragStartRef.current.startX + (event.clientX - dragStartRef.current.pointerX);
-                          const nextY = dragStartRef.current.startY + (event.clientY - dragStartRef.current.pointerY);
-                          const minX = Math.min(0, CROPPER_SIZE - scaledImageSize.width);
-                          const minY = Math.min(0, CROPPER_SIZE - scaledImageSize.height);
-
-                          setImageOffset({
-                            x: clamp(nextX, minX, 0),
-                            y: clamp(nextY, minY, 0)
-                          });
-                        }}
-                        onPointerUp={() => {
-                          dragStartRef.current = null;
-                          setIsDragging(false);
-                        }}
-                        onPointerLeave={() => {
-                          dragStartRef.current = null;
-                          setIsDragging(false);
-                        }}
-                      >
+                    <div
+                      ref={cropperRef}
+                      className="relative h-[280px] w-[280px] overflow-hidden rounded-3xl border border-border bg-slate-950/5"
+                      onPointerCancel={handlePointerEnd}
+                      onPointerDown={handlePointerStart}
+                      onPointerMove={handlePointerMove}
+                      onPointerUp={handlePointerEnd}
+                    >
                         {editorImageUrl ? (
                           <img
                             alt="Profile crop preview"
@@ -317,7 +494,7 @@ export function AccountSettingsForm({ account }: { account: AccountProfile }) {
                           id="account-image-scale"
                           max="2.5"
                           min="1"
-                          onChange={(event) => setImageScale(Number(event.target.value))}
+                          onChange={(event) => handleScaleChange(event.target.valueAsNumber)}
                           step="0.01"
                           type="range"
                           value={imageScale}
@@ -331,14 +508,6 @@ export function AccountSettingsForm({ account }: { account: AccountProfile }) {
                             Upload Photo
                           </span>
                         </label>
-                        <Button
-                          disabled={!editorImageUrl}
-                          onClick={() => void commitCroppedImage()}
-                          type="button"
-                          variant="secondary"
-                        >
-                          Apply Crop
-                        </Button>
                         <Button
                           disabled={!profileImageUrl && !editorImageUrl}
                           onClick={() => {
@@ -357,7 +526,6 @@ export function AccountSettingsForm({ account }: { account: AccountProfile }) {
                 <div className="space-y-4 rounded-2xl border border-border bg-background p-4 shadow-sm">
                   <div className="space-y-1">
                     <div className="text-sm font-medium text-foreground">Icon Preview</div>
-                    <p className="text-sm text-muted-foreground">This updates live based on the photo framing you choose.</p>
                   </div>
                   <div className="flex items-center gap-5">
                     <ProfileAvatar
@@ -375,7 +543,10 @@ export function AccountSettingsForm({ account }: { account: AccountProfile }) {
             </div>
           </div>
           <CardFooter className="px-0 pb-0 pt-2">
-            <Button disabled={isSubmitting || !hasChanges || !displayName.trim()} type="submit">
+            <Button
+              disabled={isSubmitting || !displayName.trim() || !email.trim() || !hasChanges}
+              type="submit"
+            >
               Save Changes
             </Button>
           </CardFooter>
@@ -386,6 +557,150 @@ export function AccountSettingsForm({ account }: { account: AccountProfile }) {
           <p className={errorMessage ? "text-red-600" : "text-emerald-700"}>{errorMessage ?? successMessage}</p>
         </CardFooter>
       ) : null}
+      {isClient && isPasswordModalOpen
+        ? createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4">
+          <div className="w-full max-w-lg rounded-[1.75rem] border border-border bg-white p-6 shadow-[0_30px_80px_-28px_rgba(7,28,18,0.45)]">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <h2 className="text-xl font-semibold text-foreground">Reset Password</h2>
+                <p className="text-sm text-muted-foreground">Enter your current password, then set and confirm a new one.</p>
+              </div>
+              <button
+                aria-label="Close reset password dialog"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                onClick={() => setIsPasswordModalOpen(false)}
+                type="button"
+              >
+                <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <path d="M6 6L18 18M18 6L6 18" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+                </svg>
+              </button>
+            </div>
+            <form className="mt-5 space-y-4" onSubmit={handlePasswordReset}>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground" htmlFor="account-current-password">
+                  Current password
+                </label>
+                <div className="relative">
+                  <Input
+                    className="pr-11"
+                    id="account-current-password"
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                    type={showCurrentPassword ? "text" : "password"}
+                    value={currentPassword}
+                  />
+                  <button
+                    aria-label={showCurrentPassword ? "Hide current password" : "Show current password"}
+                    className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => setShowCurrentPassword((current) => !current)}
+                    type="button"
+                  >
+                    {showCurrentPassword ? (
+                      <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <path d="M3 3L21 21" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+                        <path d="M10.58 10.58A2 2 0 0013.42 13.42M9.88 5.09A10.94 10.94 0 0112 4.91c5.05 0 8.27 3.11 9.53 5.09a1.95 1.95 0 010 2c-.55.87-1.44 2.04-2.72 3.08M6.53 6.53C4.7 7.8 3.49 9.43 2.47 11a1.95 1.95 0 000 2C3.73 14.98 6.95 18.09 12 18.09c1.78 0 3.36-.39 4.75-1" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                      </svg>
+                    ) : (
+                      <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <path d="M2.46 12C3.73 9.98 6.95 6.91 12 6.91S20.27 9.98 21.54 12C20.27 14.02 17.05 17.09 12 17.09S3.73 14.02 2.46 12Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                        <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground" htmlFor="account-next-password">
+                  New password
+                </label>
+                <div className="relative">
+                  <Input
+                    className="pr-11"
+                    id="account-next-password"
+                    onChange={(event) => setNextPassword(event.target.value)}
+                    type={showNextPassword ? "text" : "password"}
+                    value={nextPassword}
+                  />
+                  <button
+                    aria-label={showNextPassword ? "Hide new password" : "Show new password"}
+                    className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => setShowNextPassword((current) => !current)}
+                    type="button"
+                  >
+                    {showNextPassword ? (
+                      <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <path d="M3 3L21 21" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+                        <path d="M10.58 10.58A2 2 0 0013.42 13.42M9.88 5.09A10.94 10.94 0 0112 4.91c5.05 0 8.27 3.11 9.53 5.09a1.95 1.95 0 010 2c-.55.87-1.44 2.04-2.72 3.08M6.53 6.53C4.7 7.8 3.49 9.43 2.47 11a1.95 1.95 0 000 2C3.73 14.98 6.95 18.09 12 18.09c1.78 0 3.36-.39 4.75-1" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                      </svg>
+                    ) : (
+                      <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <path d="M2.46 12C3.73 9.98 6.95 6.91 12 6.91S20.27 9.98 21.54 12C20.27 14.02 17.05 17.09 12 17.09S3.73 14.02 2.46 12Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                        <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground" htmlFor="account-confirm-next-password">
+                  Confirm new password
+                </label>
+                <div className="relative">
+                  <Input
+                    className="pr-11"
+                    id="account-confirm-next-password"
+                    onChange={(event) => setConfirmNextPassword(event.target.value)}
+                    type={showConfirmNextPassword ? "text" : "password"}
+                    value={confirmNextPassword}
+                  />
+                  <button
+                    aria-label={showConfirmNextPassword ? "Hide confirmed new password" : "Show confirmed new password"}
+                    className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => setShowConfirmNextPassword((current) => !current)}
+                    type="button"
+                  >
+                    {showConfirmNextPassword ? (
+                      <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <path d="M3 3L21 21" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+                        <path d="M10.58 10.58A2 2 0 0013.42 13.42M9.88 5.09A10.94 10.94 0 0112 4.91c5.05 0 8.27 3.11 9.53 5.09a1.95 1.95 0 010 2c-.55.87-1.44 2.04-2.72 3.08M6.53 6.53C4.7 7.8 3.49 9.43 2.47 11a1.95 1.95 0 000 2C3.73 14.98 6.95 18.09 12 18.09c1.78 0 3.36-.39 4.75-1" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                      </svg>
+                    ) : (
+                      <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <path d="M2.46 12C3.73 9.98 6.95 6.91 12 6.91S20.27 9.98 21.54 12C20.27 14.02 17.05 17.09 12 17.09S3.73 14.02 2.46 12Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                        <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+                {nextPassword.length > 0 && confirmNextPassword.length > 0 && !passwordResetMatches ? (
+                  <p className="text-sm text-red-600">New passwords must match.</p>
+                ) : null}
+              </div>
+              {(passwordErrorMessage || passwordSuccessMessage) ? (
+                <p className={passwordErrorMessage ? "text-sm text-red-600" : "text-sm text-emerald-700"}>
+                  {passwordErrorMessage ?? passwordSuccessMessage}
+                </p>
+              ) : null}
+              <div className="flex justify-end gap-3">
+                <Button
+                  onClick={() => setIsPasswordModalOpen(false)}
+                  type="button"
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+                <Button disabled={isPasswordSubmitting || !canSubmitPasswordReset} type="submit">
+                  Save Changes
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+          ,
+          document.body
+        )
+        : null}
     </Card>
   );
 }

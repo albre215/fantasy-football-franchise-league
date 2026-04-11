@@ -30,13 +30,17 @@ export async function PATCH(request: Request) {
     const userId = await requireAuthenticatedUserId();
     const body = (await request.json()) as {
       displayName?: string;
+      email?: string;
       phoneNumber?: string;
+      password?: string;
       profileImageUrl?: string | null;
     };
 
     const account = await accountService.updateAccountProfile(userId, {
       displayName: body.displayName ?? "",
+      email: body.email ?? "",
       phoneNumber: body.phoneNumber ?? "",
+      password: body.password ?? "",
       profileImageUrl: body.profileImageUrl ?? null
     });
 

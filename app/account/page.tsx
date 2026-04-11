@@ -1,9 +1,12 @@
 import Image from "next/image";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getServerAuthSession } from "@/auth";
 import { AccountSettingsForm } from "@/components/account/account-settings-form";
 import { BrandAccountSlot } from "@/components/brand/brand-account-slot";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { accountService } from "@/server/services/account-service";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +28,11 @@ export default async function AccountPage() {
           <div className="relative min-h-[320px] sm:min-h-[460px]">
             <div className="absolute right-5 top-5 z-20 sm:right-6 sm:top-6">
               <BrandAccountSlot />
+            </div>
+            <div className="absolute left-5 top-5 z-20 sm:left-6 sm:top-6">
+              <Link className={cn(buttonVariants({ variant: "outline" }), "border-white/65 bg-white/10 text-white hover:bg-white/18 hover:text-white")} href="/">
+                Back
+              </Link>
             </div>
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-4 py-6 sm:px-6 sm:py-8">
               <div className="relative h-full w-full max-w-none">

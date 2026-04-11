@@ -100,6 +100,10 @@ export const authOptions: NextAuthOptions = {
         if (session.user.displayName) {
           token.displayName = session.user.displayName;
         }
+
+        if (session.user.email) {
+          token.email = session.user.email;
+        }
       }
 
       return token;

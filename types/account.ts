@@ -12,6 +12,8 @@ export interface AccountProfileResponse {
 
 export interface UpdateAccountProfileInput {
   displayName: string;
+  email: string;
   phoneNumber?: string;
+  password?: string;
   profileImageUrl?: string | null;
 }
