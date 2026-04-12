@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { compare, hash } from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
-import { recoveryDeliveryService } from "@/server/services/recovery-delivery-service";
+import { RecoveryDeliveryServiceError, recoveryDeliveryService } from "@/server/services/recovery-delivery-service";
 
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_BYTES = 72;
@@ -115,7 +115,7 @@ export const authRecoveryService = {
     const rawToken = createPasswordResetToken();
     const tokenHash = hashValue(rawToken);
     const expiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MINUTES * 60 * 1000);
-    const baseUrl = process.env.NEXTAUTH_URL?.trim() || "http://localhost:3000";
+    const baseUrl = recoveryDeliveryService.getAppBaseUrl();
     const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
 
     await prisma.passwordResetToken.create({
@@ -126,10 +126,20 @@ export const authRecoveryService = {
       }
     });
 
-    const delivery = await recoveryDeliveryService.sendPasswordResetEmail({
-      email: user.email,
-      resetUrl
-    });
+    let delivery;
+
+    try {
+      delivery = await recoveryDeliveryService.sendPasswordResetEmail({
+        email: user.email,
+        resetUrl
+      });
+    } catch (error) {
+      if (error instanceof RecoveryDeliveryServiceError) {
+        throw new AuthRecoveryServiceError(error.message, 500);
+      }
+
+      throw error;
+    }
 
     return {
       delivery,
