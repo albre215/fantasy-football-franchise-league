@@ -96,15 +96,43 @@ enum SeasonNflGameResult {
 }
 
 model User {
-  id            String         @id @default(cuid())
-  email         String         @unique
-  displayName   String
-  phoneNumber   String?
-  profileImageUrl String?
-  passwordHash  String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  leagueMembers LeagueMember[]
+  id                  String                  @id @default(cuid())
+  email               String                  @unique
+  displayName         String
+  phoneNumber         String?
+  profileImageUrl     String?
+  passwordHash        String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  leagueMembers       LeagueMember[]
+  passwordResetTokens PasswordResetToken[]
+  temporaryLoginCodes TemporaryLoginCode[]
+}
+
+model PasswordResetToken {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model TemporaryLoginCode {
+  id                  String   @id @default(cuid())
+  userId              String
+  codeHash            String
+  phoneNumberSnapshot String
+  expiresAt           DateTime
+  consumedAt          DateTime?
+  createdAt           DateTime @default(now())
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([id, expiresAt])
 }
 
 model League {

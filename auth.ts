@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
+import { AuthRecoveryServiceError, authRecoveryService } from "@/server/services/auth-recovery-service";
 
 const MAX_EMAIL_LENGTH = 320;
 const MAX_PASSWORD_BYTES = 72;
@@ -86,6 +87,34 @@ export const authOptions: NextAuthOptions = {
           name: user.displayName,
           displayName: user.displayName
         };
+      }
+    }),
+    CredentialsProvider({
+      id: "recovery-code",
+      name: "Temporary Login Code",
+      credentials: {
+        challengeId: {
+          label: "Challenge ID",
+          type: "text"
+        },
+        code: {
+          label: "Verification code",
+          type: "text"
+        }
+      },
+      async authorize(credentials) {
+        const challengeId = String(credentials?.challengeId ?? "");
+        const code = String(credentials?.code ?? "");
+
+        try {
+          return await authRecoveryService.verifyTemporaryLoginCode(challengeId, code);
+        } catch (error) {
+          if (error instanceof AuthRecoveryServiceError) {
+            return null;
+          }
+
+          throw error;
+        }
       }
     })
   ],
