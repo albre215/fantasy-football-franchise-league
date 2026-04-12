@@ -119,10 +119,11 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   callbacks: {
-    async jwt({ token, user, trigger, session }) {
+    async jwt({ token, user, trigger, session, account }) {
       if (user) {
         token.sub = user.id;
         token.displayName = user.name ?? "";
+        token.authMethod = account?.provider === "recovery-code" ? "recovery-code" : "credentials";
       }
 
       if (trigger === "update" && session?.user) {
@@ -141,6 +142,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user && token.sub) {
         session.user.id = token.sub;
         session.user.displayName = getSessionDisplayName(token.displayName, session.user.name);
+        session.user.authMethod = token.authMethod === "recovery-code" ? "recovery-code" : "credentials";
       }
 
       return session;

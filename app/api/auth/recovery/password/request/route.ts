@@ -5,6 +5,13 @@ import { AuthRecoveryServiceError, authRecoveryService } from "@/server/services
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const neutralResponse = {
+    message: "If an account matches that email, a password reset email will be sent.",
+    delivery: {
+      channel: "email" as const
+    }
+  };
+
   try {
     const body = (await request.json()) as {
       email?: string;
@@ -21,6 +28,10 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof AuthRecoveryServiceError) {
+      if (error.statusCode === 404 || error.statusCode === 429) {
+        return NextResponse.json(neutralResponse);
+      }
+
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
     }
 

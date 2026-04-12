@@ -1,0 +1,4 @@
+ALTER TABLE "TemporaryLoginCode"
+ADD COLUMN "attemptCount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN "lastAttemptAt" TIMESTAMP(3),
+ADD COLUMN "lockedUntil" TIMESTAMP(3);

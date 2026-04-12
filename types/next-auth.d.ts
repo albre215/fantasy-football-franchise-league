@@ -5,6 +5,7 @@ declare module "next-auth" {
     user: {
       id: string;
       displayName: string;
+      authMethod: "credentials" | "recovery-code";
     } & DefaultSession["user"];
   }
 
@@ -18,5 +19,6 @@ declare module "next-auth/jwt" {
   interface JWT {
     sub?: string;
     displayName?: string;
+    authMethod?: "credentials" | "recovery-code";
   }
 }

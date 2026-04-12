@@ -126,6 +126,9 @@ model TemporaryLoginCode {
   userId              String
   codeHash            String
   phoneNumberSnapshot String
+  attemptCount        Int      @default(0)
+  lastAttemptAt       DateTime?
+  lockedUntil         DateTime?
   expiresAt           DateTime
   consumedAt          DateTime?
   createdAt           DateTime @default(now())

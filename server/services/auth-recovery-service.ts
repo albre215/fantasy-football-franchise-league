@@ -13,6 +13,11 @@ const MAX_PASSWORD_BYTES = 72;
 const PASSWORD_RESET_TOKEN_TTL_MINUTES = 30;
 const TEMP_LOGIN_CODE_TTL_MINUTES = 10;
 const TWILIO_VERIFY_CHALLENGE_SENTINEL = "__twilio_verify__";
+const PASSWORD_RESET_REQUEST_COOLDOWN_MS = 60 * 1000;
+const TEMP_LOGIN_REQUEST_COOLDOWN_MS = 60 * 1000;
+const TEMP_LOGIN_MAX_ATTEMPTS = 5;
+const TEMP_LOGIN_LOCKOUT_THRESHOLD = 3;
+const TEMP_LOGIN_LOCKOUT_MS = 5 * 60 * 1000;
 
 class AuthRecoveryServiceError extends Error {
   constructor(
@@ -97,6 +102,48 @@ async function getUserByPhoneNumber(phoneNumberInput: string) {
   return users.find((user) => normalizePhoneNumber(user.phoneNumber ?? "") === normalizedPhoneNumber) ?? null;
 }
 
+async function getMostRecentActivePasswordResetToken(userId: string) {
+  return prisma.passwordResetToken.findFirst({
+    where: {
+      userId,
+      consumedAt: null,
+      expiresAt: {
+        gt: new Date()
+      }
+    },
+    orderBy: {
+      createdAt: "desc"
+    },
+    select: {
+      id: true,
+      createdAt: true
+    }
+  });
+}
+
+async function getMostRecentActiveTemporaryLoginCode(userId: string) {
+  return prisma.temporaryLoginCode.findFirst({
+    where: {
+      userId,
+      consumedAt: null,
+      expiresAt: {
+        gt: new Date()
+      }
+    },
+    orderBy: {
+      createdAt: "desc"
+    },
+    select: {
+      id: true,
+      createdAt: true
+    }
+  });
+}
+
+function isWithinCooldown(timestamp: Date, cooldownMs: number) {
+  return Date.now() - timestamp.getTime() < cooldownMs;
+}
+
 export const authRecoveryService = {
   async requestPasswordReset(emailInput: string) {
     const email = normalizeEmail(emailInput);
@@ -109,6 +156,12 @@ export const authRecoveryService = {
 
     if (!user) {
       throw new AuthRecoveryServiceError("That email is not tied to an account.", 404);
+    }
+
+    const recentToken = await getMostRecentActivePasswordResetToken(user.id);
+
+    if (recentToken && isWithinCooldown(recentToken.createdAt, PASSWORD_RESET_REQUEST_COOLDOWN_MS)) {
+      throw new AuthRecoveryServiceError("Please wait a moment before requesting another password reset email.", 429);
     }
 
     await prisma.passwordResetToken.deleteMany({
@@ -167,6 +220,12 @@ export const authRecoveryService = {
 
     if (!user.phoneNumber?.trim()) {
       throw new AuthRecoveryServiceError("This account does not have a phone number on file for temporary login.", 400);
+    }
+
+    const recentChallenge = await getMostRecentActiveTemporaryLoginCode(user.id);
+
+    if (recentChallenge && isWithinCooldown(recentChallenge.createdAt, TEMP_LOGIN_REQUEST_COOLDOWN_MS)) {
+      throw new AuthRecoveryServiceError("Please wait a moment before requesting another login code.", 429);
     }
 
     await prisma.temporaryLoginCode.deleteMany({
@@ -246,6 +305,10 @@ export const authRecoveryService = {
       throw new AuthRecoveryServiceError("That temporary login code has expired. Request a new code and try again.", 400);
     }
 
+    if (challenge.lockedUntil && challenge.lockedUntil > new Date()) {
+      throw new AuthRecoveryServiceError("Too many incorrect codes. Please wait a few minutes and request a new code.", 429);
+    }
+
     let isValidCode = false;
 
     if (challenge.codeHash === TWILIO_VERIFY_CHALLENGE_SENTINEL) {
@@ -266,17 +329,52 @@ export const authRecoveryService = {
     }
 
     if (!isValidCode) {
+      const nextAttemptCount = challenge.attemptCount + 1;
+      const now = new Date();
+      const shouldConsume = nextAttemptCount >= TEMP_LOGIN_MAX_ATTEMPTS;
+      const shouldLock = !shouldConsume && nextAttemptCount >= TEMP_LOGIN_LOCKOUT_THRESHOLD;
+
+      await prisma.temporaryLoginCode.update({
+        where: {
+          id: challenge.id
+        },
+        data: {
+          attemptCount: nextAttemptCount,
+          lastAttemptAt: now,
+          lockedUntil: shouldLock ? new Date(now.getTime() + TEMP_LOGIN_LOCKOUT_MS) : null,
+          consumedAt: shouldConsume ? now : undefined
+        }
+      });
+
+      if (shouldConsume) {
+        throw new AuthRecoveryServiceError("Too many incorrect codes. Request a new code and try again.", 429);
+      }
+
+      if (shouldLock) {
+        throw new AuthRecoveryServiceError("Too many incorrect codes. Please wait a few minutes and try again.", 429);
+      }
+
       throw new AuthRecoveryServiceError("Code is incorrect. Try again.", 400);
     }
 
-    await prisma.temporaryLoginCode.update({
-      where: {
-        id: challenge.id
-      },
-      data: {
-        consumedAt: new Date()
-      }
-    });
+    await prisma.$transaction([
+      prisma.temporaryLoginCode.update({
+        where: {
+          id: challenge.id
+        },
+        data: {
+          consumedAt: new Date()
+        }
+      }),
+      prisma.temporaryLoginCode.deleteMany({
+        where: {
+          userId: challenge.user.id,
+          id: {
+            not: challenge.id
+          }
+        }
+      })
+    ]);
 
     return {
       id: challenge.user.id,
@@ -353,6 +451,11 @@ export const authRecoveryService = {
           id: {
             not: token.id
           }
+        }
+      }),
+      prisma.temporaryLoginCode.deleteMany({
+        where: {
+          userId: token.userId
         }
       })
     ]);
