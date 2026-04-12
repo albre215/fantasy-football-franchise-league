@@ -2,12 +2,17 @@ import crypto from "crypto";
 import { compare, hash } from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
-import { RecoveryDeliveryServiceError, recoveryDeliveryService } from "@/server/services/recovery-delivery-service";
+import {
+  RecoveryDeliveryServiceError,
+  getRecoverySmsMode,
+  recoveryDeliveryService
+} from "@/server/services/recovery-delivery-service";
 
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_BYTES = 72;
 const PASSWORD_RESET_TOKEN_TTL_MINUTES = 30;
 const TEMP_LOGIN_CODE_TTL_MINUTES = 10;
+const TWILIO_VERIFY_CHALLENGE_SENTINEL = "__twilio_verify__";
 
 class AuthRecoveryServiceError extends Error {
   constructor(
@@ -170,9 +175,40 @@ export const authRecoveryService = {
       }
     });
 
-    const rawCode = createTemporaryLoginCode();
-    const codeHash = await hash(rawCode, 10);
     const expiresAt = new Date(Date.now() + TEMP_LOGIN_CODE_TTL_MINUTES * 60 * 1000);
+    const smsMode = getRecoverySmsMode();
+    let codeHash = TWILIO_VERIFY_CHALLENGE_SENTINEL;
+    let delivery;
+
+    if (smsMode === "preview") {
+      const rawCode = createTemporaryLoginCode();
+      codeHash = await hash(rawCode, 10);
+
+      try {
+        delivery = await recoveryDeliveryService.sendTemporaryLoginCode({
+          phoneNumber: user.phoneNumber,
+          code: rawCode
+        });
+      } catch (error) {
+        if (error instanceof RecoveryDeliveryServiceError) {
+          throw new AuthRecoveryServiceError(error.message, 500);
+        }
+
+        throw error;
+      }
+    } else {
+      try {
+        delivery = await recoveryDeliveryService.sendTemporaryLoginCode({
+          phoneNumber: user.phoneNumber
+        });
+      } catch (error) {
+        if (error instanceof RecoveryDeliveryServiceError) {
+          throw new AuthRecoveryServiceError(error.message, 500);
+        }
+
+        throw error;
+      }
+    }
 
     const challenge = await prisma.temporaryLoginCode.create({
       data: {
@@ -184,11 +220,6 @@ export const authRecoveryService = {
       select: {
         id: true
       }
-    });
-
-    const delivery = await recoveryDeliveryService.sendTemporaryLoginCode({
-      phoneNumber: user.phoneNumber,
-      code: rawCode
     });
 
     return {
@@ -215,7 +246,24 @@ export const authRecoveryService = {
       throw new AuthRecoveryServiceError("That temporary login code has expired. Request a new code and try again.", 400);
     }
 
-    const isValidCode = await compare(code.trim(), challenge.codeHash);
+    let isValidCode = false;
+
+    if (challenge.codeHash === TWILIO_VERIFY_CHALLENGE_SENTINEL) {
+      try {
+        isValidCode = await recoveryDeliveryService.checkTemporaryLoginCode({
+          phoneNumber: challenge.phoneNumberSnapshot,
+          code
+        });
+      } catch (error) {
+        if (error instanceof RecoveryDeliveryServiceError) {
+          throw new AuthRecoveryServiceError(error.message, 500);
+        }
+
+        throw error;
+      }
+    } else {
+      isValidCode = await compare(code.trim(), challenge.codeHash);
+    }
 
     if (!isValidCode) {
       throw new AuthRecoveryServiceError("Code is incorrect. Try again.", 400);
