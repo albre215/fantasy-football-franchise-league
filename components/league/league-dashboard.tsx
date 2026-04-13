@@ -1,10 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 
+import { BrandAccountSlot } from "@/components/brand/brand-account-slot";
 import { BrandMasthead } from "@/components/brand/brand-masthead";
 import { LeagueOwnerPanel } from "@/components/league/league-owner-panel";
 import { ProfileAvatar } from "@/components/shared/profile-avatar";
@@ -12,6 +14,7 @@ import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import type { DraftState, DraftStateResponse } from "@/types/draft";
 import type {
   AddLeagueMemberResponse,
@@ -948,21 +951,36 @@ export function LeagueDashboard({
 
   return (
     <main className="container py-12">
-      <div className="max-w-6xl space-y-6">
-        <BrandMasthead
-          actions={
-            <Link className={buttonVariants({ variant: "outline" })} href="/">
-              Back to Home
-            </Link>
-          }
-          description={
-            viewMode === "commissioner"
-              ? "Set up the real current season from an already-completed offseason draft."
-              : "Review this league from the owner perspective without leaving the league workspace."
-          }
-          eyebrow={viewMode === "commissioner" ? "Commissioner Console" : "Owner View"}
-          title={viewMode === "commissioner" ? "League Bootstrap Console" : "League Owner Workspace"}
-        />
+      <div className="w-full space-y-6">
+        <section className="relative overflow-hidden rounded-[2rem] border border-[#123222] bg-[radial-gradient(circle_at_top_left,rgba(113,255,104,0.22),transparent_28%),linear-gradient(135deg,#081a11_0%,#0d2919_52%,#143222_100%)] shadow-[0_30px_90px_-42px_rgba(1,24,14,0.92)]">
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent,rgba(255,204,92,0.06),transparent)] opacity-80" />
+          <div className="relative min-h-[320px] sm:min-h-[460px]">
+            <BrandAccountSlot />
+            <div className="absolute left-5 top-5 z-20 sm:left-6 sm:top-6">
+              <Link
+                className={cn(
+                  buttonVariants({ variant: "outline" }),
+                  "border-white/65 bg-white/10 text-white hover:bg-white/18 hover:text-white"
+                )}
+                href="/"
+              >
+                Back to Home
+              </Link>
+            </div>
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-4 py-6 sm:px-6 sm:py-8">
+              <div className="relative h-full w-full max-w-none">
+                <Image
+                  alt="GM Fantasy logo"
+                  className="h-full w-full scale-[1.18] object-contain drop-shadow-[0_18px_38px_rgba(0,0,0,0.28)]"
+                  fill
+                  priority
+                  sizes="100vw"
+                  src="/brand/gm-fantasy-logo.png"
+                />
+              </div>
+            </div>
+          </div>
+        </section>
 
         {(errorMessage || successMessage) && (
           <div className="pointer-events-none fixed right-6 top-6 z-50 w-full max-w-md">
@@ -982,33 +1000,6 @@ export function LeagueDashboard({
 
         {bootstrapState && (
           <>
-            {canToggleOwnerView ? (
-              <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white/90 p-4 shadow-[0_14px_28px_-24px_rgba(6,32,18,0.2),0_0_0_1px_rgba(24,54,33,0.08)] backdrop-blur-sm">
-                <div>
-                  <p className="font-medium text-foreground">League View</p>
-                  <p className="text-sm text-muted-foreground">
-                    Switch between commissioner controls and the read-only owner experience for this league.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    onClick={() => setViewMode("commissioner")}
-                    type="button"
-                    variant={viewMode === "commissioner" ? "default" : "outline"}
-                  >
-                    Commissioner View
-                  </Button>
-                  <Button
-                    onClick={() => setViewMode("owner")}
-                    type="button"
-                    variant={viewMode === "owner" ? "default" : "outline"}
-                  >
-                    Owner View
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-
             {viewMode === "commissioner" && commissionerAccessMessage ? (
               <Card className="border-amber-200 bg-amber-50">
                 <CardContent className="p-4 text-sm text-amber-900">
@@ -1046,16 +1037,17 @@ export function LeagueDashboard({
             ) : null}
 
             {viewMode === "commissioner" && activeTab === "overview" ? (
-              <div className="grid gap-6 xl:grid-cols-3">
+              <div className="grid gap-6 xl:grid-cols-[0.9fr_1.9fr]">
                 <Card>
                   <CardHeader>
                     <CardTitle>League Snapshot</CardTitle>
-                    <CardDescription>Structural identity for the league you are currently managing.</CardDescription>
                   </CardHeader>
                     <CardContent className="space-y-3 text-sm text-muted-foreground">
-                      <p>League: {bootstrapState.league.name}</p>
+                      <p>
+                        <span className="font-semibold text-foreground">League:</span> {bootstrapState.league.name}
+                      </p>
                       <p className="flex items-center gap-2">
-                        <span>Commissioner:</span>
+                        <span className="font-semibold text-foreground">Commissioner:</span>
                         {bootstrapState.league.commissioner ? (
                           <>
                             <ProfileAvatar
@@ -1070,34 +1062,62 @@ export function LeagueDashboard({
                           <span>Not assigned</span>
                         )}
                       </p>
-                      <p>Active season: {activeSeason ? activeSeason.name ?? activeSeason.year : "None selected"}</p>
-                      <p>League phase: {currentLeaguePhase ?? "Not set"}</p>
-                      <p>Members: {bootstrapState.memberCount} / 10</p>
+                      <p>
+                        <span className="font-semibold text-foreground">Active season:</span>{" "}
+                        {activeSeason ? activeSeason.name ?? activeSeason.year : "None selected"}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-foreground">Members:</span> {bootstrapState.memberCount}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-foreground">Ledger Entry Fee:</span> $200
+                      </p>
                     </CardContent>
                 </Card>
 
-                <CommissionerToolsPanel
-                  activeSeason={activeSeason}
-                  accessMessage={commissionerAccessMessage}
-                  canManageLeague={canManageLeague}
-                  draftState={draftState}
-                  hideHeading
-                  members={members}
-                  onError={(message) => setErrorMessage(message || null)}
-                  onRefresh={() => refreshLeagueDashboard(leagueId, { includeOperationalData: true })}
-                  onSuccess={(message) => setSuccessMessage(message || null)}
-                  phaseContext={seasonPhaseContext}
-                  seasonOwnership={seasonOwnership}
-                  seasons={seasons}
-                  visibleSections={["state"]}
-                />
-
                 <Card>
                   <CardHeader>
-                    <CardTitle>Next Action & Blockers</CardTitle>
-                    <CardDescription>The operational guidance card for what to do next.</CardDescription>
+                    <CardTitle>Current State & Next Action</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4 text-sm text-muted-foreground">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <p>
+                        <span className="font-semibold text-foreground">Assigned teams:</span> {assignedTeamsCount} / 30
+                      </p>
+                      <p>
+                        <span className="font-semibold text-foreground">Final standings saved:</span> {standingsSaved ? "Yes" : "No"}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-foreground">Fantasy payouts published:</span>{" "}
+                        {resultsAvailability?.hasFantasyPayoutsPublished ? "Yes" : "No"}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-foreground">Draft exists:</span> {draftExists ? "Yes" : "No"}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-foreground">Draft status:</span> {draftStatus}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-foreground">Target season locked:</span> {isLocked ? "Yes" : "No"}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-foreground">Ownership finalized:</span>{" "}
+                        {ownershipFinalized ? "Yes" : "No"}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-foreground">Ledger-based draft order ready:</span>{" "}
+                        {recommendedDraftOrderReady ? "Yes" : "No"}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-foreground">Ledger coverage:</span>{" "}
+                        {resultsAvailability?.draftOrderReadiness.ledgerCoverageStatus ?? "NONE"}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-foreground">Owners with ledger entries:</span>{" "}
+                        {resultsAvailability?.draftOrderReadiness.ownersWithLedgerEntries ?? 0} /{" "}
+                        {resultsAvailability?.eligibleMembers?.length ?? 0}
+                      </p>
+                    </div>
                     <div className="rounded-lg border border-dashed border-border p-4">
                       <p className="font-medium text-foreground">Primary recommendation</p>
                       <p className="mt-1">{primaryNextAction}</p>
@@ -1761,6 +1781,38 @@ export function LeagueDashboard({
             ) : null}
 
             {viewMode === "commissioner" && activeTab === "history-analytics" ? <LeagueHistoryPanel leagueId={leagueId} /> : null}
+
+            {canToggleOwnerView ? (
+              <div className="flex items-center justify-end gap-3">
+                <span className="text-base font-semibold text-foreground">Dashboard View:</span>
+                <div className="inline-flex rounded-full border border-border bg-white/90 p-1 shadow-[0_14px_28px_-24px_rgba(6,32,18,0.2),0_0_0_1px_rgba(24,54,33,0.08)] backdrop-blur-sm">
+                  <button
+                    className={cn(
+                      "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+                      viewMode === "commissioner"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                    onClick={() => setViewMode("commissioner")}
+                    type="button"
+                  >
+                    Commissioner
+                  </button>
+                  <button
+                    className={cn(
+                      "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+                      viewMode === "owner"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                    onClick={() => setViewMode("owner")}
+                    type="button"
+                  >
+                    Owner
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </>
         )}
       </div>

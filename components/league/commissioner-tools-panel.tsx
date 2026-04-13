@@ -467,28 +467,45 @@ export function CommissionerToolsPanel({
       <Card>
         <CardHeader>
           <CardTitle>Current State</CardTitle>
-          <CardDescription>Single source of truth for the current operational state of the active season.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm text-muted-foreground md:grid-cols-2">
-          <p>Assigned teams: {assignedTeamCount} / 30</p>
-          <p>League phase: {phaseContext?.season.leaguePhase ?? activeSeason?.leaguePhase ?? "Unknown"}</p>
-          <p>Final standings saved: {results?.availability.hasFinalStandings ? "Yes" : "No"}</p>
-          <p>Fantasy payouts published: {results?.availability.hasFantasyPayoutsPublished ? "Yes" : "No"}</p>
-          <p>Draft exists: {draftState ? "Yes" : "No"}</p>
-          <p>Draft status: {draftState?.draft.status ?? "No draft"}</p>
-          <p>Target season locked: {activeSeason?.isLocked ? "Yes" : "No"}</p>
-          <p>Ownership finalized: {ownershipFinalized ? "Yes" : "No"}</p>
-          <p>Ledger-based draft order ready: {results?.availability.isReadyForDraftOrderAutomation ? "Yes" : "No"}</p>
-          <p>Ledger coverage: {results?.availability.draftOrderReadiness.ledgerCoverageStatus ?? "NONE"}</p>
           <p>
-            Owners with ledger entries: {results?.availability.draftOrderReadiness.ownersWithLedgerEntries ?? 0} /{" "}
+            <span className="font-semibold text-foreground">Assigned teams:</span> {assignedTeamCount} / 30
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Final standings saved:</span>{" "}
+            {results?.availability.hasFinalStandings ? "Yes" : "No"}
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Fantasy payouts published:</span>{" "}
+            {results?.availability.hasFantasyPayoutsPublished ? "Yes" : "No"}
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Draft exists:</span> {draftState ? "Yes" : "No"}
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Draft status:</span> {draftState?.draft.status ?? "No draft"}
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Target season locked:</span>{" "}
+            {activeSeason?.isLocked ? "Yes" : "No"}
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Ownership finalized:</span> {ownershipFinalized ? "Yes" : "No"}
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Ledger-based draft order ready:</span>{" "}
+            {results?.availability.isReadyForDraftOrderAutomation ? "Yes" : "No"}
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Ledger coverage:</span>{" "}
+            {results?.availability.draftOrderReadiness.ledgerCoverageStatus ?? "NONE"}
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Owners with ledger entries:</span>{" "}
+            {results?.availability.draftOrderReadiness.ownersWithLedgerEntries ?? 0} /{" "}
             {results?.eligibleMembers.length ?? 0}
           </p>
-          <p>
-            Drop-phase keeper completion: {phaseContext?.readiness.ownersWithCompletedKeeperSelections ?? 0} /{" "}
-            {phaseContext?.readiness.ownersTotalCount ?? 0}
-          </p>
-          <p>Ready for DRAFT_PHASE: {phaseContext?.readiness.isReadyForDraftPhase ? "Yes" : "No"}</p>
           {phaseContext?.warnings.length ? (
             <div className="md:col-span-2 rounded-lg border border-dashed border-border p-3">
               {phaseContext.warnings.slice(0, 3).map((warning) => (
