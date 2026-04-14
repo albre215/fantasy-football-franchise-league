@@ -1088,7 +1088,7 @@ export function LeagueDashboard({
                       <p>
                         <span className="font-semibold text-foreground">League:</span> {bootstrapState.league.name}
                       </p>
-                      <p className="flex items-center gap-2">
+                      <div className="flex items-center gap-2">
                         <span className="font-semibold text-foreground">Commissioner:</span>
                         {bootstrapState.league.commissioner ? (
                           <>
@@ -1103,7 +1103,7 @@ export function LeagueDashboard({
                         ) : (
                           <span>Not assigned</span>
                         )}
-                      </p>
+                      </div>
                       <p>
                         <span className="font-semibold text-foreground">Active season:</span>{" "}
                         {activeSeason ? activeSeason.name ?? activeSeason.year : "None selected"}
