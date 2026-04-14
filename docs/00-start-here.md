@@ -35,6 +35,7 @@ Use this file first when handing the repo to another AI.
 - commissioners can toggle between commissioner and owner views inside the same league page
 - season creation now auto-activates the newly created season
 - new-season year defaults follow the GM Fantasy post-Super-Bowl rollover rule
+- the Seasons tab is now a simplified create-first list: `Create New Season` at the top, seasons listed below, and year edits remain available after creation
 - inaugural seasons now use a live inaugural auction path instead of the continuing-league replacement draft flow
 - account settings, avatars, recovery flows, Resend email delivery, Twilio Verify temporary login, and auth hardening are all implemented
 
@@ -42,12 +43,8 @@ Use this file first when handing the repo to another AI.
 - follow-up work areas: configurable fees/payouts, owner experience polish, analytics expansion, and inaugural auction polish/live-room refinement
 
 ## Current Branch Context
-- `main` contains the inaugural auction implementation and updated handoff docs baseline
+- `main` contains the inaugural auction implementation, the simplified Seasons management panel, and the updated handoff docs baseline
 - recently created feature branches that may or may not be merged yet:
-  - `feature/create-season-adjustments`
-    - create-season auto-activates the new season
-    - season year defaults follow the GM Fantasy calendar rollover
-    - season-management cards were simplified
   - `feature/error-resolution`
     - fixes a league dashboard hydration error caused by invalid `ProfileAvatar` nesting
 

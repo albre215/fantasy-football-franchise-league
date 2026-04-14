@@ -18,7 +18,9 @@ Use this file as the quickest "what just changed?" reference.
 ### Season creation cleanup
 - newly created seasons now become active automatically
 - create-season year defaults follow the GM Fantasy post-Super-Bowl rollover rule
+- the Seasons tab is now create-first, with `Create New Season` at the top and seasons listed directly below
 - Seasons tab cards no longer show the extra phase/status/helper copy that was cluttering the UI
+- season cards still allow post-create year edits, and inactive `Set Active` buttons now match the `Active Season` button width
 
 ### Home + league entry cleanup
 - `My Leagues` is the main home-page league launcher
