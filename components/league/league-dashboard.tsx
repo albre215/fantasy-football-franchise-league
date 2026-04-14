@@ -195,7 +195,6 @@ export function LeagueDashboard({
   const [seasonPhaseContext, setSeasonPhaseContext] = useState<SeasonPhaseContextResponse["phase"] | null>(null);
   const [ownershipError, setOwnershipError] = useState<string | null>(null);
   const [seasonYear, setSeasonYear] = useState(() => getCurrentGmFantasySeasonYear().toString());
-  const [seasonName, setSeasonName] = useState("");
   const [editingSeasonId, setEditingSeasonId] = useState<string | null>(null);
   const [editingSeasonYear, setEditingSeasonYear] = useState("");
   const [memberDisplayName, setMemberDisplayName] = useState("");
@@ -493,14 +492,12 @@ export function LeagueDashboard({
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          year: Number(seasonYear),
-          name: seasonName || undefined
+          year: Number(seasonYear)
         })
       });
       const data = await parseJsonResponse<CreateSeasonResponse>(response);
 
       setSeasonYear(getCurrentGmFantasySeasonYear().toString());
-      setSeasonName("");
 
       if (data.nflImport?.status === "FAILED") {
         setSuccessMessage(`Created and activated season ${data.season.name ?? data.season.year}.`);
@@ -1193,61 +1190,13 @@ export function LeagueDashboard({
                 <Card>
                   <CardHeader>
                     <CardTitle>Season Management</CardTitle>
-                    <CardDescription>
-                      Create seasons, pick the current active season, and keep structural season setup focused here.
-                    </CardDescription>
                   </CardHeader>
-                  <CardContent className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-                    <div className="space-y-4">
-                      <form className="space-y-4" onSubmit={handleCreateSeason}>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium" htmlFor="season-year">
-                            Create New Season
-                          </label>
-                          <Input
-                            id="season-year"
-                            inputMode="numeric"
-                            onChange={(event) => setSeasonYear(event.target.value)}
-                            placeholder="Season year"
-                            value={seasonYear}
-                          />
-                          <Input
-                            onChange={(event) => setSeasonName(event.target.value)}
-                            placeholder="Optional season name"
-                            value={seasonName}
-                          />
-                        </div>
-                        <Button disabled={isSubmitting || !canManageLeague} type="submit">
-                          Create Season
-                        </Button>
-                      </form>
-
-                      <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
-                        {hasActiveSeason
-                          ? `Active season: ${activeSeason?.name ?? activeSeason?.year}`
-                          : "Create or activate a season first. All season-scoped workflows use the active season."}
-                      </div>
-                      {hasActiveSeason && seasonPhaseContext ? (
-                        <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                          <p className="font-medium text-foreground">Current league phase</p>
-                          <p className="mt-1">{seasonPhaseContext.season.leaguePhase}</p>
-                          {seasonPhaseContext.warnings.length > 0 ? (
-                            <ul className="mt-3 space-y-1">
-                              {seasonPhaseContext.warnings.slice(0, 3).map((warning) => (
-                                <li key={warning}>{warning}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="mt-2">No current phase warnings are surfaced for this season.</p>
-                          )}
-                        </div>
-                      ) : null}
-                      {hasActiveSeason ? (
-                        <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                          Only the commissioner can lock or unlock the season under the authenticated workflow.
-                        </div>
-                      ) : null}
-                    </div>
+                  <CardContent className="space-y-4">
+                    <form className="space-y-4" onSubmit={handleCreateSeason}>
+                      <Button disabled={isSubmitting || !canManageLeague} type="submit">
+                        Create New Season
+                      </Button>
+                    </form>
 
                     <div className="space-y-3">
                       {seasons.length === 0 ? (
@@ -1300,6 +1249,7 @@ export function LeagueDashboard({
                                 </Button>
                               ) : null}
                               <Button
+                                className="min-w-[7.75rem]"
                                 disabled={isSubmitting || season.status === "ACTIVE" || !canManageLeague}
                                 onClick={() => void handleSetActiveSeason(season.id)}
                                 type="button"
