@@ -71,6 +71,7 @@ export interface UpdateSeasonLeaguePhaseInput {
 
 export interface CreateSeasonResponse {
   season: SeasonSummary;
+  nflImport: SeasonNflSyncStatus | null;
 }
 
 export interface SeasonListResponse {

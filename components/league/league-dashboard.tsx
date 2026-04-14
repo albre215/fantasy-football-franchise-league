@@ -14,6 +14,7 @@ import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { getCurrentGmFantasySeasonYear } from "@/lib/gm-season";
 import { cn } from "@/lib/utils";
 import type { DraftState, DraftStateResponse } from "@/types/draft";
 import type {
@@ -193,7 +194,7 @@ export function LeagueDashboard({
   const [resultsAvailability, setResultsAvailability] = useState<SeasonResultsResponse["results"]["availability"] | null>(null);
   const [seasonPhaseContext, setSeasonPhaseContext] = useState<SeasonPhaseContextResponse["phase"] | null>(null);
   const [ownershipError, setOwnershipError] = useState<string | null>(null);
-  const [seasonYear, setSeasonYear] = useState(new Date().getFullYear().toString());
+  const [seasonYear, setSeasonYear] = useState(() => getCurrentGmFantasySeasonYear().toString());
   const [seasonName, setSeasonName] = useState("");
   const [editingSeasonId, setEditingSeasonId] = useState<string | null>(null);
   const [editingSeasonYear, setEditingSeasonYear] = useState("");
@@ -498,8 +499,22 @@ export function LeagueDashboard({
       });
       const data = await parseJsonResponse<CreateSeasonResponse>(response);
 
+      setSeasonYear(getCurrentGmFantasySeasonYear().toString());
       setSeasonName("");
-      setSuccessMessage(`Created season ${data.season.name ?? data.season.year}.`);
+
+      if (data.nflImport?.status === "FAILED") {
+        setSuccessMessage(`Created and activated season ${data.season.name ?? data.season.year}.`);
+        setErrorMessage(
+          `Season created and activated, but automatic NFL import failed. ${data.nflImport.message ?? ""}`.trim()
+        );
+      } else if (data.nflImport?.message) {
+        setSuccessMessage(
+          `Created and activated season ${data.season.name ?? data.season.year}. ${data.nflImport.message}`.trim()
+        );
+      } else {
+        setSuccessMessage(`Created and activated season ${data.season.name ?? data.season.year}.`);
+      }
+
       await refreshLeagueDashboard(leagueId, { includeOperationalData: tabNeedsOperationalData });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to create season.");
@@ -1209,7 +1224,7 @@ export function LeagueDashboard({
 
                       <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
                         {hasActiveSeason
-                          ? `Active season: ${activeSeason?.name ?? activeSeason?.year} - ${isLocked ? "Locked" : "Open"} - ${currentLeaguePhase ?? "Unknown phase"}`
+                          ? `Active season: ${activeSeason?.name ?? activeSeason?.year}`
                           : "Create or activate a season first. All season-scoped workflows use the active season."}
                       </div>
                       {hasActiveSeason && seasonPhaseContext ? (
@@ -1247,9 +1262,6 @@ export function LeagueDashboard({
                           >
                             <div>
                               <p className="font-medium text-foreground">{season.name ?? `${season.year} Season`}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {season.status} - {season.leaguePhase} - {season.isLocked ? "Locked" : "Open"}
-                              </p>
                               {editingSeasonId === season.id ? (
                                 <div className="mt-3 flex flex-wrap items-center gap-2">
                                   <Input
@@ -1274,11 +1286,7 @@ export function LeagueDashboard({
                                     Cancel
                                   </Button>
                                 </div>
-                              ) : (
-                                <p className="mt-2 text-xs text-muted-foreground">
-                                  Need to correct the season year? Use Edit Year before relying on standings or draft order.
-                                </p>
-                              )}
+                              ) : null}
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                               {editingSeasonId !== season.id ? (

@@ -1,6 +1,8 @@
 import { NflPerformanceServiceError, nflPerformanceService } from "@/server/services/nfl-performance-service";
 import { seasonService } from "@/server/services/season-service";
 import type {
+  CreateSeasonInput,
+  CreateSeasonResponse,
   SetActiveSeasonInput,
   SetActiveSeasonResponse,
   UpdateSeasonYearInput,
@@ -29,6 +31,20 @@ function startSeasonNflImportInBackground(seasonId: string, actingUserId: string
 }
 
 export const seasonActivationService = {
+  async createSeasonAndSyncNflResults(input: CreateSeasonInput): Promise<CreateSeasonResponse> {
+    const season = await seasonService.createSeason(input);
+    startSeasonNflImportInBackground(season.id, input.actingUserId);
+
+    return {
+      season,
+      nflImport: {
+        attempted: true,
+        status: "PENDING",
+        message: `Automatic NFL import started for the ${season.year} season.`
+      }
+    };
+  },
+
   async setActiveSeasonAndSyncNflResults(input: SetActiveSeasonInput): Promise<SetActiveSeasonResponse> {
     const season = await seasonService.setActiveSeason(input);
     startSeasonNflImportInBackground(season.id, input.actingUserId);

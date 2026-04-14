@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 
+import { getCurrentGmFantasySeasonYear } from "@/lib/gm-season";
 import { prisma } from "@/lib/prisma";
 import type {
   CreateSeasonInput,
@@ -332,53 +333,67 @@ async function getSeasonSetupStatusInternal(
 export const seasonService = {
   async createSeason(input: CreateSeasonInput) {
     const leagueId = input.leagueId.trim();
+    const requestedYear =
+      Number.isFinite(input.year) && Number.isInteger(input.year) ? input.year : getCurrentGmFantasySeasonYear();
 
     if (!leagueId) {
       throw new SeasonServiceError("leagueId is required.", 400);
     }
 
-    if (!isValidSeasonYear(input.year)) {
+    if (!isValidSeasonYear(requestedYear)) {
       throw new SeasonServiceError("A valid season year is required.", 400);
     }
 
     const name = input.name?.trim() || null;
 
-    await getLeagueOrThrow(prisma, leagueId);
-    await assertActingCommissionerForLeague(prisma, leagueId, input.actingUserId);
-    const previousSeason = await prisma.season.findFirst({
-      where: {
-        leagueId,
-        year: input.year - 1
-      },
-      select: {
-        id: true
-      }
-    });
-
     try {
-      const season = await prisma.season.create({
-        data: {
-          leagueId,
-          year: input.year,
-          name,
-          status: "PLANNING",
-          leaguePhase: "DRAFT_PHASE",
-          draftMode: previousSeason ? "CONTINUING_REPLACEMENT" : "INAUGURAL_AUCTION"
-        },
-        select: seasonSummarySelect
-      }).catch(async (error) => {
-        if (!isMissingLeaguePhaseColumnError(error)) {
-          throw error;
-        }
+      const season = await prisma.$transaction(async (tx) => {
+        await getLeagueOrThrow(tx, leagueId);
+        await assertActingCommissionerForLeague(tx, leagueId, input.actingUserId);
+        const previousSeason = await tx.season.findFirst({
+          where: {
+            leagueId,
+            year: requestedYear - 1
+          },
+          select: {
+            id: true
+          }
+        });
 
-        return prisma.season.create({
+        await tx.season.updateMany({
+          where: {
+            leagueId,
+            status: "ACTIVE"
+          },
+          data: {
+            status: "PLANNING"
+          }
+        });
+
+        return tx.season.create({
           data: {
             leagueId,
-            year: input.year,
+            year: requestedYear,
             name,
-            status: "PLANNING"
+            status: "ACTIVE",
+            leaguePhase: "DRAFT_PHASE",
+            draftMode: previousSeason ? "CONTINUING_REPLACEMENT" : "INAUGURAL_AUCTION"
           },
-          select: seasonSummarySelectWithoutPhase
+          select: seasonSummarySelect
+        }).catch(async (error) => {
+          if (!isMissingLeaguePhaseColumnError(error)) {
+            throw error;
+          }
+
+          return tx.season.create({
+            data: {
+              leagueId,
+              year: requestedYear,
+              name,
+              status: "ACTIVE"
+            },
+            select: seasonSummarySelectWithoutPhase
+          });
         });
       });
 
