@@ -43,7 +43,7 @@ function deriveLeaguePhaseFromSeasonStatus(status: SeasonSummary["status"]): Lea
 function isMissingLeaguePhaseColumnError(error: unknown) {
   return (
     error instanceof Error &&
-    (error.message.includes("leaguePhase") ||
+    ((error.message.includes("leaguePhase") || error.message.includes("draftMode")) ||
       error.message.includes("column") ||
       error.message.includes("does not exist") ||
       error.message.includes("Unknown field"))
@@ -57,6 +57,7 @@ function mapSeason(season: {
   name: string | null;
   status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
   leaguePhase?: "IN_SEASON" | "POST_SEASON" | "DROP_PHASE" | "DRAFT_PHASE" | null;
+  draftMode?: "CONTINUING_REPLACEMENT" | "INAUGURAL_AUCTION" | null;
   isLocked: boolean;
   startsAt: Date | null;
   endsAt: Date | null;
@@ -69,6 +70,7 @@ function mapSeason(season: {
     name: season.name,
     status: season.status,
     leaguePhase: season.leaguePhase ?? deriveLeaguePhaseFromSeasonStatus(season.status),
+    draftMode: season.draftMode ?? "CONTINUING_REPLACEMENT",
     isLocked: season.isLocked,
     startsAt: season.startsAt?.toISOString() ?? null,
     endsAt: season.endsAt?.toISOString() ?? null,
@@ -83,6 +85,7 @@ const seasonSummarySelect = {
   name: true,
   status: true,
   leaguePhase: true,
+  draftMode: true,
   isLocked: true,
   startsAt: true,
   endsAt: true,
@@ -160,6 +163,7 @@ async function getSeasonOrThrow(
         name: string | null;
         status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
         leaguePhase?: "IN_SEASON" | "POST_SEASON" | "DROP_PHASE" | "DRAFT_PHASE" | null;
+        draftMode?: "CONTINUING_REPLACEMENT" | "INAUGURAL_AUCTION" | null;
         isLocked: boolean;
         startsAt: Date | null;
         endsAt: Date | null;
@@ -341,6 +345,15 @@ export const seasonService = {
 
     await getLeagueOrThrow(prisma, leagueId);
     await assertActingCommissionerForLeague(prisma, leagueId, input.actingUserId);
+    const previousSeason = await prisma.season.findFirst({
+      where: {
+        leagueId,
+        year: input.year - 1
+      },
+      select: {
+        id: true
+      }
+    });
 
     try {
       const season = await prisma.season.create({
@@ -349,7 +362,8 @@ export const seasonService = {
           year: input.year,
           name,
           status: "PLANNING",
-          leaguePhase: "DRAFT_PHASE"
+          leaguePhase: "DRAFT_PHASE",
+          draftMode: previousSeason ? "CONTINUING_REPLACEMENT" : "INAUGURAL_AUCTION"
         },
         select: seasonSummarySelect
       }).catch(async (error) => {
@@ -394,6 +408,7 @@ export const seasonService = {
       name: string | null;
       status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
       leaguePhase?: "IN_SEASON" | "POST_SEASON" | "DROP_PHASE" | "DRAFT_PHASE" | null;
+      draftMode?: "CONTINUING_REPLACEMENT" | "INAUGURAL_AUCTION" | null;
       isLocked: boolean;
       startsAt: Date | null;
       endsAt: Date | null;
@@ -442,6 +457,7 @@ export const seasonService = {
           name: string | null;
           status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
           leaguePhase?: "IN_SEASON" | "POST_SEASON" | "DROP_PHASE" | "DRAFT_PHASE" | null;
+          draftMode?: "CONTINUING_REPLACEMENT" | "INAUGURAL_AUCTION" | null;
           isLocked: boolean;
           startsAt: Date | null;
           endsAt: Date | null;

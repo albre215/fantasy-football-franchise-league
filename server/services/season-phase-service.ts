@@ -6,6 +6,7 @@ import type { DraftStatus } from "@/types/draft";
 import type {
   LeaguePhase,
   SeasonPhaseContext,
+  SeasonDraftMode,
   UpdateSeasonLeaguePhaseInput
 } from "@/types/season";
 
@@ -41,7 +42,7 @@ function deriveLeaguePhaseFromSeasonStatus(status: "PLANNING" | "ACTIVE" | "COMP
 function isMissingLeaguePhaseColumnError(error: unknown) {
   return (
     error instanceof Error &&
-    (error.message.includes("leaguePhase") ||
+    ((error.message.includes("leaguePhase") || error.message.includes("draftMode")) ||
       error.message.includes("column") ||
       error.message.includes("does not exist") ||
       error.message.includes("Unknown field"))
@@ -61,6 +62,17 @@ function mapAllowedActions(currentPhase: LeaguePhase): SeasonPhaseContext["allow
     canRunDraft: currentPhase === "DRAFT_PHASE",
     canEnterDropPhase: currentPhase === "POST_SEASON"
   };
+}
+
+function resolveDraftMode(
+  explicitDraftMode: SeasonDraftMode | null | undefined,
+  hasPreviousSeason: boolean
+): SeasonDraftMode {
+  if (explicitDraftMode) {
+    return explicitDraftMode;
+  }
+
+  return hasPreviousSeason ? "CONTINUING_REPLACEMENT" : "INAUGURAL_AUCTION";
 }
 
 function buildTransitionWarnings(
@@ -130,6 +142,7 @@ async function getSeasonPhaseBaseContext(seasonId: string) {
         name: string | null;
         status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
         leaguePhase?: LeaguePhase | null;
+        draftMode?: SeasonDraftMode | null;
         targetDraft: { id: string; status: DraftStatus } | null;
       }
     | null;
@@ -146,6 +159,7 @@ async function getSeasonPhaseBaseContext(seasonId: string) {
         name: true,
         status: true,
         leaguePhase: true,
+        draftMode: true,
         targetDraft: {
           select: {
             id: true,
@@ -169,6 +183,7 @@ async function getSeasonPhaseBaseContext(seasonId: string) {
         year: true,
         name: true,
         status: true,
+        draftMode: true,
         targetDraft: {
           select: {
             id: true,
@@ -194,14 +209,16 @@ async function getSeasonPhaseBaseContext(seasonId: string) {
   });
 
   const results = await resultsService.getSeasonResults(season.id);
-  const recommendation = previousSeason
+  const draftMode = resolveDraftMode(season.draftMode, Boolean(previousSeason));
+  const recommendation = previousSeason && draftMode === "CONTINUING_REPLACEMENT"
     ? await resultsService.getRecommendedOffseasonDraftOrder(previousSeason.id, season.id)
     : null;
 
   return {
     season: {
       ...season,
-      leaguePhase: season.leaguePhase ?? deriveLeaguePhaseFromSeasonStatus(season.status)
+      leaguePhase: season.leaguePhase ?? deriveLeaguePhaseFromSeasonStatus(season.status),
+      draftMode
     },
     recommendation,
     results
@@ -218,6 +235,7 @@ export const seasonPhaseService = {
         : null;
     const readiness: SeasonPhaseContext["readiness"] = {
       hasPreviousSeason: recommendation !== null,
+      usesInauguralAuction: season.draftMode === "INAUGURAL_AUCTION",
       hasFinalStandings: results.availability.hasFinalStandings,
       hasFantasyPayoutsPublished: results.availability.hasFantasyPayoutsPublished,
       draftOrderReady: dropPhaseContext?.hasUsableDraftOrder ?? recommendation?.readiness.isReady ?? false,
@@ -238,7 +256,9 @@ export const seasonPhaseService = {
       (currentPhase === "POST_SEASON" || currentPhase === "DROP_PHASE" || currentPhase === "DRAFT_PHASE")
         ? ["Fantasy payouts are not published to the ledger yet."]
         : []),
-      ...(!readiness.hasPreviousSeason && currentPhase !== "IN_SEASON"
+      ...(!readiness.hasPreviousSeason &&
+      season.draftMode !== "INAUGURAL_AUCTION" &&
+      currentPhase !== "IN_SEASON"
         ? ["The immediately previous season is missing, so offseason review is incomplete."]
         : []),
       ...((dropPhaseContext?.hasUsableDraftOrder ? [] : recommendation?.warnings) ?? []),
@@ -255,7 +275,8 @@ export const seasonPhaseService = {
         year: season.year,
         name: season.name,
         status: season.status,
-        leaguePhase: currentPhase
+        leaguePhase: currentPhase,
+        draftMode: season.draftMode
       },
       allowedActions: mapAllowedActions(currentPhase),
       readiness,

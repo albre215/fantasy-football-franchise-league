@@ -26,6 +26,11 @@ enum LeaguePhase {
   DRAFT_PHASE
 }
 
+enum SeasonDraftMode {
+  CONTINUING_REPLACEMENT
+  INAUGURAL_AUCTION
+}
+
 enum NFLConference {
   AFC
   NFC
@@ -149,6 +154,7 @@ model League {
   members       LeagueMember[]
   seasons       Season[]
   drafts        Draft[]
+  inauguralAuctions InauguralAuction[]
   ledgerEntries LedgerEntry[]
 }
 
@@ -170,6 +176,8 @@ model LeagueMember {
   sourceMappings   SeasonMemberSourceMapping[]
   ledgerEntries    LedgerEntry[]
   nflTeamResults   SeasonNflTeamResult[]
+  inauguralAuctionBids InauguralAuctionBid[]
+  inauguralAuctionAwards InauguralAuctionAward[]
 
   @@unique([leagueId, userId])
   @@index([userId])
@@ -183,6 +191,7 @@ model Season {
   fantasyPayoutConfig Json?
   status            SeasonStatus         @default(PLANNING)
   leaguePhase       LeaguePhase          @default(IN_SEASON)
+  draftMode         SeasonDraftMode      @default(CONTINUING_REPLACEMENT)
   isLocked          Boolean              @default(false)
   startsAt          DateTime?
   endsAt            DateTime?
@@ -200,6 +209,7 @@ model Season {
   ledgerEntries    LedgerEntry[]
   nflImportRuns    SeasonNflImportRun[]
   nflTeamResults   SeasonNflTeamResult[]
+  inauguralAuction InauguralAuction?
 
   @@unique([leagueId, year])
   @@index([leagueId, status])
@@ -235,6 +245,7 @@ model NFLTeam {
   teamOwnerships   TeamOwnership[]
   draftPicks       DraftPick[]
   keeperSelections KeeperSelection[]
+  inauguralAuctionNominations InauguralAuctionNomination[]
   seasonResults    SeasonNflTeamResult[] @relation("SeasonNflTeam")
   opponentResults  SeasonNflTeamResult[] @relation("SeasonNflOpponentTeam")
 }
@@ -256,6 +267,85 @@ model Draft {
   keeperSelections KeeperSelection[]
 
   @@index([leagueId, status])
+}
+
+model InauguralAuction {
+  id                  String                        @id @default(cuid())
+  leagueId            String
+  seasonId            String                        @unique
+  status              DraftStatus                   @default(PLANNING)
+  orderMethod         InauguralAuctionOrderMethod
+  currentNominationIndex Int                        @default(0)
+  clockStartedAt      DateTime?
+  clockExpiresAt      DateTime?
+  announcementAwardId String?
+  announcementEndsAt  DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
+  league              League                        @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  season              Season                        @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  nominationEntries   InauguralAuctionNomination[]
+  bids                InauguralAuctionBid[]
+  awards              InauguralAuctionAward[]
+
+  @@index([leagueId, status])
+}
+
+enum InauguralAuctionOrderMethod {
+  ALPHABETICAL
+  DIVISION
+  PREVIOUS_YEAR_RECORD
+}
+
+model InauguralAuctionNomination {
+  id         String            @id @default(cuid())
+  auctionId   String
+  nflTeamId   String
+  orderIndex  Int
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  auction     InauguralAuction  @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  nflTeam     NFLTeam           @relation(fields: [nflTeamId], references: [id], onDelete: Restrict)
+  bids        InauguralAuctionBid[]
+  award       InauguralAuctionAward?
+
+  @@unique([auctionId, orderIndex])
+  @@unique([auctionId, nflTeamId])
+  @@index([nflTeamId])
+}
+
+model InauguralAuctionBid {
+  id           String                     @id @default(cuid())
+  auctionId     String
+  nominationId  String
+  leagueMemberId String
+  amount        Int
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+  auction       InauguralAuction           @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  nomination    InauguralAuctionNomination @relation(fields: [nominationId], references: [id], onDelete: Cascade)
+  leagueMember  LeagueMember               @relation(fields: [leagueMemberId], references: [id], onDelete: Restrict)
+
+  @@index([auctionId, nominationId, amount])
+  @@index([leagueMemberId])
+}
+
+model InauguralAuctionAward {
+  id             String                     @id @default(cuid())
+  auctionId      String
+  nominationId   String                     @unique
+  leagueMemberId String
+  amount         Int
+  awardedAt      DateTime                   @default(now())
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  auction        InauguralAuction           @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  nomination     InauguralAuctionNomination @relation(fields: [nominationId], references: [id], onDelete: Cascade)
+  leagueMember   LeagueMember               @relation(fields: [leagueMemberId], references: [id], onDelete: Restrict)
+
+  @@index([auctionId, awardedAt])
+  @@index([leagueMemberId])
 }
 
 model DraftPick {

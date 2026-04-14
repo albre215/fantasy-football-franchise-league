@@ -126,6 +126,18 @@ const OffseasonDraftPanel = dynamic(
   }
 );
 
+const InauguralAuctionPanel = dynamic(
+  () => import("@/components/league/inaugural-auction-panel").then((mod) => mod.InauguralAuctionPanel),
+  {
+    loading: () => (
+      <TabPanelSkeleton
+        description="Loading inaugural auction room."
+        title="Inaugural Auction"
+      />
+    )
+  }
+);
+
 const SeasonNflPerformancePanel = dynamic(
   () => import("@/components/league/season-nfl-performance-panel").then((mod) => mod.SeasonNflPerformancePanel),
   {
@@ -903,8 +915,9 @@ export function LeagueDashboard({
   const lockState = bootstrapState?.lockReadiness.state ?? "NOT_READY";
   const assignedTeamsCount = bootstrapState?.assignedTeamCount ?? 0;
   const standingsSaved = resultsAvailability?.hasFinalStandings ?? false;
-  const draftExists = Boolean(draftState);
-  const draftStatus = draftState?.draft.status ?? "No draft";
+  const isInauguralAuctionSeason = activeSeason?.draftMode === "INAUGURAL_AUCTION";
+  const draftExists = isInauguralAuctionSeason ? null : Boolean(draftState);
+  const draftStatus = isInauguralAuctionSeason ? "Managed in inaugural auction room" : draftState?.draft.status ?? "No draft";
   const ownershipFinalized = isLocked && assignedTeamsCount === 30;
   const recommendedDraftOrderReady = resultsAvailability?.isReadyForDraftOrderAutomation ?? false;
   const currentLeaguePhase = seasonPhaseContext?.season.leaguePhase ?? activeSeason?.leaguePhase ?? null;
@@ -921,6 +934,8 @@ export function LeagueDashboard({
     ? "Finish assigning active-season NFL teams before moving on."
     : !standingsSaved
     ? "Save final standings to unlock next season's draft-order logic."
+    : isInauguralAuctionSeason && assignedTeamsCount < 30
+    ? "Configure and run the inaugural auction until all 30 awarded teams are finalized."
     : draftState?.draft.status === "PLANNING"
     ? "Complete keeper selections and start the offseason draft when the order looks right."
     : draftState?.draft.status === "ACTIVE"
@@ -940,6 +955,9 @@ export function LeagueDashboard({
       : null,
     hasActiveSeason && !standingsSaved
       ? "Final standings are still missing for the active season."
+      : null,
+    isInauguralAuctionSeason && assignedTeamsCount < 30
+      ? "The inaugural auction must finish with 30 awarded teams and exactly two NFL teams left unassigned."
       : null,
     draftState?.draft.status === "PLANNING"
       ? "Save two keepers for each owner before starting the draft."
@@ -1033,7 +1051,16 @@ export function LeagueDashboard({
             ) : null}
 
             {viewMode === "owner" ? (
-              <LeagueOwnerPanel activeSeason={activeSeason} leagueName={bootstrapState.league.name} />
+              <div className="space-y-6">
+                <LeagueOwnerPanel activeSeason={activeSeason} leagueName={bootstrapState.league.name} />
+                {activeSeason?.draftMode === "INAUGURAL_AUCTION" ? (
+                  <InauguralAuctionPanel
+                    activeSeason={activeSeason}
+                    description="Bid live from the owner view while the inaugural season is being assigned."
+                    title="Live Auction Room"
+                  />
+                ) : null}
+              </div>
             ) : null}
 
             {viewMode === "commissioner" && activeTab === "overview" ? (
@@ -1092,7 +1119,10 @@ export function LeagueDashboard({
                         {resultsAvailability?.hasFantasyPayoutsPublished ? "Yes" : "No"}
                       </p>
                       <p>
-                        <span className="font-semibold text-foreground">Draft exists:</span> {draftExists ? "Yes" : "No"}
+                        <span className="font-semibold text-foreground">
+                          {isInauguralAuctionSeason ? "Auction room:" : "Draft exists:"}
+                        </span>{" "}
+                        {isInauguralAuctionSeason ? "See Results & Draft tab" : draftExists ? "Yes" : "No"}
                       </p>
                       <p>
                         <span className="font-semibold text-foreground">Draft status:</span> {draftStatus}
@@ -1105,8 +1135,10 @@ export function LeagueDashboard({
                         {ownershipFinalized ? "Yes" : "No"}
                       </p>
                       <p>
-                        <span className="font-semibold text-foreground">Ledger-based draft order ready:</span>{" "}
-                        {recommendedDraftOrderReady ? "Yes" : "No"}
+                        <span className="font-semibold text-foreground">
+                          {isInauguralAuctionSeason ? "Auction ownership progress:" : "Ledger-based draft order ready:"}
+                        </span>{" "}
+                        {isInauguralAuctionSeason ? `${assignedTeamsCount} / 30 awarded` : recommendedDraftOrderReady ? "Yes" : "No"}
                       </p>
                       <p>
                         <span className="font-semibold text-foreground">Ledger coverage:</span>{" "}
@@ -1115,7 +1147,7 @@ export function LeagueDashboard({
                       <p>
                         <span className="font-semibold text-foreground">Owners with ledger entries:</span>{" "}
                         {resultsAvailability?.draftOrderReadiness.ownersWithLedgerEntries ?? 0} /{" "}
-                        {resultsAvailability?.eligibleMembers?.length ?? 0}
+                        {members.length}
                       </p>
                     </div>
                     <div className="rounded-lg border border-dashed border-border p-4">
@@ -1678,14 +1710,21 @@ export function LeagueDashboard({
                   <CardHeader>
                     <CardTitle>Results & Draft Workflow</CardTitle>
                     <CardDescription>
-                      Move through the annual sequence from final standings to draft order to the offseason draft.
+                      {activeSeason?.draftMode === "INAUGURAL_AUCTION"
+                        ? "Move from final standings into the inaugural auction room for brand-new league ownership."
+                        : "Move through the annual sequence from final standings to draft order to the offseason draft."}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="flex flex-wrap gap-2">
                     {[
                       { id: "final-standings", label: "Final Standings" },
-                      { id: "offseason-draft", label: "Offseason Draft" },
-                      { id: "commissioner-overrides", label: "Commissioner Overrides" }
+                      {
+                        id: "offseason-draft",
+                        label: activeSeason?.draftMode === "INAUGURAL_AUCTION" ? "Inaugural Auction" : "Offseason Draft"
+                      },
+                      ...(activeSeason?.draftMode === "INAUGURAL_AUCTION"
+                        ? []
+                        : [{ id: "commissioner-overrides", label: "Commissioner Overrides" }])
                     ].map((tab) => (
                       <Button
                         key={tab.id}
@@ -1718,24 +1757,28 @@ export function LeagueDashboard({
                 ) : null}
 
                 {activeResultsDraftTab === "offseason-draft" ? (
-                  <OffseasonDraftPanel
-                    leagueId={leagueId}
-                    leagueCode={bootstrapState?.league.leagueCode ?? null}
-                    activeSeason={activeSeason}
-                    accessMessage={commissionerAccessMessage}
-                    canManageDraft={canManageLeague}
-                    draftState={draftState}
-                    isDraftStateLoading={isLoading && hasActiveSeason && !draftState}
-                    isSubmitting={isSubmitting}
-                    members={members}
-                    onEndSubmit={() => setIsSubmitting(false)}
-                    onError={(message) => setErrorMessage(message || null)}
-                    onRefresh={() => refreshLeagueDashboard(leagueId, { includeOperationalData: true })}
-                    onStartSubmit={() => setIsSubmitting(true)}
-                    onSuccess={(message) => setSuccessMessage(message || null)}
-                    phaseContext={seasonPhaseContext}
-                    seasons={seasons}
-                  />
+                  activeSeason?.draftMode === "INAUGURAL_AUCTION" ? (
+                    <InauguralAuctionPanel activeSeason={activeSeason} />
+                  ) : (
+                    <OffseasonDraftPanel
+                      leagueId={leagueId}
+                      leagueCode={bootstrapState?.league.leagueCode ?? null}
+                      activeSeason={activeSeason}
+                      accessMessage={commissionerAccessMessage}
+                      canManageDraft={canManageLeague}
+                      draftState={draftState}
+                      isDraftStateLoading={isLoading && hasActiveSeason && !draftState}
+                      isSubmitting={isSubmitting}
+                      members={members}
+                      onEndSubmit={() => setIsSubmitting(false)}
+                      onError={(message) => setErrorMessage(message || null)}
+                      onRefresh={() => refreshLeagueDashboard(leagueId, { includeOperationalData: true })}
+                      onStartSubmit={() => setIsSubmitting(true)}
+                      onSuccess={(message) => setSuccessMessage(message || null)}
+                      phaseContext={seasonPhaseContext}
+                      seasons={seasons}
+                    />
+                  )
                 ) : null}
 
                 {activeResultsDraftTab === "commissioner-overrides" ? (

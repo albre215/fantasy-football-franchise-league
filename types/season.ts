@@ -1,6 +1,7 @@
 import type { DraftStatus } from "@/types/draft";
 
 export type LeaguePhase = "IN_SEASON" | "POST_SEASON" | "DROP_PHASE" | "DRAFT_PHASE";
+export type SeasonDraftMode = "CONTINUING_REPLACEMENT" | "INAUGURAL_AUCTION";
 
 export interface SeasonSummary {
   id: string;
@@ -9,6 +10,7 @@ export interface SeasonSummary {
   name: string | null;
   status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
   leaguePhase: LeaguePhase;
+  draftMode: SeasonDraftMode;
   isLocked: boolean;
   startsAt: string | null;
   endsAt: string | null;
@@ -115,6 +117,7 @@ export interface SeasonPhaseContext {
     name: string | null;
     status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
     leaguePhase: LeaguePhase;
+    draftMode: SeasonDraftMode;
   };
   allowedActions: {
     canReviewResults: boolean;
@@ -129,6 +132,7 @@ export interface SeasonPhaseContext {
   };
   readiness: {
     hasPreviousSeason: boolean;
+    usesInauguralAuction: boolean;
     hasFinalStandings: boolean;
     hasFantasyPayoutsPublished: boolean;
     draftOrderReady: boolean;

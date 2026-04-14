@@ -1,192 +1,126 @@
-# Current State and Completed Prompts
+# Current State and Completed Work
 
-This file summarizes the repo as it exists after Phases 1 through 10.5 plus the recent membership-management and UX fixes.
+This file summarizes the repo as it exists on `main` after the recent authentication, account, and commissioner-console UI work.
 
-## Earlier Prompt Baseline
+## Major Product Areas Already Implemented
 
 ### League bootstrap
 - league creation and joining
+- home landing page with `My Leagues`
+- unified league entry through `Open League`
 - season creation and active-season management
-- league member add workflow
-- commissioner-driven member replacement that preserves slot history
-- season setup validation
-- lock / unlock workflow
+- season lock / unlock workflow
+- season year editing
 
-### History / analytics
-- league overview
-- franchise history
-- owner history
-- draft history
-- analytics leaderboards and summaries
+### Membership management
+- commissioner can add members
+- commissioner can replace a non-commissioner member
+- replacement preserves the existing `LeagueMember` slot and its history
+- the Members tab uses a modal-based replacement flow
 
-### Manual standings + auth
-- commissioner-entered final standings
-- standings overwrite flow
-- credentials authentication through NextAuth
-- session-derived acting user on mutation routes
+### Ownership
+- active-season team ownership assignment / removal
+- season lock awareness
+- season-backed ownership reads
 
-## Phase 1 - Ledger Engine
-
-### What Landed
-- persisted `LedgerEntry`
-- season ledger routes and UI
-- commissioner manual adjustments
-- season balance aggregation by owner
-
-## Phase 2 - NFL Performance Engine
-
-### What Landed
+### NFL performance
 - provider-backed NFL result imports
-- season/year-based NFL import flow
-- automatic active-season imports
+- automatic import for the active season
+- weekly NFL review
+- commissioner corrections
 - season import history
-- owner-level NFL rollups from owned teams
-- commissioner weekly review / correction tools
+- owner NFL rollups
 
-### Current Notes
-- manual corrections survive provider re-imports
-- imports are concurrency-guarded by season
+### Fantasy results and ledger
+- manual final fantasy standings save / overwrite
+- fantasy payout posting into `LedgerEntry`
+- season ledger balances
+- owner ledger detail
+- commissioner manual adjustments
+- NFL results -> ledger posting
 
-## Phase 3 - Fantasy Results -> Ledger Integration
+### Offseason workflow
+- persisted league phases
+- explicit `DROP_PHASE` keeper / release workflow
+- ledger-based replacement-draft recommendation
+- replacement draft lifecycle
+- draft finalization into target-season `TeamOwnership`
 
-### What Landed
-- final fantasy standings remain stored in `SeasonStanding`
-- saved standings publish `FANTASY_PAYOUT` ledger entries
-- standings corrections safely replace fantasy payout ledger entries
-
-## Phase 4 - Offseason Draft Order From Ledger Totals
-
-### What Landed
-- recommended offseason draft order now derives from season ledger totals
-- source-season owners map into the target season by `userId`
-- deterministic tie-breaks:
-  - lower ledger total first
-  - worse fantasy rank first if tied
-  - display name ordering as final fallback
-
-### Hardening That Landed
-- clearer recommendation naming
-- stronger recommendation tests
-- readiness / coverage transparency
-- explicit tie-break output
-
-## Phase 5 - League Phase System
-
-### What Landed
-- persisted `Season.leaguePhase`
-- supported phases:
-  - `IN_SEASON`
-  - `POST_SEASON`
-  - `DROP_PHASE`
-  - `DRAFT_PHASE`
-- service-owned phase context, warnings, readiness, and transitions
-- phase-gated draft preparation and execution
-
-## Phase 6 - Real DROP_PHASE Keeper / Release Workflow
-
-### What Landed
-- `DROP_PHASE` now records exactly 2 keepers and 1 released team per owner
-- released-team pool is explicit and league-wide reviewable
-- transition into `DRAFT_PHASE` depends on valid keeper / release completion
-
-## Phase 7 - Owner-Facing Read-Only Views
-
-### What Landed
-- `/owner` route and read-only owner dashboard
-- owner season detail
-- owner financial rollups
+### History and analytics
+- league overview
 - owner history
-- read-only draft and phase context
+- franchise history
+- draft history
+- analytics views
+- shared analytics metric dictionary in `docs/05-analytics-metric-definitions.md`
 
-## Phase 8 - Replacement Draft System
+### Auth and recovery
+- credentials sign-in
+- account registration
+- editable account settings
+- password change from account settings
+- password reset request / validate / complete flow
+- Resend-backed password reset email delivery
+- temporary phone login request + verify flow
+- Twilio Verify integration for provider-mode phone verification
+- local preview modes for dev only
+- preview modes blocked in production
+- recovery hardening:
+  - request throttling
+  - challenge attempt tracking
+  - temporary challenge lockout/invalidation
+  - neutral password-reset request responses
 
-### What Landed
-- replacement draft pool derives only from the explicit released-team pool
-- ledger-based offseason recommendation still drives draft order
-- one replacement draft pick per owner
-- duplicate or non-pool team picks are rejected
-- replacement draft execution remains gated by `DRAFT_PHASE`
-- finalization writes exactly 3 authoritative `TeamOwnership` rows per owner into the target season
+### Account/profile UX
+- account settings page
+- editable display name / email / phone
+- phone auto-formatting
+- profile picture upload with circular framing
+- shared profile avatars across major league surfaces
+- account icon available in the shared hero treatment across pages
 
-## Phase 9 - NFL Results -> Ledger Automation
-
-### What Landed
-- persisted NFL team results can be previewed as owner-level ledger rollups
-- commissioners can post NFL-derived ledger entries explicitly
-- reruns safely replace only prior NFL-derived entries for the same season
-
-## Phase 10 - Analytics & Insights Layer
-
-### What Landed
-- richer owner analytics
-- richer franchise analytics
-- season payout and parity analytics
-- draft slot and replacement-draft effectiveness analytics
-
-## Phase 10.5 - Analytics Definitions Hardening
-
-### What Landed
-- explicit metric-definition comments in `analytics-service.ts`
-- clarified analytics DTO documentation in `types/analytics.ts`
-- standardized analytics UI wording
-- dedicated analytics data dictionary in `docs/05-analytics-metric-definitions.md`
-
-## Additional Hardening / Error Resolution Already Landed
-
-### Load / speed work
-- homepage and league page server rendering improved
-- heavy dashboard panels are lazy-loaded
-- active-season operational fetches are deferred
-
-### Season-backed error hardening
-- season/ownership/ledger/results/NFL paths were tightened to avoid broad season reads
-- local Prisma schema mismatch issues around `leaguePhase` were repaired
-- duplicate Phase 5 migration was removed
-- local migration history and DB schema were brought back into sync
-
-### Recent membership-management hardening
-- member replacement now preserves the existing `LeagueMember` slot and its full historical references
-- the Members tab now uses a modal-based replacement flow instead of an always-visible side panel
-- selected member rows now show a clearer active state during replacement
-- commissioner rows are explicitly non-replaceable in the UI
+### Unified league workspace UX
+- commissioner and owner views are combined into one league route
+- commissioners can toggle between the two views in-page
+- the commissioner hero now matches the simpler home/account style
+- overview panel layout has been cleaned up and simplified
 
 ## Current Commissioner Workflow
 
 1. Sign in or create an account
-2. Create league and members
-3. Create seasons and set active season
-4. Manage season ownership and lock state
+2. Create or open a league from home
+3. Create seasons and set the active season
+4. Manage members and active-season ownership
 5. Let active-season NFL results import automatically
-6. Save final standings for the completed season
+6. Save final fantasy standings for the completed season
 7. Publish fantasy payouts into the ledger
-8. Review the ledger-based offseason recommendation for the next season
-9. Move the target season through league phases
+8. Review the ledger-based replacement-draft recommendation
+9. Move the target season through phases as needed
 10. In `DROP_PHASE`, save 2 keepers and review the released-team pool
-11. Move into `DRAFT_PHASE`
-12. Start the replacement draft
-13. Record one released-team pick per owner
-14. Finalize the draft into target-season ownership
-15. Review owner views, history, analytics, NFL performance, and ledger balances
+11. In `DRAFT_PHASE`, run the replacement draft
+12. Finalize the draft into target-season ownership
+13. Review owner view, ledger, history, and analytics
 
-## Current State Summary
+## Current Source-of-Truth Summary
+- `TeamOwnership` = ownership truth
+- `SeasonStanding` = final fantasy standings truth
+- `LedgerEntry` = money truth
+- `Season.leaguePhase` = workflow truth
+- `LeagueMember` = durable slot truth inside a league
+- `User` = current person attached to that slot
 
-The repo currently supports:
-- real user authentication
-- season bootstrap
-- durable member-slot management with commissioner replacement
-- team ownership management
-- automatic NFL result imports for the active season
-- manual final standings entry
-- fantasy payouts posted into the ledger
-- ledger-based offseason draft recommendation
-- explicit league phase workflow
-- real DROP_PHASE keeper / release workflow
-- replacement draft lifecycle
-- owner-facing read-only views
-- season ledger UI and adjustments
-- historical ownership and draft analytics
+## Important Recent Hardening / UX Improvements
+- member replacement preserves slot history
+- auth recovery uses provider-backed delivery
+- temporary login challenges are throttled and attempt-limited
+- password reset request responses are safer against account enumeration
+- home page and league page entry paths were simplified
+- commissioner and owner dashboards were unified
+- account/profile avatar coverage expanded across major league panels
+- commissioner overview UI was simplified for clearer handoff/review
 
-The repo does not yet support:
-- inaugural auction behavior
+## What The Repo Does Not Yet Support
+- inaugural auction / empty-league entry behavior
+- configurable entry fees and payout settings end to end
 - owner-facing draft actions
-- password reset / email verification
+- broader constrained-session semantics for temporary recovery login

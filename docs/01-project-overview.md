@@ -6,11 +6,11 @@ GM Fantasy
 ## What This App Is For
 GM Fantasy is a commissioner-first web application for running a long-lived fantasy football league where owners control NFL franchises instead of fantasy player rosters.
 
-The application is built around preserving historical league state:
-- which owner controlled which NFL teams in each season
+The app is designed around preserving league history:
+- which owner slot controlled which NFL teams in each season
 - how final fantasy standings finished each season
-- how season money results accumulated in the ledger
-- how offseason keeper and draft decisions changed ownership
+- how money accumulated in the ledger
+- how offseason keeper and replacement-draft decisions changed ownership
 - how those records feed history, analytics, and future automation
 
 ## Core League Concept
@@ -26,21 +26,21 @@ The application is built around preserving historical league state:
 1. In-season operations
 - a season is active and typically in `IN_SEASON`
 - NFL results import automatically for the active season
-- commissioner can review or correct weekly NFL outcomes if needed
+- the commissioner can review or correct weekly NFL outcomes if needed
 
-2. End-of-season results
-- the commissioner manually records the final 1st through 10th place fantasy standings
+2. End-of-season fantasy results
+- the commissioner manually records final 1st through 10th place fantasy standings
 - `SeasonStanding` remains the final fantasy-history truth
 
 3. Financial posting
 - fantasy placements are converted into `FANTASY_PAYOUT` ledger entries
-- NFL-side season results also contribute to owner-level money outcomes
+- NFL-side season results can also contribute to owner-level money outcomes
 - `LedgerEntry` is the money truth for the season
 
 4. Offseason recommendation
-- the next offseason draft recommendation is derived from the immediately previous season's total ledger winnings
+- the next offseason replacement-draft recommendation is derived from the immediately previous season's total ledger winnings
 - order runs from lowest total winnings to highest total winnings
-- standings are used only as a deterministic tie-break fallback
+- fantasy standings are used only as deterministic tie-break support
 
 5. League phase progression
 - the target season moves through explicit workflow phases:
@@ -48,6 +48,8 @@ The application is built around preserving historical league state:
   - `POST_SEASON`
   - `DROP_PHASE`
   - `DRAFT_PHASE`
+- these phases are part of the app's workflow engine and service logic
+- the product direction is for phase mechanics to stay mostly in the background rather than becoming user-facing clutter
 
 6. DROP_PHASE keeper / release workflow
 - in `DROP_PHASE`, each owner keeps exactly 2 teams from the previous season
@@ -61,7 +63,7 @@ The application is built around preserving historical league state:
 
 8. History and analytics
 - historical ownership, ledger, standings, and draft records remain queryable for history and analytics
-- analytics metrics are read-only derived views and now have a shared metric dictionary
+- analytics metrics are read-only derived views and have a shared metric dictionary
 
 ## Current Stack
 - Next.js 14 App Router
@@ -70,6 +72,8 @@ The application is built around preserving historical league state:
 - Prisma
 - PostgreSQL / Neon-style hosted Postgres via `DATABASE_URL`
 - NextAuth credentials authentication
+- Resend for password reset email delivery
+- Twilio Verify for temporary phone verification login
 - Node.js
 
 ## Product Goals
@@ -78,10 +82,10 @@ The application is built around preserving historical league state:
 - stable member-slot continuity even when the person in that slot changes
 - franchise ownership tracking
 - season financial tracking
-- offseason keeper and draft management
+- offseason keeper and replacement-draft management
 - league lifecycle control through phases
 - historical analytics
-- real authentication and safer mutation access
+- real authentication and safer recovery flows
 
 ## Current Philosophy
 - preserve clean domain boundaries
@@ -92,15 +96,22 @@ The application is built around preserving historical league state:
 - keep `LedgerEntry` as the authoritative source of money / winnings
 - keep `Season.leaguePhase` as workflow state
 - keep offseason records historically queryable through `Draft`, `DraftPick`, and `KeeperSelection`
+- keep routes thin and services authoritative
 
 ## Current Product Direction
-The current app favors a commissioner-driven workflow over external integrations:
-- final fantasy standings are entered manually
-- NFL results are provider-backed and imported automatically for the active season
-- fantasy payouts are posted into the ledger from saved standings
-- offseason draft order is derived from previous-season ledger totals
-- offseason workflow is explicitly gated by persisted league phases
-- league members are managed as durable league slots, and commissioner-driven member replacement preserves that slot's history
-- analytics definitions are standardized in `docs/05-analytics-metric-definitions.md`
+The current app favors commissioner-driven league operations with cleaner UI surfaces:
+- the home page is the main authenticated landing page
+- `My Leagues` is the single entry point into leagues
+- `Open League` launches a unified league workspace
+- commissioners can toggle between commissioner view and owner view inside the same league page
+- separate home-page owner-link navigation has been removed
+
+The app also now includes:
+- editable account settings
+- profile picture upload with circular framing
+- shared profile avatars across major league surfaces
+- password reset by email
+- temporary login by phone verification
+- provider-backed recovery delivery with local preview mode reserved for development only
 
 Provider-based ingestion code still exists in the repo, but manual standings remain the primary fantasy-results workflow.

@@ -7,20 +7,30 @@ Next.js App Router pages and API routes.
 
 Important areas:
 - `app/page.tsx`
-  - home page / auth entry point
+  - home page / auth entry point / league launcher
 - `app/league/page.tsx`
-  - main commissioner dashboard route
+  - unified league workspace route
+- `app/account/page.tsx`
+  - account settings page
+- `app/reset-password/page.tsx`
+  - password reset completion page
 - `app/api/`
-  - auth, league, season, ownership, results, ledger, NFL, draft, phase, history, and analytics routes
+  - auth, account, league, season, ownership, results, ledger, NFL, draft, phase, history, and analytics routes
 
 ### `components/`
 React UI components.
 
 Important areas:
 - `components/home/`
-  - sign-in, registration, and league entry UI
+  - sign-in, registration, recovery, and home landing UI
+- `components/account/`
+  - account settings form and password reset modal UI
 - `components/league/`
-  - commissioner-facing dashboard panels
+  - commissioner-facing and owner-facing league panels
+- `components/brand/`
+  - shared hero/account slot brand surfaces
+- `components/shared/`
+  - shared avatar and NFL label UI
 - `components/providers/`
   - session provider wrapper
 - `components/ui/`
@@ -42,7 +52,7 @@ Service-layer business logic.
 
 Important area:
 - `server/services/`
-  - central domain services for auth, league management, seasons, ownership, results, ledger, NFL performance, draft flow, history, and analytics
+  - central domain services for auth, auth recovery, account, league management, seasons, ownership, results, ledger, NFL performance, draft flow, history, and analytics
 
 ### `types/`
 Typed request/response and domain contracts shared across services, routes, and UI.
@@ -66,18 +76,21 @@ Represents a person in the system.
 Used for:
 - authenticated identity
 - credentials login
+- password reset and temporary login recovery
+- profile image storage
 - cross-season identity continuity via `userId`
 
 ### `League`
 Root league record.
 
 ### `LeagueMember`
-Represents a user's membership in a league.
+Represents a membership slot inside a league.
 
 Important notes:
 - unique per `(leagueId, userId)`
 - role is `COMMISSIONER` or `OWNER`
-- cross-season continuity should prefer `userId`, not raw `LeagueMember.id`
+- should be treated as the durable slot inside the league
+- member replacement preserves the `LeagueMember` slot and swaps the attached `User`
 
 ### `Season`
 Represents a league season.
@@ -88,7 +101,7 @@ Important notes:
 - has `isLocked`
 - has `fantasyPayoutConfig`
 - has persisted `leaguePhase`
-- active season drives the commissioner dashboard
+- active season drives the league workspace
 
 ### `NFLTeam`
 Catalog of NFL teams.
@@ -114,6 +127,21 @@ Critical rule:
 ### `Draft`, `DraftPick`, `KeeperSelection`
 Historical offseason workflow records.
 
+### `PasswordResetToken`
+Password reset token model.
+
+Important notes:
+- token hash is persisted, not the raw token
+- token is single-use through `consumedAt`
+
+### `TemporaryLoginCode`
+Temporary phone-login challenge model.
+
+Important notes:
+- stores the local or Twilio-backed challenge anchor
+- now includes attempt-tracking and lockout fields
+- verification challenges are single-use through `consumedAt`
+
 ### `SeasonNflImportRun`, `SeasonNflTeamResult`
 Persisted NFL import and team-result tracking.
 
@@ -125,10 +153,30 @@ Additional ingestion-related models still present in the schema.
 ### `server/services/auth-service.ts`
 - registration
 - password hashing
-- user-claim behavior
+- user creation
+
+### `server/services/auth-recovery-service.ts`
+- password reset token generation / validation / completion
+- temporary login challenge creation
+- temporary login verification
+- recovery throttling, one-time-use semantics, and verification attempt hardening
+
+### `server/services/recovery-delivery-service.ts`
+- provider boundary for recovery delivery
+- Resend password reset email integration
+- Twilio Verify SMS send/check integration
+- preview-mode behavior for local development
+- preview-mode production safety rails
+
+### `server/services/account-service.ts`
+- account profile read/update
+- email update validation
+- password change validation
+- profile image persistence
 
 ### `server/services/league-service.ts`
 - create/join leagues
+- home-page league listing
 - dashboard/bootstrap summary state
 - league-level commissioner access
 - durable member-slot management
@@ -188,11 +236,20 @@ Additional ingestion-related models still present in the schema.
 ### Auth routes
 - `app/api/auth/[...nextauth]`
 - `app/api/auth/register`
+- `app/api/auth/recovery/password/request`
+- `app/api/auth/recovery/password/validate`
+- `app/api/auth/recovery/password/complete`
+- `app/api/auth/recovery/temporary-login/request`
+
+### Account routes
+- `app/api/account`
+- `app/api/account/password`
 
 ### League routes
 - `app/api/league/create`
 - `app/api/league/join`
 - `app/api/league/list`
+- `app/api/league/join/suggestions`
 - `app/api/league/[leagueId]/...`
 - includes member replacement at `app/api/league/[leagueId]/members/replace`
 
@@ -244,11 +301,38 @@ Additional ingestion-related models still present in the schema.
 ### `components/home/league-control-panel.tsx`
 Home-screen auth and league entry experience.
 
-### `components/league/league-dashboard.tsx`
-Main commissioner console with the major operational tabs.
+Important notes:
+- sign-in and create-account live here
+- forgot-password and temporary phone-login recovery modal lives here
+- join-league suggestions live here
 
-Important note:
-- the Members tab now uses a modal-based member replacement flow rather than an always-visible side panel
+### `components/home/account-menu.tsx`
+Top-right account control with home-page greeting animation.
+
+### `components/account/account-settings-form.tsx`
+Account settings UI.
+
+Important notes:
+- editable display name, email, phone
+- phone formatting assistance
+- profile picture upload + circular framing
+- reset-password modal flow
+
+### `components/shared/profile-avatar.tsx`
+Reusable avatar component used across account, commissioner, and owner UI.
+
+### `components/league/league-dashboard.tsx`
+Unified league workspace.
+
+Important notes:
+- `Open League` is the main entry path
+- commissioners land in commissioner view
+- commissioners can toggle between commissioner and owner view inside the same page
+- the overview hero has been simplified to match home/account styling
+- the overview card layout was recently cleaned up for handoff-friendly UI
+
+### `components/league/league-owner-panel.tsx`
+Read-only owner view embedded inside the unified league workspace.
 
 ### `components/league/season-results-panel.tsx`
 Manual standings + fantasy payout review UI.
@@ -263,35 +347,41 @@ NFL import/status, weekly review, and commissioner correction UI.
 Season ledger balances, owner detail, and manual adjustment UI.
 
 ### `components/league/commissioner-tools-panel.tsx`
-Commissioner-facing results/draft recommendation review.
+Commissioner-facing state and workflow support sections.
 
 ### `components/league/league-history-panel.tsx`
 History and analytics UI.
 
 ## Current Data Flow
 
-### 1. Season Bootstrap
-Commissioner opens the dashboard, loads bootstrap state, seasons, and season-backed operational data as needed, then manages members, seasons, ownership, and lock state.
+### 1. Home + Auth
+User signs in or registers from the home page, opens a league from `My Leagues`, or uses recovery flows when needed.
+
+### 2. Recovery
+Password reset remains email-first. Temporary login uses phone verification as a convenience path, not the primary recovery truth.
+
+### 3. League Workspace
+Commissioner opens a league from home, loads bootstrap state, seasons, and season-backed operational data as needed, then manages members, seasons, ownership, results, ledger, NFL, and history in one workspace.
 
 Membership-specific rule:
 - member replacement preserves the existing `LeagueMember` slot and its historical references while swapping the linked `User`
 
-### 2. NFL Performance
+### 4. NFL Performance
 Active-season NFL results import automatically, persist into season-scoped NFL tables, and roll up to owner views. Commissioner can correct weekly outcomes manually.
 
-### 3. Final Standings + Fantasy Payouts
+### 5. Final Standings + Fantasy Payouts
 Commissioner saves final standings into `SeasonStanding`, then fantasy payouts are published into `LedgerEntry`.
 
-### 4. Offseason Draft Recommendation
+### 6. Offseason Draft Recommendation
 The immediately previous season's ledger totals are aggregated per owner, tied deterministically, mapped into the target season by `userId`, and returned as the recommended offseason draft order.
 
-### 5. League Phase Control
-`seasonPhaseService` exposes current phase, allowed actions, warnings, readiness, and valid forward transitions.
+### 7. League Phase Control
+`seasonPhaseService` exposes current phase, allowed actions, warnings, readiness, and valid forward transitions. The domain engine uses phases heavily; recent UI work has reduced phase-heavy wording in commissioner overview surfaces.
 
-### 6. Offseason Replacement Draft Lifecycle
+### 8. Offseason Replacement Draft Lifecycle
 In `DROP_PHASE`, keepers and released teams become explicit and reviewable. In `DRAFT_PHASE`, the replacement draft runs from the released-team pool using the ledger-based order, and finalization writes authoritative target-season `TeamOwnership`.
 
-### 7. History / Analytics
+### 9. History / Analytics
 Read-only server-side history and analytics aggregate ownership, standings, ledger, and draft records. Metric definitions are standardized in `docs/05-analytics-metric-definitions.md`.
 
 ## Architectural Boundaries To Preserve
@@ -305,7 +395,7 @@ Read-only server-side history and analytics aggregate ownership, standings, ledg
 - services stay authoritative
 
 ## Known Technical Caveats
-- credentials auth exists, but password reset and email verification do not
 - Windows can lock Prisma/Git files while `next dev` is running
 - stop `npm run dev` before Prisma migration/generate work on this machine
 - local migration history was repaired recently; do not casually accept Prisma reset prompts against a populated local DB
+- recovery providers require real env configuration; without that, local preview mode is used in development only
