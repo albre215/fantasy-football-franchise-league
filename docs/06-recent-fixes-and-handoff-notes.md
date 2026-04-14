@@ -9,6 +9,17 @@ Use this file as the quickest "what just changed?" reference.
 
 ## Most Recent Product / UX Changes
 
+### Inaugural auction path
+- inaugural seasons now use a live inaugural auction instead of the continuing-league replacement draft flow
+- season `draftMode` distinguishes inaugural vs continuing workflow
+- the auction room is embedded in the shared league workspace for commissioners and owners
+- final inaugural ownership still persists only into `TeamOwnership`
+
+### Season creation cleanup
+- newly created seasons now become active automatically
+- create-season year defaults follow the GM Fantasy post-Super-Bowl rollover rule
+- Seasons tab cards no longer show the extra phase/status/helper copy that was cluttering the UI
+
 ### Home + league entry cleanup
 - `My Leagues` is the main home-page league launcher
 - duplicate `Open League Hub` flow was removed
@@ -25,6 +36,10 @@ Use this file as the quickest "what just changed?" reference.
 - overview cards were cleaned up and reduced in verbosity
 - current-state and next-action data were combined into one panel
 - dashboard-view toggle placement was standardized at the bottom
+
+### Hydration / error cleanup
+- fixed a league dashboard hydration error caused by rendering `ProfileAvatar` inside a `<p>`
+- the invalid nesting produced the recent bottom-right Next.js overlay errors on the league page
 
 ### Account settings and profile UX
 - account page was visually aligned with the home/league hero system
@@ -84,9 +99,12 @@ Use this file as the quickest "what just changed?" reference.
   - `server/services/league-service.ts`
   - `components/league/league-dashboard.tsx`
   - `components/league/commissioner-tools-panel.tsx`
+  - `components/league/inaugural-auction-panel.tsx`
+  - `server/services/inaugural-auction-service.ts`
 
 ## Local Environment Notes
 - Windows Git/Prisma locking still happens on this machine
 - stop `npm run dev` before Prisma migration/generate work
 - do not casually accept destructive Prisma reset prompts against a populated DB
 - real recovery delivery requires valid provider env vars in `.env`
+- if a task is being handed off from the current checkout rather than `main`, mention the active branch explicitly because recent fixes may live on a feature branch before merge

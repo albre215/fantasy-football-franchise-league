@@ -56,10 +56,10 @@ The app is designed around preserving league history:
 - each owner explicitly releases exactly 1 team
 - the released-team pool becomes reviewable league-wide before the draft starts
 
-7. Replacement draft execution
-- in `DRAFT_PHASE`, the commissioner runs a one-pick-per-owner replacement draft
-- the draft pool comes only from the explicit released-team pool
-- finalizing the draft creates the authoritative `TeamOwnership` rows for the target season
+7. Ownership assignment execution
+- continuing leagues use the keeper / replacement-draft flow in `DRAFT_PHASE`
+- inaugural leagues use a live inaugural auction with budgets, nomination order, timed bidding, and award finalization
+- both paths end by writing the authoritative target-season `TeamOwnership` rows
 
 8. History and analytics
 - historical ownership, ledger, standings, and draft records remain queryable for history and analytics
@@ -113,5 +113,8 @@ The app also now includes:
 - password reset by email
 - temporary login by phone verification
 - provider-backed recovery delivery with local preview mode reserved for development only
+- inaugural auction support for brand-new leagues with no previous season
+- automatic season activation when a new season is created
+- GM Fantasy season-year defaulting based on the day after the Super Bowl rollover rule
 
 Provider-based ingestion code still exists in the repo, but manual standings remain the primary fantasy-results workflow.

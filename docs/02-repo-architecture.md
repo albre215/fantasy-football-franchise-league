@@ -101,6 +101,7 @@ Important notes:
 - has `isLocked`
 - has `fantasyPayoutConfig`
 - has persisted `leaguePhase`
+- has `draftMode` to distinguish continuing-league replacement flow vs inaugural auction flow
 - active season drives the league workspace
 
 ### `NFLTeam`
@@ -126,6 +127,14 @@ Critical rule:
 
 ### `Draft`, `DraftPick`, `KeeperSelection`
 Historical offseason workflow records.
+
+### `InauguralAuction`, `InauguralAuctionNomination`, `InauguralAuctionBid`, `InauguralAuctionAward`
+Supporting records for brand-new league inaugural auctions.
+
+Important notes:
+- these support live inaugural ownership assignment
+- they are not a second ownership truth
+- final ownership still lands in `TeamOwnership`
 
 ### `PasswordResetToken`
 Password reset token model.
@@ -188,6 +197,8 @@ Additional ingestion-related models still present in the schema.
 - lock/unlock
 - setup validation
 - update season year
+- season creation now auto-activates the new season
+- season creation determines `draftMode` based on whether a previous season exists
 
 ### `server/services/season-phase-service.ts`
 - read phase context
@@ -226,6 +237,14 @@ Additional ingestion-related models still present in the schema.
 - replacement draft lifecycle
 - finalize into `TeamOwnership`
 - phase-gated draft operations
+
+### `server/services/inaugural-auction-service.ts`
+- inaugural auction configuration
+- nomination ordering
+- live bidding validation
+- timer extension / immediate award handling
+- award progression and final summary state
+- finalization into authoritative `TeamOwnership`
 
 ### `server/services/history-service.ts` / `analytics-service.ts`
 - cross-season history and analytics read models
@@ -296,6 +315,11 @@ Additional ingestion-related models still present in the schema.
 - `app/api/season/[seasonId]/draft/reset`
 - `app/api/season/[seasonId]/draft/override-order`
 
+### Inaugural auction routes
+- `app/api/season/[seasonId]/inaugural-auction`
+- `app/api/season/[seasonId]/inaugural-auction/start`
+- `app/api/season/[seasonId]/inaugural-auction/bid`
+
 ## Important UI Panels / Components
 
 ### `components/home/league-control-panel.tsx`
@@ -340,6 +364,15 @@ Manual standings + fantasy payout review UI.
 ### `components/league/offseason-draft-panel.tsx`
 Ledger-based recommendation, keeper, and draft UI.
 
+### `components/league/inaugural-auction-panel.tsx`
+Commissioner/owner live inaugural auction room.
+
+Important notes:
+- used when `activeSeason.draftMode === "INAUGURAL_AUCTION"`
+- polling-based live room, not websocket-based
+- commissioner configures order and starts the auction
+- eligible owners bid from the shared league workspace
+
 ### `components/league/season-nfl-performance-panel.tsx`
 NFL import/status, weekly review, and commissioner correction UI.
 
@@ -378,8 +411,10 @@ The immediately previous season's ledger totals are aggregated per owner, tied d
 ### 7. League Phase Control
 `seasonPhaseService` exposes current phase, allowed actions, warnings, readiness, and valid forward transitions. The domain engine uses phases heavily; recent UI work has reduced phase-heavy wording in commissioner overview surfaces.
 
-### 8. Offseason Replacement Draft Lifecycle
+### 8. Ownership Assignment Lifecycle
 In `DROP_PHASE`, keepers and released teams become explicit and reviewable. In `DRAFT_PHASE`, the replacement draft runs from the released-team pool using the ledger-based order, and finalization writes authoritative target-season `TeamOwnership`.
+
+For inaugural seasons, the inaugural auction room replaces the continuity draft workflow and finalizes into the same authoritative `TeamOwnership` model.
 
 ### 9. History / Analytics
 Read-only server-side history and analytics aggregate ownership, standings, ledger, and draft records. Metric definitions are standardized in `docs/05-analytics-metric-definitions.md`.

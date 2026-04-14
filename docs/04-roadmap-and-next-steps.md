@@ -1,6 +1,6 @@
 # Roadmap and Next Steps
 
-This roadmap reflects the repo on `main` after the recovery-provider integrations, authentication hardening, account/profile work, and commissioner-console overview cleanup.
+This roadmap reflects the repo after the recovery-provider integrations, authentication hardening, inaugural auction implementation, and recent season-management cleanup.
 
 ## Current Baseline
 
@@ -22,27 +22,13 @@ Already implemented:
 - league phase system
 - explicit `DROP_PHASE` keeper / release workflow
 - replacement draft lifecycle
+- inaugural auction lifecycle
 - unified commissioner / owner league workspace
 - NFL results -> ledger posting
 - history and analytics views
 - analytics metric definitions
 
 ## Recommended Next Product Work
-
-### Phase 11 - Inaugural Auction / Empty-League Entry Path
-
-#### Goal
-Support the path where a brand-new or reset league does not have a previous season to inherit from.
-
-#### What It Should Enable
-- inaugural auction behavior when there is no immediately previous season
-- an explicit alternative to replacement-draft continuity
-- clean coexistence with the current ledger-based continuity path
-
-#### Why It Is Next
-- the continuing-league offseason workflow is now end to end
-- the biggest remaining league-lifecycle gap is the non-continuity path for brand-new leagues
-- this is the cleanest next feature before owner actions or deeper automation
 
 ### Configurable Fees / Payout Settings
 
@@ -54,6 +40,18 @@ Move hardcoded financial assumptions into persisted league or season settings.
 - configurable payout structure
 - dashboard surfaces that display dynamic financial settings
 - cleaner downstream ledger automation
+
+### Inaugural Auction Polish
+
+#### Goal
+Refine the newly implemented inaugural auction now that the core path exists.
+
+#### Good Next Targets
+- multi-browser manual testing and concurrency polish
+- better commissioner setup affordances for division ordering
+- clearer fallback messaging for previous-year-record mode when prior NFL data is unavailable
+- optional richer final-summary stats
+- future real-time upgrade beyond polling if the stack warrants it
 
 ### Owner Experience Follow-Up
 
@@ -90,6 +88,7 @@ Endpoints still worth profiling:
 ### Testing
 Good next test targets:
 - season-service paths involving active season / year updates
+- inaugural-auction service and UI polling behavior under multi-user interaction
 - season-phase-service transition coverage
 - draft edge cases around reset/finalize/override order
 - NFL auto-import and import concurrency behavior

@@ -1,6 +1,6 @@
 # Current State and Completed Work
 
-This file summarizes the repo as it exists on `main` after the recent authentication, account, and commissioner-console UI work.
+This file summarizes the repo as it exists after the inaugural auction implementation, recent season-creation adjustments, and the latest league dashboard hydration fix.
 
 ## Major Product Areas Already Implemented
 
@@ -45,6 +45,8 @@ This file summarizes the repo as it exists on `main` after the recent authentica
 - ledger-based replacement-draft recommendation
 - replacement draft lifecycle
 - draft finalization into target-season `TeamOwnership`
+- inaugural auction lifecycle for brand-new leagues
+- season-level draft mode split between continuing vs inaugural flows
 
 ### History and analytics
 - league overview
@@ -84,6 +86,14 @@ This file summarizes the repo as it exists on `main` after the recent authentica
 - commissioners can toggle between the two views in-page
 - the commissioner hero now matches the simpler home/account style
 - overview panel layout has been cleaned up and simplified
+- inaugural auction room is integrated into the shared league workspace
+
+### Season creation behavior
+- creating a season now automatically makes that season active
+- create-season year defaults follow the GM Fantasy season rollover rule:
+  - the day after the Super Bowl starts the new GM Fantasy season year
+  - for example, February 10, 2025 starts the 2025 GM Fantasy season
+- the Seasons tab has less phase-heavy/status-heavy clutter in the season cards
 
 ## Current Commissioner Workflow
 
@@ -118,9 +128,10 @@ This file summarizes the repo as it exists on `main` after the recent authentica
 - commissioner and owner dashboards were unified
 - account/profile avatar coverage expanded across major league panels
 - commissioner overview UI was simplified for clearer handoff/review
+- league dashboard hydration bug caused by `ProfileAvatar` inside a `<p>` was fixed
 
 ## What The Repo Does Not Yet Support
-- inaugural auction / empty-league entry behavior
 - configurable entry fees and payout settings end to end
 - owner-facing draft actions
 - broader constrained-session semantics for temporary recovery login
+- true websocket-based live auction updates

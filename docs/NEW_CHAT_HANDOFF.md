@@ -39,6 +39,7 @@ Then review or implement the following task:
 
 ## Optional Extra Context To Add
 - current branch name
+- whether the work should assume `main` baseline or the current feature branch baseline
 - whether the task is UI-only, service-layer, auth/recovery, or data-model related
 - whether provider env vars are configured locally
 - whether `npm run dev` is currently running
