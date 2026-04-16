@@ -272,6 +272,16 @@ export function InauguralAuctionPanel({
           {successMessage ? <p className="text-sm text-emerald-700">{successMessage}</p> : null}
           {isLoading ? <p className="text-sm text-muted-foreground">Loading inaugural auction room...</p> : null}
 
+          <div className="rounded-lg border border-dashed border-border bg-secondary/20 p-4 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">When this auction becomes available</p>
+            <p className="mt-2">
+              The inaugural auction shows for seasons created with the inaugural workflow. To configure and start it,
+              the season must be in <span className="font-medium text-foreground">DRAFT_PHASE</span>, unlocked, have
+              exactly <span className="font-medium text-foreground">10 league members</span>, and still have
+              <span className="font-medium text-foreground"> no ownership records</span>.
+            </p>
+          </div>
+
           {!auctionState && !isLoading ? (
             <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-3">

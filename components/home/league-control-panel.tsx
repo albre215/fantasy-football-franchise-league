@@ -48,11 +48,16 @@ function formatPhoneNumber(value: string) {
 }
 
 interface LeagueControlPanelProps {
+  initialErrorMessage?: string | null;
   initialIsAuthenticated: boolean;
   initialLeagues: LeagueListItem[];
 }
 
-export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: LeagueControlPanelProps) {
+export function LeagueControlPanel({
+  initialErrorMessage = null,
+  initialIsAuthenticated,
+  initialLeagues
+}: LeagueControlPanelProps) {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [isLoading, setIsLoading] = useState(false);
@@ -91,7 +96,7 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
   const [isRecoverySubmitting, setIsRecoverySubmitting] = useState(false);
   const [recoveryErrorMessage, setRecoveryErrorMessage] = useState<string | null>(null);
   const [recoverySuccessMessage, setRecoverySuccessMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(initialErrorMessage);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [openingLeagueId, setOpeningLeagueId] = useState<string | null>(null);
 
@@ -172,7 +177,8 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
   useEffect(() => {
     setLeagues(initialLeagues);
     setIsLoading(false);
-  }, [initialLeagues]);
+    setErrorMessage(initialErrorMessage);
+  }, [initialErrorMessage, initialLeagues]);
 
   useEffect(() => {
     if (!isAuthenticated || initialLeagues.length === 0) {
@@ -804,6 +810,10 @@ export function LeagueControlPanel({ initialIsAuthenticated, initialLeagues }: L
               {isLoading ? (
                 <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
                   Loading your leagues...
+                </div>
+              ) : errorMessage && sortedLeagues.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-red-300 bg-red-50 p-6 text-sm text-red-700">
+                  {errorMessage}
                 </div>
               ) : sortedLeagues.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">

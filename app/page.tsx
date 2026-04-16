@@ -5,6 +5,7 @@ import { AccountMenu } from "@/components/home/account-menu";
 import { LeagueControlPanel } from "@/components/home/league-control-panel";
 import { accountService } from "@/server/services/account-service";
 import { leagueService } from "@/server/services/league-service";
+import type { LeagueListItem } from "@/types/league";
 
 function getGreetingName(displayName: string | null | undefined) {
   const trimmed = displayName?.trim();
@@ -16,14 +17,38 @@ function getGreetingName(displayName: string | null | undefined) {
   return trimmed.split(/\s+/)[0] ?? trimmed;
 }
 
+function isDatabaseUnavailableError(error: unknown) {
+  return (
+    error instanceof Error &&
+    (error.message.includes("Can't reach database server") ||
+      error.message.includes("PrismaClientInitializationError") ||
+      error.message.includes("prisma.user.findUnique()"))
+  );
+}
+
 export default async function HomePage() {
   const session = await getServerAuthSession();
   const isAuthenticated = Boolean(session?.user?.id);
   const greetingName = getGreetingName(session?.user?.displayName);
-  const accountProfile =
-    isAuthenticated && session?.user?.id ? await accountService.getAccountProfile(session.user.id) : null;
-  const initialLeagues =
-    isAuthenticated && session?.user?.id ? await leagueService.listLeaguesForUser(session.user.id) : [];
+  let accountProfile = null;
+  let initialLeagues: LeagueListItem[] = [];
+  let initialErrorMessage: string | null = null;
+
+  if (isAuthenticated && session?.user?.id) {
+    try {
+      [accountProfile, initialLeagues] = await Promise.all([
+        accountService.getAccountProfile(session.user.id),
+        leagueService.listLeaguesForUser(session.user.id)
+      ]);
+    } catch (error) {
+      if (!isDatabaseUnavailableError(error)) {
+        throw error;
+      }
+
+      initialErrorMessage =
+        "The app could not reach the database right now. Check your DATABASE_URL / network connection and refresh once Neon is reachable again.";
+    }
+  }
 
   return (
     <main className="min-h-screen py-10 sm:py-12">
@@ -58,7 +83,11 @@ export default async function HomePage() {
             </div>
           </section>
         </div>
-        <LeagueControlPanel initialIsAuthenticated={isAuthenticated} initialLeagues={initialLeagues} />
+        <LeagueControlPanel
+          initialErrorMessage={initialErrorMessage}
+          initialIsAuthenticated={isAuthenticated}
+          initialLeagues={initialLeagues}
+        />
       </div>
     </main>
   );
