@@ -10,6 +10,10 @@ import { normalizeNflTeamAbbreviation } from "@/lib/nfl-team-aliases";
 import { prisma } from "@/lib/prisma";
 import { nflResultsProviders } from "@/server/providers/nfl";
 import type { NormalizedNflTeamResultRecord } from "@/server/providers/nfl/types";
+import {
+  DEFAULT_NFL_PLAYOFF_PAYOUT_CONFIG,
+  DEFAULT_NFL_REGULAR_SEASON_PAYOUT_CONFIG
+} from "@/server/services/league-payout-defaults";
 import { replaceSeasonNflLedgerEntriesForSeasonTx } from "@/server/services/ledger-service";
 import { NflPerformanceServiceError } from "@/server/services/nfl-performance-errors";
 import {
@@ -492,6 +496,249 @@ function buildOwnerStandings(
     });
 }
 
+function roundToCurrency(value: number) {
+  return Number(value.toFixed(2));
+}
+
+function splitAmountAcrossSlots(totalAmount: number, slotCount: number) {
+  if (slotCount <= 0) {
+    return [];
+  }
+
+  const totalCents = Math.round(totalAmount * 100);
+  const baseShare = Math.floor(totalCents / slotCount);
+  const remainder = totalCents % slotCount;
+
+  return Array.from({ length: slotCount }, (_, index) => (baseShare + (index < remainder ? 1 : 0)) / 100);
+}
+
+function buildRegularSeasonPayouts(
+  season: SeasonContext,
+  results: SeasonResultRow[],
+  ownerSummaries: ReturnType<typeof buildOwnerResultSummaries>,
+  activeTeamCount: number
+) {
+  const regularSeasonResults = results.filter((result) => result.phase === "REGULAR_SEASON");
+  const ownershipByTeamId = new Map(season.teamOwnerships.map((ownership) => [ownership.nflTeamId, ownership] as const));
+  const totalExpectedRegularSeasonResults = activeTeamCount * getRegularSeasonWeekLimit(season.year);
+  const isRegularSeasonComplete =
+    activeTeamCount > 0 && regularSeasonResults.length >= totalExpectedRegularSeasonResults;
+  const regularSeasonWinsByMemberId = new Map<string, number>();
+  let unownedRegularSeasonWins = 0;
+
+  for (const member of season.league.members) {
+    regularSeasonWinsByMemberId.set(member.id, 0);
+  }
+
+  for (const result of regularSeasonResults) {
+    if (result.result !== "WIN") {
+      continue;
+    }
+
+    const ownership = ownershipByTeamId.get(result.nflTeamId);
+
+    if (!ownership) {
+      unownedRegularSeasonWins += 1;
+      continue;
+    }
+
+    regularSeasonWinsByMemberId.set(
+      ownership.leagueMemberId,
+      (regularSeasonWinsByMemberId.get(ownership.leagueMemberId) ?? 0) + 1
+    );
+  }
+
+  const baseAmountByMemberId = new Map<string, number>();
+  const bonusAmountByMemberId = new Map<string, number>();
+  const unusedPoolAmount = roundToCurrency(
+    unownedRegularSeasonWins * DEFAULT_NFL_REGULAR_SEASON_PAYOUT_CONFIG.perWinAmount
+  );
+
+  for (const member of season.league.members) {
+    const wins = regularSeasonWinsByMemberId.get(member.id) ?? 0;
+    baseAmountByMemberId.set(
+      member.id,
+      roundToCurrency(wins * DEFAULT_NFL_REGULAR_SEASON_PAYOUT_CONFIG.perWinAmount)
+    );
+    bonusAmountByMemberId.set(member.id, 0);
+  }
+
+  if (isRegularSeasonComplete && ownerSummaries.length > 0) {
+    const rankedOwners = ownerSummaries
+      .map(({ record }) => ({
+        leagueMemberId: record.leagueMemberId,
+        displayName: record.displayName,
+        regularSeasonWins: record.regularSeasonWins
+      }))
+      .sort((left, right) => {
+        if (right.regularSeasonWins !== left.regularSeasonWins) {
+          return right.regularSeasonWins - left.regularSeasonWins;
+        }
+
+        return left.displayName.localeCompare(right.displayName);
+      });
+
+    const leastWinsOwner = [...rankedOwners].sort((left, right) => {
+      if (left.regularSeasonWins !== right.regularSeasonWins) {
+        return left.regularSeasonWins - right.regularSeasonWins;
+      }
+
+      return left.displayName.localeCompare(right.displayName);
+    })[0] ?? null;
+
+    const topBonuses = [
+      DEFAULT_NFL_REGULAR_SEASON_PAYOUT_CONFIG.mostWinsBonus,
+      DEFAULT_NFL_REGULAR_SEASON_PAYOUT_CONFIG.secondMostWinsBonus,
+      DEFAULT_NFL_REGULAR_SEASON_PAYOUT_CONFIG.thirdMostWinsBonus
+    ];
+
+    for (const [index, bonusAmount] of topBonuses.entries()) {
+      const owner = rankedOwners[index];
+
+      if (!owner) {
+        continue;
+      }
+
+      bonusAmountByMemberId.set(
+        owner.leagueMemberId,
+        roundToCurrency((bonusAmountByMemberId.get(owner.leagueMemberId) ?? 0) + bonusAmount)
+      );
+    }
+
+    if (leastWinsOwner) {
+      bonusAmountByMemberId.set(
+        leastWinsOwner.leagueMemberId,
+        roundToCurrency(
+          (bonusAmountByMemberId.get(leastWinsOwner.leagueMemberId) ?? 0) +
+            DEFAULT_NFL_REGULAR_SEASON_PAYOUT_CONFIG.leastWinsBonus +
+            unusedPoolAmount
+        )
+      );
+    }
+  }
+
+  return {
+    isRegularSeasonComplete,
+    unusedPoolAmount,
+    payoutsByMemberId: new Map(
+      season.league.members.map((member) => {
+        const wins = regularSeasonWinsByMemberId.get(member.id) ?? 0;
+        const baseAmount = baseAmountByMemberId.get(member.id) ?? 0;
+        const bonusAmount = bonusAmountByMemberId.get(member.id) ?? 0;
+
+        return [
+          member.id,
+          {
+            regularSeasonWins: wins,
+            baseAmount,
+            bonusAmount,
+            totalAmount: roundToCurrency(baseAmount + bonusAmount)
+          }
+        ] as const;
+      })
+    )
+  };
+}
+
+function buildPlayoffPayouts(season: SeasonContext, results: SeasonResultRow[]) {
+  const ownershipByTeamId = new Map(season.teamOwnerships.map((ownership) => [ownership.nflTeamId, ownership] as const));
+  const playoffResults = results.filter((result) => result.phase !== "REGULAR_SEASON");
+  const playoffAmountByMemberId = new Map<string, number>();
+  let unownedPlayoffPoolAmount = 0;
+
+  for (const member of season.league.members) {
+    playoffAmountByMemberId.set(member.id, 0);
+  }
+
+  for (const result of playoffResults) {
+    let payoutAmount = 0;
+
+    if (result.phase === "SUPER_BOWL" && result.result === "WIN") {
+      payoutAmount = DEFAULT_NFL_PLAYOFF_PAYOUT_CONFIG.superBowlChampion;
+    } else if (result.result === "LOSS") {
+      if (result.phase === "SUPER_BOWL") {
+        payoutAmount = DEFAULT_NFL_PLAYOFF_PAYOUT_CONFIG.superBowlRunnerUp;
+      } else if (result.phase === "CONFERENCE") {
+        payoutAmount = DEFAULT_NFL_PLAYOFF_PAYOUT_CONFIG.conferenceLoser;
+      } else if (result.phase === "DIVISIONAL") {
+        payoutAmount = DEFAULT_NFL_PLAYOFF_PAYOUT_CONFIG.divisionalLoser;
+      } else if (result.phase === "WILD_CARD") {
+        payoutAmount = DEFAULT_NFL_PLAYOFF_PAYOUT_CONFIG.wildCardLoser;
+      }
+    }
+
+    if (payoutAmount === 0) {
+      continue;
+    }
+
+    const ownership = ownershipByTeamId.get(result.nflTeamId);
+
+    if (!ownership) {
+      unownedPlayoffPoolAmount = roundToCurrency(unownedPlayoffPoolAmount + payoutAmount);
+      continue;
+    }
+
+    playoffAmountByMemberId.set(
+      ownership.leagueMemberId,
+      roundToCurrency((playoffAmountByMemberId.get(ownership.leagueMemberId) ?? 0) + payoutAmount)
+    );
+  }
+
+  const superBowlParticipantTeamIds = Array.from(
+    new Set(
+      playoffResults
+        .filter((result) => result.phase === "SUPER_BOWL")
+        .map((result) => result.nflTeamId)
+    )
+  );
+  const sharedUnusedPlayoffAmountByMemberId = new Map<string, number>();
+  let distributedUnusedPlayoffPoolAmount = 0;
+
+  for (const member of season.league.members) {
+    sharedUnusedPlayoffAmountByMemberId.set(member.id, 0);
+  }
+
+  if (unownedPlayoffPoolAmount > 0 && superBowlParticipantTeamIds.length > 0) {
+    const shares = splitAmountAcrossSlots(unownedPlayoffPoolAmount, superBowlParticipantTeamIds.length);
+
+    superBowlParticipantTeamIds.forEach((teamId, index) => {
+      const ownership = ownershipByTeamId.get(teamId);
+
+      if (!ownership) {
+        return;
+      }
+
+      const share = shares[index] ?? 0;
+      distributedUnusedPlayoffPoolAmount = roundToCurrency(distributedUnusedPlayoffPoolAmount + share);
+      sharedUnusedPlayoffAmountByMemberId.set(
+        ownership.leagueMemberId,
+        roundToCurrency((sharedUnusedPlayoffAmountByMemberId.get(ownership.leagueMemberId) ?? 0) + share)
+      );
+    });
+  }
+
+  const pendingUnusedPlayoffPoolAmount = roundToCurrency(unownedPlayoffPoolAmount - distributedUnusedPlayoffPoolAmount);
+
+  return {
+    pendingUnusedPlayoffPoolAmount,
+    payoutsByMemberId: new Map(
+      season.league.members.map((member) => {
+        const earnedAmount = playoffAmountByMemberId.get(member.id) ?? 0;
+        const sharedUnusedAmount = sharedUnusedPlayoffAmountByMemberId.get(member.id) ?? 0;
+
+        return [
+          member.id,
+          {
+            earnedAmount,
+            sharedUnusedAmount,
+            totalAmount: roundToCurrency(earnedAmount + sharedUnusedAmount)
+          }
+        ] as const;
+      })
+    )
+  };
+}
+
 async function getExistingNflLedgerEntries(tx: PrismaClientLike, seasonId: string) {
   return tx.ledgerEntry.findMany({
     where: {
@@ -519,6 +766,11 @@ async function buildSeasonNflLedgerPostingPreview(
 ): Promise<SeasonNflLedgerPostingPreview> {
   const ownerSummaries = buildOwnerResultSummaries(season, results);
   const existingEntries = await getExistingNflLedgerEntries(tx, season.id);
+  const activeTeamCount = await tx.nFLTeam.count({
+    where: {
+      isActive: true
+    }
+  });
   const latestPostedEntry = existingEntries[0] ?? null;
   const lastPostedBy =
     latestPostedEntry?.actingUserId
@@ -539,6 +791,8 @@ async function buildSeasonNflLedgerPostingPreview(
   const hasValidOwnership = ownershipCount === expectedOwnershipCount;
   const ownedTeamIds = new Set(season.teamOwnerships.map((ownership) => ownership.nflTeamId));
   const resultCountsByTeamId = new Map<string, number>();
+  const regularSeasonPayouts = buildRegularSeasonPayouts(season, results, ownerSummaries, activeTeamCount);
+  const playoffPayouts = buildPlayoffPayouts(season, results);
 
   for (const result of results) {
     resultCountsByTeamId.set(result.nflTeamId, (resultCountsByTeamId.get(result.nflTeamId) ?? 0) + 1);
@@ -548,6 +802,17 @@ async function buildSeasonNflLedgerPostingPreview(
   const ownerRollups: OwnerNflLedgerPostingSummary[] = ownerSummaries
     .map(({ record, ownedTeams }) => {
       const warnings: string[] = [];
+      const regularSeasonPayout = regularSeasonPayouts.payoutsByMemberId.get(record.leagueMemberId) ?? {
+        regularSeasonWins: 0,
+        baseAmount: 0,
+        bonusAmount: 0,
+        totalAmount: 0
+      };
+      const playoffPayout = playoffPayouts.payoutsByMemberId.get(record.leagueMemberId) ?? {
+        earnedAmount: 0,
+        sharedUnusedAmount: 0,
+        totalAmount: 0
+      };
 
       if (ownedTeams.length !== 3) {
         warnings.push(`Expected 3 owned teams for ${record.displayName}, found ${ownedTeams.length}.`);
@@ -555,6 +820,14 @@ async function buildSeasonNflLedgerPostingPreview(
 
       if (record.resultCount === 0 && ownedTeams.length > 0) {
         warnings.push("No persisted NFL results were found for this owner's teams.");
+      }
+
+      if (!regularSeasonPayouts.isRegularSeasonComplete && regularSeasonPayout.bonusAmount === 0) {
+        warnings.push("Regular-season bonus payouts will finalize once all NFL regular-season games are complete.");
+      }
+
+      if (playoffPayouts.pendingUnusedPlayoffPoolAmount > 0) {
+        warnings.push("Unused-team playoff money will distribute once the Super Bowl matchup is known.");
       }
 
       return {
@@ -580,9 +853,9 @@ async function buildSeasonNflLedgerPostingPreview(
           pointsAgainst: record.pointsAgainst,
           netPoints: record.netPoints
         },
-        regularSeasonAmount: Number(record.regularSeasonWins.toFixed(2)),
-        playoffAmount: Number(record.playoffWins.toFixed(2)),
-        nflLedgerAmount: Number((record.regularSeasonWins + record.playoffWins).toFixed(2)),
+        regularSeasonAmount: regularSeasonPayout.totalAmount,
+        playoffAmount: playoffPayout.totalAmount,
+        nflLedgerAmount: roundToCurrency(regularSeasonPayout.totalAmount + playoffPayout.totalAmount),
         warnings
       };
     })
@@ -602,11 +875,19 @@ async function buildSeasonNflLedgerPostingPreview(
   }
 
   if (coverageStatus !== "FULL_SEASON_IMPORTED") {
-    warnings.push("NFL result coverage is not yet marked as a completed full-season import.");
+    warnings.push("NFL result coverage is still in progress, so posted payouts are provisional until more results are imported.");
   }
 
-  if (missingOwnedTeamIds.length > 0) {
+  if (missingOwnedTeamIds.length > 0 && results.length === 0) {
     warnings.push("One or more owned teams have no persisted NFL results for this season.");
+  }
+
+  if (!regularSeasonPayouts.isRegularSeasonComplete) {
+    warnings.push("Regular-season ranking bonuses and unused-team carryover will finalize after all regular-season games are imported.");
+  }
+
+  if (playoffPayouts.pendingUnusedPlayoffPoolAmount > 0) {
+    warnings.push("Unused-team playoff money is waiting for the Super Bowl participants before it can be fully distributed.");
   }
 
   const entryCount = ownerRollups.reduce((count, owner) => {
@@ -624,7 +905,7 @@ async function buildSeasonNflLedgerPostingPreview(
       name: season.name,
       status: season.status
     },
-    isReadyToPost: results.length > 0 && hasCompletedFullSeasonImport && hasValidOwnership && missingOwnedTeamIds.length === 0,
+    isReadyToPost: results.length > 0 && hasValidOwnership,
     postingStatus: existingEntries.length > 0 ? "POSTED" : "NOT_POSTED",
     warnings,
     coverageStatus,
@@ -648,7 +929,7 @@ async function buildSeasonNflLedgerPostingPreview(
       expectedOwnershipCount,
       ownedTeamResultCount: results.filter((result) => ownedTeamIds.has(result.nflTeamId)).length,
       missingOwnedTeamIds,
-      hasMissingOwnedTeamResults: missingOwnedTeamIds.length > 0
+      hasMissingOwnedTeamResults: results.length === 0 && missingOwnedTeamIds.length > 0
     },
     ownerRollups
   };
@@ -1210,7 +1491,15 @@ export const nflPerformanceService = {
           playoffAmount: owner.playoffAmount,
           regularSeasonWins: owner.nflResultSummary.regularSeasonWins,
           playoffWins: owner.nflResultSummary.playoffWins,
-          ownedTeamIds: owner.ownedTeams.map((team) => team.nflTeamId)
+          ownedTeamIds: owner.ownedTeams.map((team) => team.nflTeamId),
+          regularSeasonMetadata: {
+            payoutModel: "DEFAULT_2026_REGULAR_SEASON",
+            regularSeasonWins: owner.nflResultSummary.regularSeasonWins
+          },
+          playoffMetadata: {
+            payoutModel: "DEFAULT_2026_PLAYOFF",
+            playoffWins: owner.nflResultSummary.playoffWins
+          }
         }))
       });
 

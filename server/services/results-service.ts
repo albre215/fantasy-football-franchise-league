@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { DEFAULT_FANTASY_PAYOUT_CONFIG } from "@/server/services/league-payout-defaults";
 import { ledgerService, replaceFantasyPayoutEntriesForSeasonTx } from "@/server/services/ledger-service";
 import { seasonService } from "@/server/services/season-service";
 import type {
@@ -22,19 +23,6 @@ class ResultsServiceError extends Error {
     this.name = "ResultsServiceError";
   }
 }
-
-const DEFAULT_FANTASY_PAYOUT_CONFIG: FantasyPayoutConfigEntry[] = [
-  { rank: 1, amount: 100 },
-  { rank: 2, amount: 50 },
-  { rank: 3, amount: 25 },
-  { rank: 4, amount: 0 },
-  { rank: 5, amount: 0 },
-  { rank: 6, amount: 0 },
-  { rank: 7, amount: 0 },
-  { rank: 8, amount: 0 },
-  { rank: 9, amount: 0 },
-  { rank: 10, amount: 0 }
-];
 
 function formatPlacement(rank: number) {
   if (rank === 1) {

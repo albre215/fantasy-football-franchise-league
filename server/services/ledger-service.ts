@@ -48,6 +48,8 @@ interface ReplaceSeasonNflLedgerEntriesInput {
     regularSeasonWins: number;
     playoffWins: number;
     ownedTeamIds: string[];
+    regularSeasonMetadata?: Record<string, unknown> | null;
+    playoffMetadata?: Record<string, unknown> | null;
   }>;
 }
 
@@ -389,7 +391,8 @@ async function replaceSeasonNflLedgerEntriesForSeasonTx(
         metadata: {
           source: "SEASON_NFL_RESULTS",
           wins: ownerEntry.regularSeasonWins,
-          ownedTeamIds: ownerEntry.ownedTeamIds
+          ownedTeamIds: ownerEntry.ownedTeamIds,
+          ...(ownerEntry.regularSeasonMetadata ?? {})
         } as Prisma.InputJsonValue,
         actingUserId: input.actingUserId
       });
@@ -406,7 +409,8 @@ async function replaceSeasonNflLedgerEntriesForSeasonTx(
         metadata: {
           source: "SEASON_NFL_RESULTS",
           wins: ownerEntry.playoffWins,
-          ownedTeamIds: ownerEntry.ownedTeamIds
+          ownedTeamIds: ownerEntry.ownedTeamIds,
+          ...(ownerEntry.playoffMetadata ?? {})
         } as Prisma.InputJsonValue,
         actingUserId: input.actingUserId
       });
