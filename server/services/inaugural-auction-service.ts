@@ -1,12 +1,17 @@
 import { Prisma } from "@prisma/client";
 
+import { normalizeNflTeamAbbreviation } from "@/lib/nfl-team-aliases";
 import { prisma } from "@/lib/prisma";
+import { nflResultsProviders } from "@/server/providers/nfl";
+import type { NormalizedNflTeamResultRecord } from "@/server/providers/nfl/types";
 import { seasonService } from "@/server/services/season-service";
 import type {
   InauguralAuctionBidSummary,
   InauguralAuctionFinalSummary,
   InauguralAuctionOrderMethod,
+  InauguralAuctionOrderPreview,
   InauguralAuctionOwnerSummary,
+  InauguralAuctionPreviousYearSortDirection,
   InauguralAuctionState,
   ConfigureInauguralAuctionInput,
   StartInauguralAuctionInput,
@@ -21,6 +26,7 @@ const MAX_SINGLE_BID = 98;
 const NOMINATION_CLOCK_SECONDS = 60;
 const FINAL_TEN_SECONDS_EXTENSION = 10;
 const AWARD_CELEBRATION_SECONDS = 7;
+const FINAL_TEAM_SELECTION_AWARD_AMOUNT = 1;
 
 class InauguralAuctionServiceError extends Error {
   constructor(
@@ -67,6 +73,48 @@ function getMaxAllowedBid(teamCount: number, budgetRemaining: number) {
   const affordableCap = budgetRemaining - remainingRequiredSlotsAfterPurchase;
 
   return Math.max(0, Math.min(MAX_SINGLE_BID, affordableCap));
+}
+
+function buildRecordMapFromResults(
+  teams: Array<{ id: string; abbreviation: string }>,
+  results: Array<{ nflTeamId: string; result: "WIN" | "LOSS" | "TIE" }>
+) {
+  const recordMap = new Map<string, { wins: number; losses: number; ties: number }>();
+
+  for (const result of results) {
+    const current = recordMap.get(result.nflTeamId) ?? { wins: 0, losses: 0, ties: 0 };
+
+    if (result.result === "WIN") {
+      current.wins += 1;
+    } else if (result.result === "LOSS") {
+      current.losses += 1;
+    } else {
+      current.ties += 1;
+    }
+
+    recordMap.set(result.nflTeamId, current);
+  }
+
+  return teams.every((team) => recordMap.has(team.id)) ? recordMap : null;
+}
+
+function buildRecordMapFromProviderResults(
+  teams: Array<{ id: string; abbreviation: string }>,
+  results: NormalizedNflTeamResultRecord[]
+) {
+  const teamIdByAbbreviation = new Map(
+    teams.map((team) => [normalizeNflTeamAbbreviation(team.abbreviation), team.id] as const)
+  );
+
+  const normalizedResults = results
+    .filter((result) => result.phase === "REGULAR_SEASON")
+    .map((result) => ({
+      nflTeamId: teamIdByAbbreviation.get(normalizeNflTeamAbbreviation(result.teamAbbreviation)) ?? null,
+      result: result.result
+    }))
+    .filter((result): result is { nflTeamId: string; result: "WIN" | "LOSS" | "TIE" } => Boolean(result.nflTeamId));
+
+  return buildRecordMapFromResults(teams, normalizedResults);
 }
 
 function resolveWinningBid<T extends { amount: number; createdAt: Date; id: string }>(bids: T[]) {
@@ -233,7 +281,9 @@ async function buildOrder(
   tx: PrismaClientLike,
   seasonYear: number,
   orderMethod: InauguralAuctionOrderMethod,
-  divisionOrder: string[] | undefined
+  divisionOrder: string[] | undefined,
+  customTeamOrder: string[] | undefined,
+  previousYearSortDirection: InauguralAuctionPreviousYearSortDirection | undefined
 ) {
   const teams = await tx.nFLTeam.findMany({
     where: {
@@ -249,7 +299,15 @@ async function buildOrder(
   if (orderMethod === "ALPHABETICAL") {
     return {
       teams: [...teams].sort((left, right) => left.name.localeCompare(right.name)),
-      notes: ["Alphabetical nomination order is active."]
+      notes: [],
+      divisionOrder: null,
+      entries: [...teams]
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map((team, index) => ({
+          orderIndex: index,
+          nflTeam: mapDraftTeam(team),
+          note: null
+        }))
     };
   }
 
@@ -283,7 +341,46 @@ async function buildOrder(
       teams: divisionOrder.flatMap((division) =>
         [...(groupedTeams.get(division) ?? [])].sort((left, right) => left.name.localeCompare(right.name))
       ),
-      notes: [`Division nomination order is active: ${divisionOrder.join(" -> ")}.`]
+      notes: [],
+      divisionOrder,
+      entries: divisionOrder
+        .flatMap((division) =>
+          [...(groupedTeams.get(division) ?? [])].sort((left, right) => left.name.localeCompare(right.name))
+        )
+        .map((team, index) => ({
+          orderIndex: index,
+          nflTeam: mapDraftTeam(team),
+          note: getDivisionKey(team)
+        }))
+    };
+  }
+
+  if (orderMethod === "CUSTOM") {
+    if (!customTeamOrder || customTeamOrder.length !== teams.length) {
+      throw new InauguralAuctionServiceError("Custom order must include all 32 NFL teams exactly once.", 400);
+    }
+
+    if (new Set(customTeamOrder).size !== teams.length) {
+      throw new InauguralAuctionServiceError("Custom order contains duplicate NFL teams.", 400);
+    }
+
+    const teamById = new Map(teams.map((team) => [team.id, team] as const));
+
+    if (customTeamOrder.some((teamId) => !teamById.has(teamId))) {
+      throw new InauguralAuctionServiceError("Custom order contains an unknown NFL team.", 400);
+    }
+
+    const orderedTeams = customTeamOrder.map((teamId) => teamById.get(teamId)!);
+
+    return {
+      teams: orderedTeams,
+      notes: [],
+      divisionOrder: null,
+      entries: orderedTeams.map((team, index) => ({
+        orderIndex: index,
+        nflTeam: mapDraftTeam(team),
+        note: getDivisionKey(team)
+      }))
     };
   }
 
@@ -298,33 +395,37 @@ async function buildOrder(
     }
   });
 
-  const recordMap = new Map<string, { wins: number; losses: number; ties: number }>();
+  let recordMap = buildRecordMapFromResults(teams, priorYearResults);
 
-  for (const result of priorYearResults) {
-    const current = recordMap.get(result.nflTeamId) ?? { wins: 0, losses: 0, ties: 0 };
-
-    if (result.result === "WIN") {
-      current.wins += 1;
-    } else if (result.result === "LOSS") {
-      current.losses += 1;
-    } else {
-      current.ties += 1;
+  if (!recordMap) {
+    try {
+      const providerResults = await nflResultsProviders.NFLVERSE.loadSeasonResults({
+        seasonYear: seasonYear - 1
+      });
+      recordMap = buildRecordMapFromProviderResults(teams, providerResults.records);
+    } catch {
+      recordMap = null;
     }
-
-    recordMap.set(result.nflTeamId, current);
   }
 
-  if (recordMap.size !== teams.length) {
+  if (!recordMap) {
     return {
       teams: [...teams].sort((left, right) => left.name.localeCompare(right.name)),
       notes: [
-        "Previous-year NFL results were incomplete, so the inaugural auction fell back to alphabetical nomination order."
-      ]
+        "Previous-year NFL results were unavailable, so the inaugural auction fell back to alphabetical nomination order."
+      ],
+      divisionOrder: null,
+      entries: [...teams]
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map((team, index) => ({
+          orderIndex: index,
+          nflTeam: mapDraftTeam(team),
+          note: "No complete prior-year record found"
+        }))
     };
   }
 
-  return {
-    teams: [...teams].sort((left, right) => {
+  const bestFirstOrderedTeams = [...teams].sort((left, right) => {
       const leftRecord = recordMap.get(left.id)!;
       const rightRecord = recordMap.get(right.id)!;
 
@@ -341,10 +442,73 @@ async function buildOrder(
       }
 
       return left.name.localeCompare(right.name);
-    }),
-    notes: [
-      "Previous-year NFL nomination order is active, sorted by regular-season wins descending, losses ascending, ties descending, then team name."
-    ]
+    });
+
+  const sortDirection = previousYearSortDirection ?? "BEST_FIRST";
+  const orderedTeams = sortDirection === "WORST_FIRST" ? [...bestFirstOrderedTeams].reverse() : bestFirstOrderedTeams;
+
+  return {
+    teams: orderedTeams,
+    notes: [],
+    divisionOrder: null,
+    entries: orderedTeams.map((team, index) => {
+      const record = recordMap.get(team.id)!;
+
+      return {
+        orderIndex: index,
+        nflTeam: mapDraftTeam(team),
+        note: `${record.wins}-${record.losses}${record.ties > 0 ? `-${record.ties}` : ""}`
+      };
+    })
+  };
+}
+
+function buildOrderPreviewFromAuction(
+  auction: NonNullable<Awaited<ReturnType<typeof getAuctionWithContext>>>
+): InauguralAuctionOrderPreview {
+  const divisionOrder =
+    auction.orderMethod === "DIVISION"
+      ? Array.from(
+          new Set(auction.nominationEntries.map((entry) => getDivisionKey(entry.nflTeam)))
+        )
+      : null;
+
+  return {
+    orderMethod: auction.orderMethod,
+    notes: [],
+    divisionOrder,
+    entries: auction.nominationEntries.map((entry) => ({
+      orderIndex: entry.orderIndex,
+      nflTeam: mapDraftTeam(entry.nflTeam),
+      note:
+        auction.orderMethod === "DIVISION" || auction.orderMethod === "CUSTOM"
+          ? getDivisionKey(entry.nflTeam)
+          : null
+    }))
+  };
+}
+
+function getFinalSelectionContext(
+  owners: InauguralAuctionOwnerSummary[],
+  auction: NonNullable<Awaited<ReturnType<typeof getAuctionWithContext>>>
+) {
+  const incompleteOwners = owners.filter((owner) => owner.teamCount < REQUIRED_TEAMS_PER_OWNER);
+  const availableNominations = auction.nominationEntries.filter((entry) => !entry.award);
+
+  if (
+    auction.status !== "ACTIVE" ||
+    auction.announcementEndsAt ||
+    auction.awards.length !== REQUIRED_AWARDED_TEAMS - 1 ||
+    incompleteOwners.length !== 1 ||
+    incompleteOwners[0]?.teamCount !== REQUIRED_TEAMS_PER_OWNER - 1 ||
+    availableNominations.length !== 3
+  ) {
+    return null;
+  }
+
+  return {
+    owner: incompleteOwners[0],
+    nominations: availableNominations
   };
 }
 
@@ -574,10 +738,11 @@ async function buildAuctionState(
   }
 
   const owners = buildOwnerSummaries(auction);
+  const finalSelection = getFinalSelectionContext(owners, auction);
   const viewerMembership = auction.season.league.members.find((member) => member.userId === actingUserId) ?? null;
   const viewerOwner = viewerMembership ? owners.find((owner) => owner.leagueMemberId === viewerMembership.id) ?? null : null;
   const activeNomination =
-    !auction.announcementEndsAt && auction.status === "ACTIVE"
+    !finalSelection && !auction.announcementEndsAt && auction.status === "ACTIVE"
       ? auction.nominationEntries.find((entry) => entry.orderIndex === auction.currentNominationIndex && !entry.award) ?? null
       : null;
   const currentHighBid = activeNomination
@@ -680,9 +845,12 @@ async function buildAuctionState(
       announcementEndsAt: auction.announcementEndsAt?.toISOString() ?? null,
       completedAt: auction.completedAt?.toISOString() ?? null
     },
+    orderPreview: buildOrderPreviewFromAuction(auction),
     orderNotes:
       auction.orderMethod === "DIVISION"
         ? ["Division-mode ordering is active. Teams inside each division run alphabetically by NFL team name."]
+        : auction.orderMethod === "CUSTOM"
+          ? ["Custom nomination order is active."]
         : [],
     currentNomination: activeNomination
       ? {
@@ -713,7 +881,7 @@ async function buildAuctionState(
     })),
     owners,
     countdown:
-      auction.status === "ACTIVE" && !auction.announcementEndsAt
+      auction.status === "ACTIVE" && !auction.announcementEndsAt && !finalSelection
         ? {
             startedAt: auction.clockStartedAt?.toISOString() ?? null,
             expiresAt: auction.clockExpiresAt?.toISOString() ?? null,
@@ -725,6 +893,17 @@ async function buildAuctionState(
               auction.clockExpiresAt!.getTime() - auction.clockStartedAt!.getTime() > NOMINATION_CLOCK_SECONDS * 1000
           }
         : null,
+    finalSelection: finalSelection
+      ? {
+          leagueMemberId: finalSelection.owner.leagueMemberId,
+          displayName: finalSelection.owner.displayName,
+          availableTeams: finalSelection.nominations.map((nomination) => ({
+            nominationId: nomination.id,
+            team: mapDraftTeam(nomination.nflTeam)
+          })),
+          automaticBidAmount: FINAL_TEAM_SELECTION_AWARD_AMOUNT
+        }
+      : null,
     activeAward: activeAward
       ? {
           id: activeAward.id,
@@ -744,10 +923,12 @@ async function buildAuctionState(
       canManageAuction: viewerMembership?.role === "COMMISSIONER",
       canBid:
         Boolean(viewerOwner) &&
+        !finalSelection &&
         auction.status === "ACTIVE" &&
         !auction.announcementEndsAt &&
         viewerOwner!.teamCount < REQUIRED_TEAMS_PER_OWNER &&
         viewerOwner!.maxAllowedBid >= 1,
+      canSelectFinalTeam: Boolean(finalSelection && viewerMembership?.id === finalSelection.owner.leagueMemberId),
       budgetRemaining: viewerOwner?.budgetRemaining ?? null,
       teamCount: viewerOwner?.teamCount ?? null,
       maxAllowedBid: viewerOwner?.maxAllowedBid ?? null
@@ -756,6 +937,35 @@ async function buildAuctionState(
 }
 
 export const inauguralAuctionService = {
+  async previewAuctionOrder(input: ConfigureInauguralAuctionInput): Promise<InauguralAuctionOrderPreview> {
+    const seasonId = input.seasonId.trim();
+    const actingUserId = input.actingUserId.trim();
+
+    if (!seasonId || !actingUserId) {
+      throw new InauguralAuctionServiceError("seasonId and actingUserId are required.", 400);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      await seasonService.assertCommissionerAccess(seasonId, actingUserId);
+      const season = await assertInauguralAuctionSeason(tx, seasonId);
+      const builtOrder = await buildOrder(
+        tx,
+        season.year,
+        input.orderMethod,
+        input.divisionOrder,
+        input.customTeamOrder,
+        input.previousYearSortDirection
+      );
+
+      return {
+        orderMethod: input.orderMethod,
+        notes: builtOrder.notes,
+        divisionOrder: builtOrder.divisionOrder,
+        entries: builtOrder.entries
+      };
+    });
+  },
+
   async getAuctionStateBySeason(seasonId: string, actingUserId: string) {
     const normalizedSeasonId = seasonId.trim();
     const normalizedActingUserId = actingUserId.trim();
@@ -824,7 +1034,14 @@ export const inauguralAuctionService = {
         throw new InauguralAuctionServiceError("The inaugural auction order cannot change after teams have already been awarded.", 409);
       }
 
-      const builtOrder = await buildOrder(tx, season.year, input.orderMethod, input.divisionOrder);
+      const builtOrder = await buildOrder(
+        tx,
+        season.year,
+        input.orderMethod,
+        input.divisionOrder,
+        input.customTeamOrder,
+        input.previousYearSortDirection
+      );
 
       if (existingAuction) {
         await tx.inauguralAuction.delete({
@@ -932,6 +1149,7 @@ export const inauguralAuctionService = {
 
       const owners = buildOwnerSummaries(auction);
       const owner = owners.find((entry) => entry.leagueMemberId === viewerMembership.id) ?? null;
+      const finalSelection = getFinalSelectionContext(owners, auction);
 
       if (!owner) {
         throw new InauguralAuctionServiceError("Auction owner context not found.", 404);
@@ -939,6 +1157,29 @@ export const inauguralAuctionService = {
 
       if (owner.teamCount >= REQUIRED_TEAMS_PER_OWNER) {
         throw new InauguralAuctionServiceError("Owners with 3 awarded teams are done bidding for the inaugural auction.", 409);
+      }
+
+      if (finalSelection) {
+        if (finalSelection.owner.leagueMemberId !== viewerMembership.id) {
+          throw new InauguralAuctionServiceError("Only the final eligible owner can choose from the last three teams.", 409);
+        }
+
+        const selectedNomination = finalSelection.nominations.find((entry) => entry.id === input.nominationId) ?? null;
+
+        if (!selectedNomination) {
+          throw new InauguralAuctionServiceError("Choose one of the final three remaining teams.", 409);
+        }
+
+        await awardNomination(
+          tx,
+          auction,
+          selectedNomination.id,
+          viewerMembership.id,
+          FINAL_TEAM_SELECTION_AWARD_AMOUNT,
+          new Date()
+        );
+
+        return (await buildAuctionState(tx, seasonId, actingUserId))!;
       }
 
       const amount = Math.floor(Number(input.amount));

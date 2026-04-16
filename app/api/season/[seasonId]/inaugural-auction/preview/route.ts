@@ -7,8 +7,7 @@ import {
 } from "@/server/services/inaugural-auction-service";
 import type {
   ConfigureInauguralAuctionInput,
-  ConfigureInauguralAuctionResponse,
-  InauguralAuctionStateResponse
+  InauguralAuctionOrderPreviewResponse
 } from "@/types/inaugural-auction";
 
 export const dynamic = "force-dynamic";
@@ -19,30 +18,11 @@ interface RouteContext {
   };
 }
 
-export async function GET(_request: Request, { params }: RouteContext) {
-  try {
-    const actingUserId = await requireAuthenticatedUserId();
-    const auction = await inauguralAuctionService.getAuctionStateBySeason(params.seasonId, actingUserId);
-
-    return NextResponse.json<InauguralAuctionStateResponse>({ auction });
-  } catch (error) {
-    if (error instanceof RouteAuthError) {
-      return NextResponse.json({ error: error.message }, { status: error.statusCode });
-    }
-
-    if (error instanceof InauguralAuctionServiceError) {
-      return NextResponse.json({ error: error.message }, { status: error.statusCode });
-    }
-
-    return NextResponse.json({ error: "Unable to load the inaugural auction." }, { status: 500 });
-  }
-}
-
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const actingUserId = await requireAuthenticatedUserId();
     const body = (await request.json()) as Partial<ConfigureInauguralAuctionInput>;
-    const auction = await inauguralAuctionService.configureAuction({
+    const preview = await inauguralAuctionService.previewAuctionOrder({
       seasonId: params.seasonId,
       actingUserId,
       orderMethod: body.orderMethod ?? "ALPHABETICAL",
@@ -51,7 +31,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       previousYearSortDirection: body.previousYearSortDirection
     });
 
-    return NextResponse.json<ConfigureInauguralAuctionResponse>({ auction }, { status: 201 });
+    return NextResponse.json<InauguralAuctionOrderPreviewResponse>({ preview });
   } catch (error) {
     if (error instanceof RouteAuthError) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
@@ -61,6 +41,6 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: error.message }, { status: error.statusCode });
     }
 
-    return NextResponse.json({ error: "Unable to configure the inaugural auction." }, { status: 500 });
+    return NextResponse.json({ error: "Unable to preview the inaugural auction order." }, { status: 500 });
   }
 }

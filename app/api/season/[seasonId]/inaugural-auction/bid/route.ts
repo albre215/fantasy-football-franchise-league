@@ -22,7 +22,8 @@ export async function POST(request: Request, { params }: RouteContext) {
     const auction = await inauguralAuctionService.submitBid({
       seasonId: params.seasonId,
       actingUserId,
-      amount: Number(body.amount ?? 0)
+      amount: Number(body.amount ?? 0),
+      nominationId: typeof body.nominationId === "string" ? body.nominationId : undefined
     });
 
     return NextResponse.json<SubmitInauguralBidResponse>({ auction });

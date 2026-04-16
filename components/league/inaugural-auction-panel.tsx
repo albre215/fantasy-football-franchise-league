@@ -7,15 +7,20 @@ import { ProfileAvatar } from "@/components/shared/profile-avatar";
 import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import type {
   ConfigureInauguralAuctionResponse,
   InauguralAuctionOrderMethod,
+  InauguralAuctionOrderPreview,
+  InauguralAuctionPreviousYearSortDirection,
+  InauguralAuctionOrderPreviewResponse,
   InauguralAuctionState,
   InauguralAuctionStateResponse,
   StartInauguralAuctionResponse,
   SubmitInauguralBidResponse
 } from "@/types/inaugural-auction";
 import type { SeasonSummary } from "@/types/season";
+import type { NFLTeamsResponse, NFLTeamSummary } from "@/types/team-ownership";
 
 const DEFAULT_DIVISION_ORDER = [
   "AFC East",
@@ -48,20 +53,102 @@ function formatCurrency(value: number) {
   return `$${value.toFixed(0)}`;
 }
 
+function buildPreviewFromTeams(
+  teams: NFLTeamSummary[],
+  orderMethod: InauguralAuctionOrderMethod,
+  divisionOrder: string[],
+  customOrder: string[]
+) {
+  const sortedAlphabetical = [...teams].sort((left, right) => left.name.localeCompare(right.name));
+
+  if (orderMethod === "ALPHABETICAL") {
+    return {
+      orderMethod,
+      notes: [],
+      divisionOrder: null,
+      entries: sortedAlphabetical.map((team, index) => ({
+        orderIndex: index,
+        nflTeam: team,
+        note: null
+      }))
+    } satisfies InauguralAuctionOrderPreview;
+  }
+
+  if (orderMethod === "DIVISION") {
+    const byDivision = new Map<string, NFLTeamSummary[]>();
+
+    for (const team of teams) {
+      const key = `${team.conference} ${team.division}`;
+      const bucket = byDivision.get(key) ?? [];
+      bucket.push(team);
+      byDivision.set(key, [...bucket].sort((left, right) => left.name.localeCompare(right.name)));
+    }
+
+    return {
+      orderMethod,
+      notes: [],
+      divisionOrder,
+      entries: divisionOrder
+        .flatMap((division) => [...(byDivision.get(division) ?? [])].sort((left, right) => left.name.localeCompare(right.name)))
+        .map((team, index) => ({
+          orderIndex: index,
+          nflTeam: team,
+          note: `${team.conference} ${team.division}`
+        }))
+    } satisfies InauguralAuctionOrderPreview;
+  }
+
+  if (orderMethod === "CUSTOM") {
+    const teamById = new Map(teams.map((team) => [team.id, team] as const));
+
+    return {
+      orderMethod,
+      notes: [],
+      divisionOrder: null,
+      entries: customOrder
+        .map((teamId) => teamById.get(teamId))
+        .filter((team): team is NFLTeamSummary => Boolean(team))
+        .map((team, index) => ({
+          orderIndex: index,
+          nflTeam: team,
+          note: `${team.conference} ${team.division}`
+        }))
+    } satisfies InauguralAuctionOrderPreview;
+  }
+
+  return {
+    orderMethod,
+    notes: ["Loading previous-year record order preview..."],
+    divisionOrder: null,
+    entries: []
+  } satisfies InauguralAuctionOrderPreview;
+}
+
 export function InauguralAuctionPanel({
   activeSeason,
   title = "Inaugural Auction Draft",
-  description = "Run the live inaugural auction, track budgets, and finalize first-season ownership."
+  description = ""
 }: InauguralAuctionPanelProps) {
   const router = useRouter();
   const [auctionState, setAuctionState] = useState<InauguralAuctionState | null>(null);
+  const [teams, setTeams] = useState<NFLTeamSummary[]>([]);
+  const [preview, setPreview] = useState<InauguralAuctionOrderPreview | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingTeams, setIsLoadingTeams] = useState(false);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [orderMethod, setOrderMethod] = useState<InauguralAuctionOrderMethod>("ALPHABETICAL");
+  const [previousYearSortDirection, setPreviousYearSortDirection] =
+    useState<InauguralAuctionPreviousYearSortDirection>("BEST_FIRST");
   const [divisionOrder, setDivisionOrder] = useState<string[]>(DEFAULT_DIVISION_ORDER);
+  const [customTeamOrder, setCustomTeamOrder] = useState<string[]>([]);
+  const [draggedDivision, setDraggedDivision] = useState<string | null>(null);
+  const [divisionInsertIndex, setDivisionInsertIndex] = useState<number | null>(null);
+  const [draggedTeamId, setDraggedTeamId] = useState<string | null>(null);
+  const [customDropIndex, setCustomDropIndex] = useState<number | null>(null);
   const [bidAmount, setBidAmount] = useState("1");
   const [visibleAwardId, setVisibleAwardId] = useState<string | null>(null);
   const [showFinalSummary, setShowFinalSummary] = useState(false);
@@ -77,6 +164,51 @@ export function InauguralAuctionPanel({
     });
     const data = await parseJsonResponse<InauguralAuctionStateResponse>(response);
     setAuctionState(data.auction);
+  }
+
+  async function refreshPreview(
+    nextOrderMethod: InauguralAuctionOrderMethod,
+    nextDivisionOrder: string[],
+    nextCustomTeamOrder: string[],
+    nextPreviousYearSortDirection: InauguralAuctionPreviousYearSortDirection
+  ) {
+    if (!activeSeason) {
+      return;
+    }
+
+    if (nextOrderMethod === "CUSTOM" && nextCustomTeamOrder.length !== teams.length) {
+      setPreview(buildPreviewFromTeams(teams, nextOrderMethod, nextDivisionOrder, nextCustomTeamOrder));
+      return;
+    }
+
+    if (nextOrderMethod !== "PREVIOUS_YEAR_RECORD" && teams.length > 0) {
+      setPreview(buildPreviewFromTeams(teams, nextOrderMethod, nextDivisionOrder, nextCustomTeamOrder));
+    }
+
+    try {
+      setIsLoadingPreview(true);
+      const response = await fetch(`/api/season/${activeSeason.id}/inaugural-auction/preview`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          orderMethod: nextOrderMethod,
+          divisionOrder: nextOrderMethod === "DIVISION" ? nextDivisionOrder : undefined,
+          customTeamOrder: nextOrderMethod === "CUSTOM" ? nextCustomTeamOrder : undefined,
+          previousYearSortDirection:
+            nextOrderMethod === "PREVIOUS_YEAR_RECORD" ? nextPreviousYearSortDirection : undefined
+        })
+      });
+      const data = await parseJsonResponse<InauguralAuctionOrderPreviewResponse>(response);
+      setPreview(data.preview);
+    } catch (error) {
+      if (nextOrderMethod === "PREVIOUS_YEAR_RECORD") {
+        setErrorMessage(error instanceof Error ? error.message : "Unable to load the inaugural auction preview.");
+      }
+    } finally {
+      setIsLoadingPreview(false);
+    }
   }
 
   useEffect(() => {
@@ -101,14 +233,38 @@ export function InauguralAuctionPanel({
   }, [activeSeason?.id]);
 
   useEffect(() => {
+    void (async () => {
+      try {
+        setIsLoadingTeams(true);
+        const response = await fetch("/api/nfl/teams", { cache: "no-store" });
+        const data = await parseJsonResponse<NFLTeamsResponse>(response);
+        setTeams(data.teams);
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Unable to load NFL teams.");
+      } finally {
+        setIsLoadingTeams(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     if (!auctionState) {
       return;
+    }
+
+    if (auctionState.auction.status === "PLANNING") {
+      setOrderMethod(auctionState.auction.orderMethod);
+      setDivisionOrder(auctionState.orderPreview.divisionOrder ?? DEFAULT_DIVISION_ORDER);
+      if (auctionState.auction.orderMethod === "CUSTOM") {
+        setCustomTeamOrder(auctionState.orderPreview.entries.map((entry) => entry.nflTeam.id));
+      }
+      setPreview(auctionState.orderPreview);
     }
 
     if (auctionState.activeAward?.id) {
       setVisibleAwardId(auctionState.activeAward.id);
     }
-  }, [auctionState?.activeAward?.id]);
+  }, [auctionState]);
 
   useEffect(() => {
     if (!auctionState?.finalSummary) {
@@ -139,7 +295,20 @@ export function InauguralAuctionPanel({
     return () => window.clearInterval(intervalId);
   }, [activeSeason?.id, auctionState?.auction.status, auctionState?.activeAward?.id]);
 
+  useEffect(() => {
+    if (!activeSeason || teams.length === 0) {
+      return;
+    }
+
+    if (auctionState && auctionState.auction.status !== "PLANNING") {
+      return;
+    }
+
+    void refreshPreview(orderMethod, divisionOrder, customTeamOrder, previousYearSortDirection);
+  }, [activeSeason?.id, teams.length, orderMethod, divisionOrder, customTeamOrder, previousYearSortDirection, auctionState?.auction.status]);
+
   const viewer = auctionState?.viewer ?? null;
+  const canConfigureAuction = !auctionState || auctionState.auction.status === "PLANNING";
   const minimumNextBid = useMemo(() => {
     if (!auctionState?.currentHighBid) {
       return 1;
@@ -147,6 +316,23 @@ export function InauguralAuctionPanel({
 
     return auctionState.currentHighBid.amount + 1;
   }, [auctionState?.currentHighBid?.amount]);
+  const previewToRender = canConfigureAuction ? preview : auctionState?.orderPreview ?? null;
+  const teamsByDivision = useMemo(() => {
+    const grouped = new Map<string, NFLTeamSummary[]>();
+
+    for (const team of teams) {
+      const key = `${team.conference} ${team.division}`;
+      const bucket = grouped.get(key) ?? [];
+      bucket.push(team);
+      grouped.set(key, [...bucket].sort((left, right) => left.name.localeCompare(right.name)));
+    }
+
+    return grouped;
+  }, [teams]);
+  const availableCustomTeams = useMemo(
+    () => teams.filter((team) => !customTeamOrder.includes(team.id)).sort((left, right) => left.name.localeCompare(right.name)),
+    [teams, customTeamOrder]
+  );
 
   function getSubmittingButtonClass(actionId: string) {
     if (!isSubmitting) {
@@ -173,7 +359,10 @@ export function InauguralAuctionPanel({
         },
         body: JSON.stringify({
           orderMethod,
-          divisionOrder: orderMethod === "DIVISION" ? divisionOrder : undefined
+          divisionOrder: orderMethod === "DIVISION" ? divisionOrder : undefined,
+          customTeamOrder: orderMethod === "CUSTOM" ? customTeamOrder : undefined,
+          previousYearSortDirection:
+            orderMethod === "PREVIOUS_YEAR_RECORD" ? previousYearSortDirection : undefined
         })
       });
       const data = await parseJsonResponse<ConfigureInauguralAuctionResponse>(response);
@@ -211,14 +400,14 @@ export function InauguralAuctionPanel({
     }
   }
 
-  async function handleSubmitBid() {
+  async function handleSubmitBid(nominationId?: string) {
     if (!activeSeason) {
       return;
     }
 
     try {
       setIsSubmitting(true);
-      setPendingActionId("submit-bid");
+      setPendingActionId(nominationId ? `select-${nominationId}` : "submit-bid");
       setErrorMessage(null);
       setSuccessMessage(null);
       const response = await fetch(`/api/season/${activeSeason.id}/inaugural-auction/bid`, {
@@ -227,12 +416,13 @@ export function InauguralAuctionPanel({
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          amount: Number(bidAmount)
+          amount: nominationId ? 1 : Number(bidAmount),
+          nominationId
         })
       });
       const data = await parseJsonResponse<SubmitInauguralBidResponse>(response);
       setAuctionState(data.auction);
-      setSuccessMessage("Bid submitted.");
+      setSuccessMessage(nominationId ? "Final team selected." : "Bid submitted.");
       setBidAmount(String(Math.max(minimumNextBid + 1, 1)));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to submit the bid.");
@@ -242,18 +432,65 @@ export function InauguralAuctionPanel({
     }
   }
 
-  function moveDivision(index: number, direction: -1 | 1) {
-    setDivisionOrder((current) => {
-      const nextIndex = index + direction;
+  function createDivisionDragPreview(element: HTMLDivElement) {
+    const clone = element.cloneNode(true) as HTMLDivElement;
+    clone.style.position = "fixed";
+    clone.style.top = "-1000px";
+    clone.style.left = "-1000px";
+    clone.style.width = `${element.offsetWidth}px`;
+    clone.style.pointerEvents = "none";
+    clone.style.opacity = "1";
+    clone.style.transform = "rotate(0deg)";
+    clone.style.boxShadow = "0 18px 40px -24px rgba(7, 28, 18, 0.45)";
+    clone.style.borderColor = "rgb(52 211 153)";
+    clone.style.background = "rgb(240 253 244)";
+    document.body.appendChild(clone);
+    window.setTimeout(() => {
+      clone.remove();
+    }, 0);
 
-      if (nextIndex < 0 || nextIndex >= current.length) {
+    return clone;
+  }
+
+  function handleDivisionDrop(targetIndex: number) {
+    if (!draggedDivision) {
+      setDivisionInsertIndex(null);
+      return;
+    }
+
+    setDivisionOrder((current) => {
+      const next = [...current];
+      const fromIndex = next.indexOf(draggedDivision);
+      if (fromIndex < 0) {
         return current;
       }
 
-      const next = [...current];
-      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      const [moved] = next.splice(fromIndex, 1);
+      const insertIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex;
+      next.splice(insertIndex, 0, moved);
       return next;
     });
+    setDivisionInsertIndex(null);
+    setDraggedDivision(null);
+  }
+
+  function handleCustomTeamDrop(targetIndex?: number) {
+    if (!draggedTeamId) {
+      return;
+    }
+
+    setCustomTeamOrder((current) => {
+      const withoutDragged = current.filter((teamId) => teamId !== draggedTeamId);
+      const insertIndex = typeof targetIndex === "number" ? Math.min(targetIndex, withoutDragged.length) : withoutDragged.length;
+      withoutDragged.splice(insertIndex, 0, draggedTeamId);
+      return withoutDragged;
+    });
+    setCustomDropIndex(null);
+    setDraggedTeamId(null);
+  }
+
+  function removeCustomTeam(teamId: string) {
+    setCustomTeamOrder((current) => current.filter((entry) => entry !== teamId));
   }
 
   if (!activeSeason) {
@@ -265,61 +502,279 @@ export function InauguralAuctionPanel({
       <Card>
         <CardHeader>
           <CardTitle>{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
+          {description ? <CardDescription>{description}</CardDescription> : null}
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           {errorMessage ? <p className="text-sm text-destructive">{errorMessage}</p> : null}
           {successMessage ? <p className="text-sm text-emerald-700">{successMessage}</p> : null}
           {isLoading ? <p className="text-sm text-muted-foreground">Loading inaugural auction room...</p> : null}
 
-          <div className="rounded-lg border border-dashed border-border bg-secondary/20 p-4 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">When this auction becomes available</p>
-            <p className="mt-2">
-              The inaugural auction shows for seasons created with the inaugural workflow. To configure and start it,
-              the season must be in <span className="font-medium text-foreground">DRAFT_PHASE</span>, unlocked, have
-              exactly <span className="font-medium text-foreground">10 league members</span>, and still have
-              <span className="font-medium text-foreground"> no ownership records</span>.
-            </p>
-          </div>
-
-          {!auctionState && !isLoading ? (
-            <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Button onClick={() => setOrderMethod("ALPHABETICAL")} type="button" variant={orderMethod === "ALPHABETICAL" ? "default" : "outline"}>
-                  Alphabetical
-                </Button>
-                <Button onClick={() => setOrderMethod("DIVISION")} type="button" variant={orderMethod === "DIVISION" ? "default" : "outline"}>
-                  Division Order
-                </Button>
-                <Button onClick={() => setOrderMethod("PREVIOUS_YEAR_RECORD")} type="button" variant={orderMethod === "PREVIOUS_YEAR_RECORD" ? "default" : "outline"}>
-                  Previous-Year Record
-                </Button>
+          {canConfigureAuction ? (
+            <div className="space-y-5">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  { value: "ALPHABETICAL", label: "Alphabetical" },
+                  { value: "DIVISION", label: "Division Order" },
+                  { value: "PREVIOUS_YEAR_RECORD", label: "Previous-Year Record" },
+                  { value: "CUSTOM", label: "Custom Order" }
+                ].map((option) => (
+                  <Button
+                    key={option.value}
+                    onClick={() => setOrderMethod(option.value as InauguralAuctionOrderMethod)}
+                    type="button"
+                    variant={orderMethod === option.value ? "default" : "outline"}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
               </div>
 
               {orderMethod === "DIVISION" ? (
-                <div className="space-y-2 rounded-lg border border-border p-4">
-                  <p className="text-sm text-muted-foreground">Choose the division nomination order. Teams inside each division stay alphabetical.</p>
-                  {divisionOrder.map((division, index) => (
-                    <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm" key={division}>
-                      <span>{division}</span>
-                      <div className="flex gap-2">
-                        <Button disabled={index === 0} onClick={() => moveDivision(index, -1)} type="button" variant="ghost">
-                          Up
-                        </Button>
-                        <Button disabled={index === divisionOrder.length - 1} onClick={() => moveDivision(index, 1)} type="button" variant="ghost">
-                          Down
-                        </Button>
+                <div className="space-y-3 rounded-2xl border border-border p-4">
+                  <div>
+                    <p className="font-medium text-foreground">Auction Order Preview</p>
+                    <p className="text-sm text-muted-foreground">
+                      Drag divisions into a new nomination order. Teams on each row stay alphabetical inside the division.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {divisionOrder.map((division, index) => (
+                      <div className="space-y-2" key={division}>
+                        <div
+                          className={cn(
+                            "h-3 rounded-full border-2 border-dashed border-transparent transition",
+                            draggedDivision
+                              ? divisionInsertIndex === index
+                                ? "border-emerald-400 bg-emerald-100"
+                                : "hover:border-emerald-200 hover:bg-emerald-50"
+                              : ""
+                          )}
+                          onDragOver={(event) => {
+                            event.preventDefault();
+                            if (draggedDivision) {
+                              setDivisionInsertIndex(index);
+                            }
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            handleDivisionDrop(index);
+                          }}
+                        />
+                        <div
+                          className={cn(
+                            "rounded-2xl border border-border bg-background px-4 py-4 transition",
+                            draggedDivision === division
+                              ? "border-emerald-400 bg-emerald-50 shadow-[0_18px_40px_-24px_rgba(7,28,18,0.45)]"
+                              : "hover:border-emerald-200 hover:bg-emerald-50/40"
+                          )}
+                          draggable
+                          onDragEnd={() => {
+                            setDraggedDivision(null);
+                            setDivisionInsertIndex(null);
+                          }}
+                          onDragStart={(event) => {
+                            setDraggedDivision(division);
+                            setDivisionInsertIndex(index);
+                            event.dataTransfer.effectAllowed = "move";
+                            const previewElement = createDivisionDragPreview(event.currentTarget as HTMLDivElement);
+                            event.dataTransfer.setDragImage(previewElement, 32, 24);
+                          }}
+                        >
+                          <div className="flex items-start gap-4">
+                            <div className="w-8 text-lg font-semibold text-emerald-700">{index + 1}.</div>
+                            <div>
+                              <p className="font-medium text-foreground">{division}</p>
+                              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                                {(teamsByDivision.get(division) ?? []).map((team) => (
+                                  <NFLTeamLabel
+                                    className="rounded-full border border-border/70 bg-background px-2 py-1"
+                                    key={team.id}
+                                    size="compact"
+                                    team={team}
+                                    textClassName="text-xs"
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                    <div
+                      className={cn(
+                        "h-3 rounded-full border-2 border-dashed border-transparent transition",
+                        draggedDivision
+                          ? divisionInsertIndex === divisionOrder.length
+                            ? "border-emerald-400 bg-emerald-100"
+                            : "hover:border-emerald-200 hover:bg-emerald-50"
+                          : ""
+                      )}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        if (draggedDivision) {
+                          setDivisionInsertIndex(divisionOrder.length);
+                        }
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        handleDivisionDrop(divisionOrder.length);
+                      }}
+                    />
+                  </div>
                 </div>
-              ) : orderMethod === "PREVIOUS_YEAR_RECORD" ? (
-                <p className="text-sm text-muted-foreground">
-                  If prior-year NFL regular-season results are incomplete, this mode safely falls back to alphabetical nomination order.
-                </p>
               ) : null}
 
-              <Button className={getSubmittingButtonClass("configure-auction")} disabled={isSubmitting} onClick={() => void handleConfigureAuction()} type="button">
+              {orderMethod === "CUSTOM" ? (
+                <div className="space-y-4 rounded-2xl border border-border p-4">
+                  <div>
+                    <p className="font-medium text-foreground">Auction Order Preview</p>
+                    <p className="text-sm text-muted-foreground">
+                      Drag teams into the Auction Order Preview below and rearrange as needed to determine auction order.
+                    </p>
+                  </div>
+                  <div
+                    className="space-y-4 rounded-2xl border border-border bg-background/70 p-3"
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      handleCustomTeamDrop();
+                    }}
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Available Teams</p>
+                      <div className="mt-3 flex flex-wrap gap-2 rounded-2xl border border-dashed border-border bg-background/70 p-3">
+                        {isLoadingTeams ? (
+                          <p className="text-sm text-muted-foreground">Loading NFL teams...</p>
+                        ) : availableCustomTeams.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">All 32 teams are currently in the auction order.</p>
+                        ) : (
+                          availableCustomTeams.map((team) => (
+                            <button
+                              className="rounded-full border border-border bg-white px-3 py-2 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50"
+                              draggable
+                              key={team.id}
+                              onDragStart={() => setDraggedTeamId(team.id)}
+                              type="button"
+                            >
+                              <NFLTeamLabel size="compact" team={team} textClassName="text-xs" />
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {customTeamOrder.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+                          Drop the first team here to create line 1.
+                        </div>
+                      ) : (
+                        customTeamOrder.map((teamId, index) => {
+                          const team = teams.find((entry) => entry.id === teamId);
+
+                          if (!team) {
+                            return null;
+                          }
+
+                          return (
+                            <div
+                              className={cn(
+                                "rounded-2xl border border-border bg-white px-4 py-3 transition",
+                                customDropIndex === index ? "border-emerald-400 bg-emerald-50" : "hover:border-emerald-200"
+                              )}
+                              draggable
+                              key={team.id}
+                              onDragOver={(event) => {
+                                event.preventDefault();
+                                setCustomDropIndex(index);
+                              }}
+                              onDragStart={() => setDraggedTeamId(team.id)}
+                              onDrop={(event) => {
+                                event.preventDefault();
+                                handleCustomTeamDrop(index);
+                              }}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-4">
+                                  <div className="w-8 text-lg font-semibold text-emerald-700">{index + 1}.</div>
+                                  <NFLTeamLabel size="default" team={team} />
+                                </div>
+                                <Button onClick={() => removeCustomTeam(team.id)} type="button" variant="ghost">
+                                  Remove
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {previewToRender ? (
+                <div className="space-y-3 rounded-2xl border border-border p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-foreground">Auction Order Preview</p>
+                      <p className="text-sm text-muted-foreground">
+                        {orderMethod === "PREVIOUS_YEAR_RECORD"
+                          ? "Review the full 1-32 prior-year record order. Matching records break alphabetically."
+                          : orderMethod === "ALPHABETICAL"
+                            ? "Previewing the full 1-32 alphabetical nomination order."
+                            : orderMethod === "DIVISION"
+                              ? "Previewing the full 1-32 order based on the selected division sequence."
+                              : "Previewing the custom 1-32 order you are building."}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {orderMethod === "PREVIOUS_YEAR_RECORD" ? (
+                        <Button
+                          onClick={() =>
+                            setPreviousYearSortDirection((current) =>
+                              current === "BEST_FIRST" ? "WORST_FIRST" : "BEST_FIRST"
+                            )
+                          }
+                          type="button"
+                          variant="outline"
+                        >
+                          {previousYearSortDirection === "BEST_FIRST"
+                            ? "Record Order: Best -> Worst"
+                            : "Record Order: Worst -> Best"}
+                        </Button>
+                      ) : null}
+                      {isLoadingPreview ? <span className="text-sm text-muted-foreground">Refreshing preview...</span> : null}
+                    </div>
+                  </div>
+
+                  {previewToRender.notes.length > 0 ? (
+                    <div className="rounded-xl border border-dashed border-border p-3 text-sm text-muted-foreground">
+                      {previewToRender.notes.map((note) => (
+                        <p key={note}>{note}</p>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="grid gap-2">
+                    {previewToRender.entries.map((entry) => (
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background px-4 py-3" key={`${entry.orderIndex}-${entry.nflTeam.id}`}>
+                        <div className="flex items-center gap-4">
+                          <div className="w-8 text-sm font-semibold text-emerald-700">{entry.orderIndex + 1}.</div>
+                          <NFLTeamLabel size="default" team={entry.nflTeam} />
+                        </div>
+                        {entry.note ? <div className="text-sm text-muted-foreground">{entry.note}</div> : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <Button
+                className={getSubmittingButtonClass("configure-auction")}
+                disabled={isSubmitting || (orderMethod === "CUSTOM" && customTeamOrder.length !== 32)}
+                onClick={() => void handleConfigureAuction()}
+                type="button"
+              >
                 Save Inaugural Auction Order
               </Button>
             </div>
@@ -331,17 +786,56 @@ export function InauguralAuctionPanel({
                 <Card>
                   <CardHeader>
                     <CardTitle>
-                      {auctionState.currentNomination ? "Team On The Clock" : auctionState.auction.status === "COMPLETED" ? "Auction Complete" : "Auction Setup"}
+                      {auctionState.finalSelection
+                        ? "Final Team Selection"
+                        : auctionState.currentNomination
+                          ? "Team On The Clock"
+                          : auctionState.auction.status === "COMPLETED"
+                            ? "Auction Complete"
+                            : "Auction Setup"}
                     </CardTitle>
                     <CardDescription>
-                      {auctionState.auction.status === "PLANNING"
-                        ? "Review the nomination order, then start the inaugural auction."
-                        : auctionState.auction.status === "COMPLETED"
-                        ? "All 30 awarded teams have been finalized into season ownership."
-                        : "Any eligible owner can bid while the clock is live."}
+                      {auctionState.finalSelection
+                        ? "One owner has one team left to claim. Choose from the final three remaining teams at an automatic $1."
+                        : auctionState.auction.status === "PLANNING"
+                          ? "Review the nomination order, then start the inaugural auction."
+                          : auctionState.auction.status === "COMPLETED"
+                            ? "All 30 awarded teams have been finalized into season ownership."
+                            : "Any eligible owner can bid while the clock is live."}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    {auctionState.finalSelection ? (
+                      <div className="space-y-4 rounded-2xl border border-border p-4">
+                        <div className="rounded-xl border border-dashed border-border p-3 text-sm text-muted-foreground">
+                          <p>
+                            <span className="font-medium text-foreground">{auctionState.finalSelection.displayName}</span> is selecting the final
+                            team. No bidding is needed in this last step.
+                          </p>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-3">
+                          {auctionState.finalSelection.availableTeams.map((entry) => (
+                            <div className="rounded-2xl border border-border bg-background p-4" key={entry.nominationId}>
+                              <NFLTeamLabel size="default" team={entry.team} />
+                              <p className="mt-3 text-sm text-muted-foreground">
+                                Automatic award amount: {formatCurrency(auctionState.finalSelection?.automaticBidAmount ?? 1)}
+                              </p>
+                              {viewer?.canSelectFinalTeam ? (
+                                <Button
+                                  className={cn("mt-4 w-full", getSubmittingButtonClass(`select-${entry.nominationId}`))}
+                                  disabled={isSubmitting}
+                                  onClick={() => void handleSubmitBid(entry.nominationId)}
+                                  type="button"
+                                >
+                                  Select Team
+                                </Button>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
                     {auctionState.currentNomination ? (
                       <div className="rounded-lg border border-border p-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -367,9 +861,7 @@ export function InauguralAuctionPanel({
                           </div>
                           <div className="rounded-lg border border-border bg-background px-4 py-3 text-sm">
                             <div className="text-muted-foreground">Auction progress</div>
-                            <div className="font-medium">
-                              {auctionState.auction.awardedCount} / 30 teams awarded
-                            </div>
+                            <div className="font-medium">{auctionState.auction.awardedCount} / 30 teams awarded</div>
                           </div>
                         </div>
                       </div>
@@ -387,13 +879,7 @@ export function InauguralAuctionPanel({
                           Your remaining budget: {formatCurrency(viewer?.budgetRemaining ?? 0)}. Team count: {viewer?.teamCount ?? 0} / 3.
                         </p>
                         <div className="flex flex-wrap gap-3">
-                          <input
-                            className="h-10 w-40 rounded-md border border-input bg-background px-3 text-sm"
-                            min={minimumNextBid}
-                            onChange={(event) => setBidAmount(event.target.value)}
-                            type="number"
-                            value={bidAmount}
-                          />
+                          <input className="h-10 w-40 rounded-md border border-input bg-background px-3 text-sm" min={minimumNextBid} onChange={(event) => setBidAmount(event.target.value)} type="number" value={bidAmount} />
                           <Button className={getSubmittingButtonClass("submit-bid")} disabled={isSubmitting || Number(bidAmount) < minimumNextBid || Number(bidAmount) > (viewer?.maxAllowedBid ?? 0)} onClick={() => void handleSubmitBid()} type="button">
                             Submit Bid
                           </Button>
@@ -402,7 +888,7 @@ export function InauguralAuctionPanel({
                           Minimum next bid: {formatCurrency(minimumNextBid)}. Your max valid bid: {formatCurrency(viewer?.maxAllowedBid ?? 0)}.
                         </p>
                       </div>
-                    ) : viewer && auctionState.auction.status === "ACTIVE" ? (
+                    ) : viewer && auctionState.auction.status === "ACTIVE" && !auctionState.finalSelection ? (
                       <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                         {viewer.teamCount === 3
                           ? "You already have 3 awarded teams and are now view-only for the rest of the auction."
@@ -436,7 +922,7 @@ export function InauguralAuctionPanel({
                     <CardTitle>Nomination Order</CardTitle>
                     <CardDescription>Teams advance automatically through the saved inaugural auction order.</CardDescription>
                   </CardHeader>
-                  <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  <CardContent className="grid gap-2">
                     {auctionState.nominations.map((nomination) => (
                       <div className="rounded-lg border border-border px-4 py-3 text-sm" key={nomination.id}>
                         <div className="font-medium">
@@ -446,8 +932,10 @@ export function InauguralAuctionPanel({
                           {nomination.isAwarded
                             ? "Awarded"
                             : auctionState.currentNomination?.id === nomination.id
-                            ? "On the clock"
-                            : "Upcoming"}
+                              ? "On the clock"
+                              : auctionState.finalSelection?.availableTeams.some((entry) => entry.nominationId === nomination.id)
+                                ? "Final selection pool"
+                                : "Upcoming"}
                         </div>
                       </div>
                     ))}
@@ -512,7 +1000,9 @@ export function InauguralAuctionPanel({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
           <div className="w-full max-w-3xl rounded-3xl border border-border bg-white p-6 shadow-2xl">
             <h3 className="text-2xl font-semibold text-foreground">Inaugural Auction Complete</h3>
-            <p className="mt-2 text-sm text-muted-foreground">Thirty teams were awarded and authoritative season ownership has been written into the league.</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Thirty teams were awarded and authoritative season ownership has been written into the league.
+            </p>
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <div className="rounded-lg border border-border p-4 text-sm">
                 <div className="font-medium">Biggest spender</div>

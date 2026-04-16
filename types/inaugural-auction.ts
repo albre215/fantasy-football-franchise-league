@@ -1,6 +1,20 @@
 import type { DraftStatus, DraftTeamSummary } from "@/types/draft";
 
-export type InauguralAuctionOrderMethod = "ALPHABETICAL" | "DIVISION" | "PREVIOUS_YEAR_RECORD";
+export type InauguralAuctionOrderMethod = "ALPHABETICAL" | "DIVISION" | "PREVIOUS_YEAR_RECORD" | "CUSTOM";
+export type InauguralAuctionPreviousYearSortDirection = "BEST_FIRST" | "WORST_FIRST";
+
+export interface InauguralAuctionOrderPreviewEntry {
+  orderIndex: number;
+  nflTeam: DraftTeamSummary;
+  note: string | null;
+}
+
+export interface InauguralAuctionOrderPreview {
+  orderMethod: InauguralAuctionOrderMethod;
+  notes: string[];
+  divisionOrder: string[] | null;
+  entries: InauguralAuctionOrderPreviewEntry[];
+}
 
 export interface InauguralAuctionOwnerSummary {
   leagueMemberId: string;
@@ -89,6 +103,7 @@ export interface InauguralAuctionState {
     announcementEndsAt: string | null;
     completedAt: string | null;
   };
+  orderPreview: InauguralAuctionOrderPreview;
   orderNotes: string[];
   currentNomination: InauguralAuctionNominationSummary | null;
   currentHighBid: InauguralAuctionBidSummary | null;
@@ -101,6 +116,17 @@ export interface InauguralAuctionState {
     secondsRemaining: number;
     isExtendedWindow: boolean;
   } | null;
+  finalSelection:
+    | {
+        leagueMemberId: string;
+        displayName: string;
+        availableTeams: Array<{
+          nominationId: string;
+          team: DraftTeamSummary;
+        }>;
+        automaticBidAmount: number;
+      }
+    | null;
   activeAward: InauguralAuctionAwardSummary | null;
   finalSummary: InauguralAuctionFinalSummary | null;
   viewer: {
@@ -108,6 +134,7 @@ export interface InauguralAuctionState {
     role: "COMMISSIONER" | "OWNER" | null;
     canManageAuction: boolean;
     canBid: boolean;
+    canSelectFinalTeam: boolean;
     budgetRemaining: number | null;
     teamCount: number | null;
     maxAllowedBid: number | null;
@@ -119,6 +146,8 @@ export interface ConfigureInauguralAuctionInput {
   actingUserId: string;
   orderMethod: InauguralAuctionOrderMethod;
   divisionOrder?: string[];
+  customTeamOrder?: string[];
+  previousYearSortDirection?: InauguralAuctionPreviousYearSortDirection;
 }
 
 export interface StartInauguralAuctionInput {
@@ -130,6 +159,7 @@ export interface SubmitInauguralBidInput {
   seasonId: string;
   actingUserId: string;
   amount: number;
+  nominationId?: string;
 }
 
 export interface InauguralAuctionStateResponse {
@@ -138,6 +168,10 @@ export interface InauguralAuctionStateResponse {
 
 export interface ConfigureInauguralAuctionResponse {
   auction: InauguralAuctionState;
+}
+
+export interface InauguralAuctionOrderPreviewResponse {
+  preview: InauguralAuctionOrderPreview;
 }
 
 export interface StartInauguralAuctionResponse {

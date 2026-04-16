@@ -296,6 +296,7 @@ enum InauguralAuctionOrderMethod {
   ALPHABETICAL
   DIVISION
   PREVIOUS_YEAR_RECORD
+  CUSTOM
 }
 
 model InauguralAuctionNomination {
