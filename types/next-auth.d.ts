@@ -6,12 +6,14 @@ declare module "next-auth" {
       id: string;
       displayName: string;
       authMethod: "credentials" | "recovery-code";
+      profileImageUrl: string | null;
     } & DefaultSession["user"];
   }
 
   interface User {
     id: string;
     displayName: string;
+    profileImageUrl?: string | null;
   }
 }
 
@@ -20,5 +22,6 @@ declare module "next-auth/jwt" {
     sub?: string;
     displayName?: string;
     authMethod?: "credentials" | "recovery-code";
+    profileImageUrl?: string | null;
   }
 }

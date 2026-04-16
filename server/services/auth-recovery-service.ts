@@ -380,7 +380,8 @@ export const authRecoveryService = {
       id: challenge.user.id,
       email: challenge.user.email,
       name: challenge.user.displayName,
-      displayName: challenge.user.displayName
+      displayName: challenge.user.displayName,
+      profileImageUrl: challenge.user.profileImageUrl
     };
   },
 

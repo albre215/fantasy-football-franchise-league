@@ -68,6 +68,13 @@ export const authOptions: NextAuthOptions = {
         const user = await prisma.user.findUnique({
           where: {
             email
+          },
+          select: {
+            id: true,
+            email: true,
+            displayName: true,
+            passwordHash: true,
+            profileImageUrl: true
           }
         });
 
@@ -85,7 +92,8 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           email: user.email,
           name: user.displayName,
-          displayName: user.displayName
+          displayName: user.displayName,
+          profileImageUrl: user.profileImageUrl
         };
       }
     }),
@@ -124,6 +132,7 @@ export const authOptions: NextAuthOptions = {
         token.sub = user.id;
         token.displayName = user.name ?? "";
         token.authMethod = account?.provider === "recovery-code" ? "recovery-code" : "credentials";
+        token.profileImageUrl = user.profileImageUrl ?? null;
       }
 
       if (trigger === "update" && session?.user) {
@@ -134,6 +143,8 @@ export const authOptions: NextAuthOptions = {
         if (session.user.email) {
           token.email = session.user.email;
         }
+
+        token.profileImageUrl = session.user.profileImageUrl ?? null;
       }
 
       return token;
@@ -143,6 +154,7 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.sub;
         session.user.displayName = getSessionDisplayName(token.displayName, session.user.name);
         session.user.authMethod = token.authMethod === "recovery-code" ? "recovery-code" : "credentials";
+        session.user.profileImageUrl = token.profileImageUrl ?? null;
       }
 
       return session;
