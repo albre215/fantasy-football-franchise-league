@@ -664,55 +664,110 @@ export function InauguralAuctionPanel({
                     </div>
 
                     <div className="space-y-2">
+                      <p className="text-sm font-medium text-foreground">Auction Order Preview</p>
                       {customTeamOrder.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+                        <div
+                          className={cn(
+                            "rounded-2xl border border-dashed p-6 text-sm text-muted-foreground transition",
+                            draggedTeamId ? "border-emerald-400 bg-emerald-50" : "border-border"
+                          )}
+                          onDragOver={(event) => {
+                            event.preventDefault();
+                            setCustomDropIndex(0);
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            handleCustomTeamDrop(0);
+                          }}
+                        >
                           Drop the first team here to create line 1.
                         </div>
                       ) : (
-                        customTeamOrder.map((teamId, index) => {
-                          const team = teams.find((entry) => entry.id === teamId);
+                        <>
+                          {customTeamOrder.map((teamId, index) => {
+                            const team = teams.find((entry) => entry.id === teamId);
 
-                          if (!team) {
-                            return null;
-                          }
+                            if (!team) {
+                              return null;
+                            }
 
-                          return (
-                            <div
-                              className={cn(
-                                "rounded-2xl border border-border bg-white px-4 py-3 transition",
-                                customDropIndex === index ? "border-emerald-400 bg-emerald-50" : "hover:border-emerald-200"
-                              )}
-                              draggable
-                              key={team.id}
-                              onDragOver={(event) => {
-                                event.preventDefault();
-                                setCustomDropIndex(index);
-                              }}
-                              onDragStart={() => setDraggedTeamId(team.id)}
-                              onDrop={(event) => {
-                                event.preventDefault();
-                                handleCustomTeamDrop(index);
-                              }}
-                            >
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-4">
-                                  <div className="w-8 text-lg font-semibold text-emerald-700">{index + 1}.</div>
-                                  <NFLTeamLabel size="default" team={team} />
+                            return (
+                              <div className="space-y-2" key={team.id}>
+                                <div
+                                  className={cn(
+                                    "h-3 rounded-full border-2 border-dashed border-transparent transition",
+                                    draggedTeamId
+                                      ? customDropIndex === index
+                                        ? "border-emerald-400 bg-emerald-100"
+                                        : "hover:border-emerald-200 hover:bg-emerald-50"
+                                      : ""
+                                  )}
+                                  onDragOver={(event) => {
+                                    event.preventDefault();
+                                    if (draggedTeamId) {
+                                      setCustomDropIndex(index);
+                                    }
+                                  }}
+                                  onDrop={(event) => {
+                                    event.preventDefault();
+                                    handleCustomTeamDrop(index);
+                                  }}
+                                />
+                                <div
+                                  className={cn(
+                                    "rounded-2xl border border-border bg-white px-4 py-3 transition",
+                                    draggedTeamId === team.id
+                                      ? "border-emerald-400 bg-emerald-50 shadow-[0_18px_40px_-24px_rgba(7,28,18,0.45)]"
+                                      : "hover:border-emerald-200"
+                                  )}
+                                  draggable
+                                  onDragEnd={() => {
+                                    setDraggedTeamId(null);
+                                    setCustomDropIndex(null);
+                                  }}
+                                  onDragStart={() => setDraggedTeamId(team.id)}
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-4">
+                                      <div className="w-8 text-lg font-semibold text-emerald-700">{index + 1}.</div>
+                                      <NFLTeamLabel size="default" team={team} />
+                                    </div>
+                                    <Button onClick={() => removeCustomTeam(team.id)} type="button" variant="ghost">
+                                      Remove
+                                    </Button>
+                                  </div>
                                 </div>
-                                <Button onClick={() => removeCustomTeam(team.id)} type="button" variant="ghost">
-                                  Remove
-                                </Button>
                               </div>
-                            </div>
-                          );
-                        })
+                            );
+                          })}
+                          <div
+                            className={cn(
+                              "h-3 rounded-full border-2 border-dashed border-transparent transition",
+                              draggedTeamId
+                                ? customDropIndex === customTeamOrder.length
+                                  ? "border-emerald-400 bg-emerald-100"
+                                  : "hover:border-emerald-200 hover:bg-emerald-50"
+                                : ""
+                            )}
+                            onDragOver={(event) => {
+                              event.preventDefault();
+                              if (draggedTeamId) {
+                                setCustomDropIndex(customTeamOrder.length);
+                              }
+                            }}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              handleCustomTeamDrop(customTeamOrder.length);
+                            }}
+                          />
+                        </>
                       )}
                     </div>
                   </div>
                 </div>
               ) : null}
 
-              {previewToRender ? (
+              {previewToRender && orderMethod !== "CUSTOM" ? (
                 <div className="space-y-3 rounded-2xl border border-border p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
