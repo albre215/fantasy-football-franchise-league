@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
+import { Check, Lock, LockOpen, XCircle } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -25,6 +26,10 @@ import type {
   ReplaceLeagueMemberResponse
 } from "@/types/league";
 import type { SeasonResultsResponse } from "@/types/results";
+import type {
+  SeasonNflLedgerPostingPreviewResponse,
+  SeasonNflOverviewResponse
+} from "@/types/nfl-performance";
 import type {
   CreateSeasonResponse,
   LockSeasonResponse,
@@ -62,6 +67,10 @@ type DashboardTab =
 type ResultsDraftTab = "final-standings" | "offseason-draft" | "commissioner-overrides";
 type DashboardViewMode = "commissioner" | "owner";
 
+function getRegularSeasonWeekLimit(seasonYear: number) {
+  return seasonYear >= 2021 ? 18 : 17;
+}
+
 function getFallbackPhaseTransitions(currentPhase: SeasonPhaseContextResponse["phase"]["season"]["leaguePhase"] | null) {
   switch (currentPhase) {
     case "IN_SEASON":
@@ -88,6 +97,30 @@ function TabPanelSkeleton({ title, description }: { title: string; description: 
         ))}
       </CardContent>
     </Card>
+  );
+}
+
+function ChecklistStatusItem({
+  label,
+  value,
+  passed
+}: {
+  label: string;
+  value: string;
+  passed: boolean;
+}) {
+  return (
+    <div className="flex items-start gap-3 text-sm">
+      {passed ? (
+        <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+      ) : (
+        <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+      )}
+      <p>
+        <span className="font-semibold text-foreground">{label}:</span>{" "}
+        <span className={passed ? "text-foreground" : "text-rose-700"}>{value}</span>
+      </p>
+    </div>
   );
 }
 
@@ -184,6 +217,7 @@ export function LeagueDashboard({
   const { data: session, status: sessionStatus } = useSession();
   const [isLoading, setIsLoading] = useState(!initialIsAuthenticated && sessionStatus === "loading");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [leagueOptions, setLeagueOptions] = useState<LeagueListItem[]>(initialLeagueOptions);
   const [bootstrapState, setBootstrapState] = useState<LeagueBootstrapStateResponse["bootstrapState"] | null>(
     initialBootstrapState
@@ -193,6 +227,8 @@ export function LeagueDashboard({
   const [draftState, setDraftState] = useState<DraftState | null>(null);
   const [resultsAvailability, setResultsAvailability] = useState<SeasonResultsResponse["results"]["availability"] | null>(null);
   const [seasonPhaseContext, setSeasonPhaseContext] = useState<SeasonPhaseContextResponse["phase"] | null>(null);
+  const [seasonNflOverview, setSeasonNflOverview] = useState<SeasonNflOverviewResponse["nfl"] | null>(null);
+  const [seasonNflLedgerPreview, setSeasonNflLedgerPreview] = useState<SeasonNflLedgerPostingPreviewResponse["nflLedger"] | null>(null);
   const [ownershipError, setOwnershipError] = useState<string | null>(null);
   const [seasonYear, setSeasonYear] = useState(() => getCurrentGmFantasySeasonYear().toString());
   const [editingSeasonId, setEditingSeasonId] = useState<string | null>(null);
@@ -241,6 +277,14 @@ export function LeagueDashboard({
     activeTab === "nfl-performance";
   const isAuthenticated = initialIsAuthenticated || sessionStatus === "authenticated";
 
+  function getSubmittingButtonClass(actionId: string) {
+    if (!isSubmitting) {
+      return undefined;
+    }
+
+    return pendingActionId === actionId ? "disabled:opacity-70" : "disabled:opacity-100";
+  }
+
   useEffect(() => {
     if (!errorMessage && !successMessage) {
       return;
@@ -278,11 +322,13 @@ export function LeagueDashboard({
 
   async function loadActiveSeasonOperationalData(seasonId: string) {
     try {
-      const [ownershipResponse, draftResponse, resultsResponse, phaseResponse] = await Promise.all([
+      const [ownershipResponse, draftResponse, resultsResponse, phaseResponse, nflOverviewResponse, nflLedgerResponse] = await Promise.all([
         fetch(`/api/season/${seasonId}/ownership`, { cache: "no-store" }),
         fetch(`/api/season/${seasonId}/draft`, { cache: "no-store" }),
         fetch(`/api/season/${seasonId}/results`, { cache: "no-store" }),
-        fetch(`/api/season/${seasonId}/phase`, { cache: "no-store" })
+        fetch(`/api/season/${seasonId}/phase`, { cache: "no-store" }),
+        fetch(`/api/season/${seasonId}/nfl`, { cache: "no-store" }),
+        fetch(`/api/season/${seasonId}/nfl/ledger`, { cache: "no-store" })
       ]);
 
       try {
@@ -350,6 +396,28 @@ export function LeagueDashboard({
         setSeasonPhaseContext(null);
       }
 
+      try {
+        const nflOverviewData = await parseJsonResponse<SeasonNflOverviewResponse>(nflOverviewResponse);
+        setSeasonNflOverview(nflOverviewData.nfl);
+      } catch (error) {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Season NFL overview load failed:", error);
+        }
+
+        setSeasonNflOverview(null);
+      }
+
+      try {
+        const nflLedgerData = await parseJsonResponse<SeasonNflLedgerPostingPreviewResponse>(nflLedgerResponse);
+        setSeasonNflLedgerPreview(nflLedgerData.nflLedger);
+      } catch (error) {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Season NFL ledger preview load failed:", error);
+        }
+
+        setSeasonNflLedgerPreview(null);
+      }
+
       setOperationalDataSeasonId(seasonId);
     } catch (error) {
       if (process.env.NODE_ENV !== "production") {
@@ -387,6 +455,8 @@ export function LeagueDashboard({
         setDraftState(null);
         setResultsAvailability(null);
         setSeasonPhaseContext(null);
+        setSeasonNflOverview(null);
+        setSeasonNflLedgerPreview(null);
         setOwnershipError(null);
         setSelectedOwnerId("");
         setSelectedTeamId("");
@@ -401,6 +471,8 @@ export function LeagueDashboard({
         setDraftState(null);
         setResultsAvailability(null);
         setSeasonPhaseContext(null);
+        setSeasonNflOverview(null);
+        setSeasonNflLedgerPreview(null);
         setOwnershipError(null);
         setSelectedOwnerId("");
         setSelectedTeamId("");
@@ -483,6 +555,7 @@ export function LeagueDashboard({
 
     setErrorMessage(null);
     setSuccessMessage(null);
+    setPendingActionId("create-season");
     setIsSubmitting(true);
 
     try {
@@ -516,6 +589,7 @@ export function LeagueDashboard({
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to create season.");
     } finally {
+      setPendingActionId(null);
       setIsSubmitting(false);
     }
   }
@@ -527,6 +601,7 @@ export function LeagueDashboard({
 
     setErrorMessage(null);
     setSuccessMessage(null);
+    setPendingActionId(`set-active:${seasonId}`);
     setIsSubmitting(true);
 
     try {
@@ -557,6 +632,7 @@ export function LeagueDashboard({
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to set active season.");
     } finally {
+      setPendingActionId(null);
       setIsSubmitting(false);
     }
   }
@@ -568,6 +644,7 @@ export function LeagueDashboard({
 
     setErrorMessage(null);
     setSuccessMessage(null);
+    setPendingActionId(`move-phase:${nextPhase}`);
     setIsSubmitting(true);
 
     try {
@@ -586,6 +663,7 @@ export function LeagueDashboard({
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to update season phase.");
     } finally {
+      setPendingActionId(null);
       setIsSubmitting(false);
     }
   }
@@ -622,6 +700,7 @@ export function LeagueDashboard({
 
     setErrorMessage(null);
     setSuccessMessage(null);
+    setPendingActionId(`season-year:${seasonId}`);
     setIsSubmitting(true);
 
     try {
@@ -654,6 +733,7 @@ export function LeagueDashboard({
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to update season year.");
     } finally {
+      setPendingActionId(null);
       setIsSubmitting(false);
     }
   }
@@ -667,6 +747,7 @@ export function LeagueDashboard({
 
     setErrorMessage(null);
     setSuccessMessage(null);
+    setPendingActionId("add-member");
     setIsSubmitting(true);
 
     try {
@@ -689,6 +770,7 @@ export function LeagueDashboard({
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to add member.");
     } finally {
+      setPendingActionId(null);
       setIsSubmitting(false);
     }
   }
@@ -720,6 +802,7 @@ export function LeagueDashboard({
 
     setErrorMessage(null);
     setSuccessMessage(null);
+    setPendingActionId(`replace-member:${replacementMemberId}`);
     setIsSubmitting(true);
 
     try {
@@ -742,6 +825,7 @@ export function LeagueDashboard({
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to change member.");
     } finally {
+      setPendingActionId(null);
       setIsSubmitting(false);
     }
   }
@@ -769,6 +853,7 @@ export function LeagueDashboard({
 
     setErrorMessage(null);
     setSuccessMessage(null);
+    setPendingActionId("assign-team");
     setIsSubmitting(true);
 
     try {
@@ -789,21 +874,23 @@ export function LeagueDashboard({
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to assign team.");
     } finally {
+      setPendingActionId(null);
       setIsSubmitting(false);
     }
   }
 
-  async function handleLockSeason() {
-    if (!activeSeason) {
+  async function handleToggleSeasonLock(season: SeasonListResponse["seasons"][number]) {
+    if (!leagueId) {
       return;
     }
 
     setErrorMessage(null);
     setSuccessMessage(null);
+    setPendingActionId(`season-lock:${season.id}`);
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`/api/season/${activeSeason.id}/lock`, {
+      const response = await fetch(`/api/season/${season.id}/${season.isLocked ? "unlock" : "lock"}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -811,42 +898,19 @@ export function LeagueDashboard({
         body: JSON.stringify({
         })
       });
-      const data = await parseJsonResponse<LockSeasonResponse>(response);
+      if (season.isLocked) {
+        const data = await parseJsonResponse<UnlockSeasonResponse>(response);
+        setSuccessMessage(`Unlocked ${data.season.name ?? data.season.year}. Fix setup issues, then relock the season.`);
+      } else {
+        const data = await parseJsonResponse<LockSeasonResponse>(response);
+        setSuccessMessage(`Locked ${data.season.name ?? data.season.year}.`);
+      }
 
-      setSuccessMessage(`Locked ${data.season.name ?? data.season.year}.`);
-      await refreshLeagueDashboard(leagueId!, { includeOperationalData: true });
+      await refreshLeagueDashboard(leagueId, { includeOperationalData: true });
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to lock season.");
+      setErrorMessage(error instanceof Error ? error.message : `Unable to ${season.isLocked ? "unlock" : "lock"} season.`);
     } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function handleUnlockSeason() {
-    if (!activeSeason) {
-      return;
-    }
-
-    setErrorMessage(null);
-    setSuccessMessage(null);
-    setIsSubmitting(true);
-
-    try {
-      const response = await fetch(`/api/season/${activeSeason.id}/unlock`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-        })
-      });
-      const data = await parseJsonResponse<UnlockSeasonResponse>(response);
-
-      setSuccessMessage(`Unlocked ${data.season.name ?? data.season.year}. Fix setup issues, then relock the season.`);
-      await refreshLeagueDashboard(leagueId!, { includeOperationalData: true });
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to unlock season.");
-    } finally {
+      setPendingActionId(null);
       setIsSubmitting(false);
     }
   }
@@ -862,6 +926,7 @@ export function LeagueDashboard({
 
     setErrorMessage(null);
     setSuccessMessage(null);
+    setPendingActionId(`remove-team:${teamOwnershipId}`);
     setIsSubmitting(true);
 
     try {
@@ -881,6 +946,7 @@ export function LeagueDashboard({
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to remove team.");
     } finally {
+      setPendingActionId(null);
       setIsSubmitting(false);
     }
   }
@@ -933,6 +999,20 @@ export function LeagueDashboard({
   const ownershipFinalized = isLocked && assignedTeamsCount === 30;
   const recommendedDraftOrderReady = resultsAvailability?.isReadyForDraftOrderAutomation ?? false;
   const currentLeaguePhase = seasonPhaseContext?.season.leaguePhase ?? activeSeason?.leaguePhase ?? null;
+  const regularSeasonComplete =
+    Boolean(activeSeason) &&
+    (seasonNflOverview?.importState.importedRegularSeasonWeeks ?? 0) >= getRegularSeasonWeekLimit(activeSeason?.year ?? 0) &&
+    seasonNflLedgerPreview?.postingStatus === "POSTED";
+  const postseasonComplete =
+    Boolean(activeSeason) &&
+    Boolean((seasonNflOverview?.importState.importedPlayoffPhases ?? []).includes("SUPER_BOWL")) &&
+    seasonNflLedgerPreview?.postingStatus === "POSTED";
+  const keeperSelectionsComplete = isInauguralAuctionSeason
+    ? assignedTeamsCount === 30
+    : draftState?.keeperProgress.isComplete ?? false;
+  const offseasonDraftComplete = isInauguralAuctionSeason
+    ? assignedTeamsCount === 30
+    : draftState?.draft.status === "COMPLETED";
   const availablePhaseTransitions =
     seasonPhaseContext?.availableTransitions ?? getFallbackPhaseTransitions(currentLeaguePhase);
 
@@ -1193,7 +1273,7 @@ export function LeagueDashboard({
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <form className="space-y-4" onSubmit={handleCreateSeason}>
-                      <Button disabled={isSubmitting || !canManageLeague} type="submit">
+                      <Button className={getSubmittingButtonClass("create-season")} disabled={isSubmitting || !canManageLeague} type="submit">
                         Create New Season
                       </Button>
                     </form>
@@ -1220,6 +1300,7 @@ export function LeagueDashboard({
                                     value={editingSeasonYear}
                                   />
                                   <Button
+                                    className={getSubmittingButtonClass(`season-year:${season.id}`)}
                                     disabled={isSubmitting || !canManageLeague || !editingSeasonYear.trim()}
                                     onClick={() => void handleUpdateSeasonYear(season.id)}
                                     type="button"
@@ -1227,6 +1308,7 @@ export function LeagueDashboard({
                                     Save Year
                                   </Button>
                                   <Button
+                                    className={getSubmittingButtonClass(`season-year:${season.id}`)}
                                     disabled={isSubmitting}
                                     onClick={cancelSeasonYearEdit}
                                     type="button"
@@ -1238,8 +1320,31 @@ export function LeagueDashboard({
                               ) : null}
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                aria-label={season.isLocked ? `Unlock ${season.name ?? season.year}` : `Lock ${season.name ?? season.year}`}
+                                className={cn(
+                                  "inline-flex h-10 w-10 items-center justify-center rounded-full border transition-colors disabled:opacity-100",
+                                  season.isLocked
+                                    ? "border-rose-200 bg-rose-100 text-rose-500 hover:bg-rose-200"
+                                    : "border-border bg-background text-muted-foreground hover:bg-secondary hover:text-foreground",
+                                  isSubmitting && pendingActionId === `season-lock:${season.id}` ? "opacity-70" : undefined
+                                )}
+                                disabled={
+                                  isSubmitting ||
+                                  !canManageLeague ||
+                                  (!season.isLocked &&
+                                    season.status === "ACTIVE" &&
+                                    !bootstrapState?.lockReadiness.isReadyToLock)
+                                }
+                                onClick={() => void handleToggleSeasonLock(season)}
+                                title={season.isLocked ? "Unlock season" : "Lock season"}
+                                type="button"
+                              >
+                                {season.isLocked ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
+                              </button>
                               {editingSeasonId !== season.id ? (
                                 <Button
+                                  className={getSubmittingButtonClass(`edit-season:${season.id}`)}
                                   disabled={isSubmitting || !canManageLeague}
                                   onClick={() => startSeasonYearEdit(season.id, season.year)}
                                   type="button"
@@ -1249,7 +1354,7 @@ export function LeagueDashboard({
                                 </Button>
                               ) : null}
                               <Button
-                                className="min-w-[7.75rem]"
+                                className={cn("min-w-[7.75rem]", getSubmittingButtonClass(`set-active:${season.id}`))}
                                 disabled={isSubmitting || season.status === "ACTIVE" || !canManageLeague}
                                 onClick={() => void handleSetActiveSeason(season.id)}
                                 type="button"
@@ -1260,6 +1365,7 @@ export function LeagueDashboard({
                               {season.status === "ACTIVE" && availablePhaseTransitions.length ? (
                                 availablePhaseTransitions.map((transition) => (
                                   <Button
+                                    className={getSubmittingButtonClass(`move-phase:${transition.phase}`)}
                                     disabled={isSubmitting || !canManageLeague || !transition.isAvailable}
                                     key={transition.phase}
                                     onClick={() => void handleUpdateLeaguePhase(transition.phase)}
@@ -1296,79 +1402,87 @@ export function LeagueDashboard({
                   </CardContent>
                 </Card>
 
-                <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Season Setup & Readiness</CardTitle>
-                      <CardDescription>
-                        Use this checklist to get the active season structurally ready before locking it.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3 text-sm">
-                      <p>
-                        Overall status:{" "}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Season Checklist</CardTitle>
+                    <CardDescription>Use this checklist to review the active season's setup at a glance.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-5">
+                    <div className="rounded-2xl border border-border bg-secondary/25 p-4">
+                      <p className="text-sm text-muted-foreground">
+                        <span className="font-semibold text-foreground">Active Season:</span>{" "}
+                        {activeSeason ? activeSeason.name ?? activeSeason.year : "None selected"}
+                      </p>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        <span className="font-semibold text-foreground">Overall Status:</span>{" "}
                         {lockState === "LOCKED"
                           ? "Locked"
                           : lockState === "READY_TO_LOCK"
                           ? "Ready to Lock"
-                          : "Not Ready"}
+                          : "Not Ready to Lock"}
                       </p>
-                      <p>Active season exists: {bootstrapState.lockReadiness.hasActiveSeason ? "Pass" : "Fail"}</p>
-                      <p>10 members required: {bootstrapState.lockReadiness.hasExactlyTenMembers ? "Pass" : "Fail"}</p>
-                      <p>
-                        30 assigned teams required: {bootstrapState.lockReadiness.hasThirtyAssignedTeams ? "Pass" : "Fail"}
-                      </p>
-                      <p>2 unassigned teams required: {bootstrapState.lockReadiness.hasTwoUnassignedTeams ? "Pass" : "Fail"}</p>
-                      <p>
-                        Every member has exactly 3 teams:{" "}
-                        {bootstrapState.lockReadiness.everyMemberHasExactlyThreeTeams ? "Pass" : "Fail"}
-                      </p>
-                      <div className="rounded-lg border border-border p-3">
-                        {members.map((member) => (
-                          <p key={member.id}>
-                            {member.displayName}: {member.assignmentCount}/3 {member.assignmentCount === 3 ? "Pass" : "Fail"}
-                          </p>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
+                    </div>
 
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Season Controls</CardTitle>
-                      <CardDescription>
-                        Lock and unlock the active season once setup is correct or when a correction is needed.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4 text-sm text-muted-foreground">
-                      <p>
-                        Active season: {activeSeason ? activeSeason.name ?? activeSeason.year : "None selected"}
-                      </p>
-                      <p>Current lock state: {isLocked ? "Locked" : "Open"}</p>
-                      <p>
-                        Commissioner-only action. Lock once members and ownership are complete, unlock only to correct mistakes.
-                      </p>
-                      <div className="flex flex-wrap gap-3">
-                        <Button
-                          disabled={isSubmitting || !bootstrapState.lockReadiness.isReadyToLock || isLocked || !canManageLeague}
-                          onClick={() => void handleLockSeason()}
-                          type="button"
-                          variant="secondary"
-                        >
-                          {isLocked ? "Season Locked" : "Lock Season"}
-                        </Button>
-                        <Button
-                          disabled={isSubmitting || !isLocked || !canManageLeague}
-                          onClick={() => void handleUnlockSeason()}
-                          type="button"
-                          variant="outline"
-                        >
-                          Unlock Season
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+                    <div className="space-y-3">
+                      <ChecklistStatusItem
+                        label="Active season exists"
+                        passed={bootstrapState.lockReadiness.hasActiveSeason}
+                        value={bootstrapState.lockReadiness.hasActiveSeason ? "A current season is selected." : "Select an active season first."}
+                      />
+                      <ChecklistStatusItem
+                        label="League membership"
+                        passed={bootstrapState.lockReadiness.hasExactlyTenMembers}
+                        value={
+                          bootstrapState.lockReadiness.hasExactlyTenMembers
+                            ? "Exactly 10 league members are in place."
+                            : "Exactly 10 league members are required."
+                        }
+                      />
+                      <ChecklistStatusItem
+                        label="Keepers Selected & Teams Dropped"
+                        passed={keeperSelectionsComplete}
+                        value={
+                          isInauguralAuctionSeason
+                            ? "Handled through the inaugural auction workflow for this season."
+                            : keeperSelectionsComplete
+                            ? "Keeper selections are saved for every owner and the 12-team offseason pool is ready."
+                            : "All owners still need two saved keepers before the 12-team offseason pool is ready."
+                        }
+                      />
+                      <ChecklistStatusItem
+                        label="Offseason Draft Complete"
+                        passed={offseasonDraftComplete}
+                        value={
+                          isInauguralAuctionSeason
+                            ? offseasonDraftComplete
+                              ? "The inaugural auction is complete and all target-season teams are finalized."
+                              : "Finish the inaugural auction to finalize each owner's third team."
+                            : offseasonDraftComplete
+                            ? "Every owner has selected a new third team and the offseason draft is complete."
+                            : "The offseason draft still needs to finish before every owner has a new third team."
+                        }
+                      />
+                      <ChecklistStatusItem
+                        label="NFL Regular Season Complete"
+                        passed={Boolean(regularSeasonComplete)}
+                        value={
+                          regularSeasonComplete
+                            ? "All regular-season NFL weeks are imported and regular-season payouts are posted."
+                            : "Complete all regular-season NFL imports and post the league's regular-season payouts."
+                        }
+                      />
+                      <ChecklistStatusItem
+                        label="NFL Postseason Complete"
+                        passed={Boolean(postseasonComplete)}
+                        value={
+                          postseasonComplete
+                            ? "All NFL playoff phases through the Super Bowl are imported and postseason payouts are posted."
+                            : "Finish playoff imports through the Super Bowl and post the league's postseason payouts."
+                        }
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             ) : null}
 
@@ -1386,6 +1500,7 @@ export function LeagueDashboard({
                       <Input onChange={(event) => setMemberDisplayName(event.target.value)} placeholder="Display name" value={memberDisplayName} />
                       <Input onChange={(event) => setMemberEmail(event.target.value)} placeholder="Email" type="email" value={memberEmail} />
                       <Button
+                        className={getSubmittingButtonClass("add-member")}
                         disabled={isSubmitting || !memberDisplayName || !memberEmail || !canManageLeague}
                         type="submit"
                       >
@@ -1420,6 +1535,7 @@ export function LeagueDashboard({
                               {member.assignmentCount}/3
                             </span>
                             <Button
+                              className={getSubmittingButtonClass(`open-member-replace:${member.id}`)}
                               disabled={isSubmitting || member.role === "COMMISSIONER" || !canManageLeague}
                               onClick={() => startMemberReplacement(member.id)}
                               type="button"
@@ -1488,6 +1604,7 @@ export function LeagueDashboard({
                               ))}
                             </select>
                             <Button
+                              className={getSubmittingButtonClass("assign-team")}
                               disabled={isSubmitting || isLocked || !selectedOwnerId || !selectedTeamId || !canManageLeague}
                               type="submit"
                             >
@@ -1551,7 +1668,7 @@ export function LeagueDashboard({
                                         >
                                           <NFLTeamLabel size="compact" team={entry.team} />
                                           <Button
-                                            className="h-7 px-2"
+                                            className={cn("h-7 px-2", getSubmittingButtonClass(`remove-team:${entry.ownershipId}`))}
                                             disabled={isSubmitting || isLocked || !canManageLeague}
                                             onClick={() => void handleRemoveTeam(entry.ownershipId, entry.team.name)}
                                             type="button"
@@ -1727,11 +1844,18 @@ export function LeagueDashboard({
                       draftState={draftState}
                       isDraftStateLoading={isLoading && hasActiveSeason && !draftState}
                       isSubmitting={isSubmitting}
+                      pendingActionId={pendingActionId}
                       members={members}
-                      onEndSubmit={() => setIsSubmitting(false)}
+                      onEndSubmit={() => {
+                        setPendingActionId(null);
+                        setIsSubmitting(false);
+                      }}
                       onError={(message) => setErrorMessage(message || null)}
                       onRefresh={() => refreshLeagueDashboard(leagueId, { includeOperationalData: true })}
-                      onStartSubmit={() => setIsSubmitting(true)}
+                      onStartSubmit={(actionId) => {
+                        setPendingActionId(actionId);
+                        setIsSubmitting(true);
+                      }}
                       onSuccess={(message) => setSuccessMessage(message || null)}
                       phaseContext={seasonPhaseContext}
                       seasons={seasons}
@@ -1865,6 +1989,7 @@ export function LeagueDashboard({
 
                     <div className="flex flex-wrap gap-3">
                       <Button
+                        className={getSubmittingButtonClass(`replace-member:${replacementMemberId}`)}
                         disabled={
                           isSubmitting ||
                           !canManageLeague ||
@@ -1877,6 +2002,7 @@ export function LeagueDashboard({
                         Save Member Change
                       </Button>
                       <Button
+                        className={getSubmittingButtonClass(`replace-member:${replacementMemberId}`)}
                         disabled={isSubmitting}
                         onClick={() => cancelMemberReplacement()}
                         type="button"

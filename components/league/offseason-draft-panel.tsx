@@ -6,6 +6,7 @@ import { ProfileAvatar } from "@/components/shared/profile-avatar";
 import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import type {
   DropPhaseContextResponse,
   DraftOrderRecommendationResponse,
@@ -31,9 +32,10 @@ interface OffseasonDraftPanelProps {
   phaseContext?: SeasonPhaseContext | null;
   isDraftStateLoading: boolean;
   isSubmitting: boolean;
+  pendingActionId?: string | null;
   canManageDraft: boolean;
   accessMessage?: string | null;
-  onStartSubmit: () => void;
+  onStartSubmit: (actionId: string) => void;
   onEndSubmit: () => void;
   onError: (message: string) => void;
   onSuccess: (message: string) => void;
@@ -169,6 +171,7 @@ export function OffseasonDraftPanel({
   phaseContext = null,
   isDraftStateLoading,
   isSubmitting,
+  pendingActionId = null,
   canManageDraft,
   accessMessage,
   onStartSubmit,
@@ -219,6 +222,14 @@ export function OffseasonDraftPanel({
   const phaseAllowsKeeperEditing = phaseContext?.allowedActions.canEditKeepers ?? false;
   const phaseAllowsDraftPreparation = phaseContext?.allowedActions.canPrepareDraft ?? false;
   const phaseAllowsDraftExecution = phaseContext?.allowedActions.canRunDraft ?? false;
+
+  function getSubmittingButtonClass(actionId: string) {
+    if (!isSubmitting) {
+      return undefined;
+    }
+
+    return pendingActionId === actionId ? "disabled:opacity-70" : "disabled:opacity-100";
+  }
 
   useEffect(() => {
     if (!activeSeason) {
@@ -490,10 +501,10 @@ export function OffseasonDraftPanel({
     }));
   }
 
-  async function withMutation<T>(run: () => Promise<T>, successMessage: string) {
+  async function withMutation<T>(actionId: string, run: () => Promise<T>, successMessage: string) {
     onError("");
     onSuccess("");
-    onStartSubmit();
+    onStartSubmit(actionId);
 
     try {
       await preserveScrollPosition(async () => {
@@ -579,6 +590,7 @@ export function OffseasonDraftPanel({
     }
 
     await withMutation(
+      `draft:${endpoint}`,
       async () => {
         const response = await fetch(`/api/season/${activeSeason.id}/draft/${endpoint}`, {
           method: "POST",
@@ -610,6 +622,7 @@ export function OffseasonDraftPanel({
     }
 
     await withMutation(
+      "draft:pick",
       async () => {
         const response = await fetch(`/api/season/${activeSeason.id}/draft/pick`, {
           method: "POST",
@@ -1129,7 +1142,7 @@ export function OffseasonDraftPanel({
                           </div>
                         ) : null}
                         <Button
-                          className="w-full"
+                          className={cn("w-full", getSubmittingButtonClass("draft:pick"))}
                           disabled={isSubmitting || !currentPickTeamId || !canManageDraft || !phaseAllowsDraftExecution}
                           onClick={() => void handleMakePick()}
                           type="button"
@@ -1141,6 +1154,7 @@ export function OffseasonDraftPanel({
                     <div className="flex flex-wrap gap-3">
                       {draftState.draft.status === "PLANNING" && (
                         <Button
+                          className={getSubmittingButtonClass("draft:start")}
                           disabled={isSubmitting || !canStartDraftFromUi || !canManageDraft || !phaseAllowsDraftExecution}
                           onClick={() => void handleDraftAction("start", "Draft started.")}
                           type="button"
@@ -1151,6 +1165,7 @@ export function OffseasonDraftPanel({
                       )}
                       {draftState.draft.status === "ACTIVE" && (
                         <Button
+                          className={getSubmittingButtonClass("draft:pause")}
                           disabled={isSubmitting || !canManageDraft || !phaseAllowsDraftExecution}
                           onClick={() => void handleDraftAction("pause", "Draft paused.")}
                           type="button"
@@ -1161,6 +1176,7 @@ export function OffseasonDraftPanel({
                       )}
                       {draftState.draft.status === "PAUSED" && (
                         <Button
+                          className={getSubmittingButtonClass("draft:resume")}
                           disabled={isSubmitting || !canManageDraft || !phaseAllowsDraftExecution}
                           onClick={() => void handleDraftAction("resume", "Draft resumed.")}
                           type="button"
@@ -1170,6 +1186,7 @@ export function OffseasonDraftPanel({
                         </Button>
                       )}
                       <Button
+                        className={getSubmittingButtonClass("draft:finalize")}
                         disabled={isSubmitting || !draftState.canFinalize || !canManageDraft || !phaseAllowsDraftExecution}
                         onClick={() => void handleDraftAction("finalize", "Draft finalized into season ownership.")}
                         type="button"

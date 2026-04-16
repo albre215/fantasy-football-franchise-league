@@ -57,6 +57,7 @@ export function InauguralAuctionPanel({
   const [auctionState, setAuctionState] = useState<InauguralAuctionState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [orderMethod, setOrderMethod] = useState<InauguralAuctionOrderMethod>("ALPHABETICAL");
@@ -147,6 +148,14 @@ export function InauguralAuctionPanel({
     return auctionState.currentHighBid.amount + 1;
   }, [auctionState?.currentHighBid?.amount]);
 
+  function getSubmittingButtonClass(actionId: string) {
+    if (!isSubmitting) {
+      return undefined;
+    }
+
+    return pendingActionId === actionId ? "disabled:opacity-70" : "disabled:opacity-100";
+  }
+
   async function handleConfigureAuction() {
     if (!activeSeason) {
       return;
@@ -154,6 +163,7 @@ export function InauguralAuctionPanel({
 
     try {
       setIsSubmitting(true);
+      setPendingActionId("configure-auction");
       setErrorMessage(null);
       setSuccessMessage(null);
       const response = await fetch(`/api/season/${activeSeason.id}/inaugural-auction`, {
@@ -172,6 +182,7 @@ export function InauguralAuctionPanel({
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to configure the inaugural auction.");
     } finally {
+      setPendingActionId(null);
       setIsSubmitting(false);
     }
   }
@@ -183,6 +194,7 @@ export function InauguralAuctionPanel({
 
     try {
       setIsSubmitting(true);
+      setPendingActionId("start-auction");
       setErrorMessage(null);
       setSuccessMessage(null);
       const response = await fetch(`/api/season/${activeSeason.id}/inaugural-auction/start`, {
@@ -194,6 +206,7 @@ export function InauguralAuctionPanel({
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to start the inaugural auction.");
     } finally {
+      setPendingActionId(null);
       setIsSubmitting(false);
     }
   }
@@ -205,6 +218,7 @@ export function InauguralAuctionPanel({
 
     try {
       setIsSubmitting(true);
+      setPendingActionId("submit-bid");
       setErrorMessage(null);
       setSuccessMessage(null);
       const response = await fetch(`/api/season/${activeSeason.id}/inaugural-auction/bid`, {
@@ -223,6 +237,7 @@ export function InauguralAuctionPanel({
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to submit the bid.");
     } finally {
+      setPendingActionId(null);
       setIsSubmitting(false);
     }
   }
@@ -294,7 +309,7 @@ export function InauguralAuctionPanel({
                 </p>
               ) : null}
 
-              <Button disabled={isSubmitting} onClick={() => void handleConfigureAuction()} type="button">
+              <Button className={getSubmittingButtonClass("configure-auction")} disabled={isSubmitting} onClick={() => void handleConfigureAuction()} type="button">
                 Save Inaugural Auction Order
               </Button>
             </div>
@@ -351,7 +366,7 @@ export function InauguralAuctionPanel({
                     ) : null}
 
                     {auctionState.auction.status === "PLANNING" && auctionState.viewer.canManageAuction ? (
-                      <Button disabled={isSubmitting} onClick={() => void handleStartAuction()} type="button">
+                      <Button className={getSubmittingButtonClass("start-auction")} disabled={isSubmitting} onClick={() => void handleStartAuction()} type="button">
                         Start Inaugural Auction
                       </Button>
                     ) : null}
@@ -369,7 +384,7 @@ export function InauguralAuctionPanel({
                             type="number"
                             value={bidAmount}
                           />
-                          <Button disabled={isSubmitting || Number(bidAmount) < minimumNextBid || Number(bidAmount) > (viewer?.maxAllowedBid ?? 0)} onClick={() => void handleSubmitBid()} type="button">
+                          <Button className={getSubmittingButtonClass("submit-bid")} disabled={isSubmitting || Number(bidAmount) < minimumNextBid || Number(bidAmount) > (viewer?.maxAllowedBid ?? 0)} onClick={() => void handleSubmitBid()} type="button">
                             Submit Bid
                           </Button>
                         </div>
