@@ -999,6 +999,11 @@ export function LeagueDashboard({
   const ownershipFinalized = isLocked && assignedTeamsCount === 30;
   const recommendedDraftOrderReady = resultsAvailability?.isReadyForDraftOrderAutomation ?? false;
   const currentLeaguePhase = seasonPhaseContext?.season.leaguePhase ?? activeSeason?.leaguePhase ?? null;
+  const firstSeasonYearOnRecord =
+    seasons.length > 0 ? Math.min(...seasons.map((season) => season.year)) : null;
+  const isFirstSeasonOnRecord =
+    activeSeason !== null && firstSeasonYearOnRecord !== null && activeSeason.year === firstSeasonYearOnRecord;
+  const usesInauguralDraftChecklist = isInauguralAuctionSeason && isFirstSeasonOnRecord;
   const regularSeasonComplete =
     Boolean(activeSeason) &&
     (seasonNflOverview?.importState.importedRegularSeasonWeeks ?? 0) >= getRegularSeasonWeekLimit(activeSeason?.year ?? 0) &&
@@ -1438,28 +1443,45 @@ export function LeagueDashboard({
                             : "Exactly 10 league members are required."
                         }
                       />
+                      {usesInauguralDraftChecklist ? (
+                        <ChecklistStatusItem
+                          label="Inaugural Draft Completed"
+                          passed={assignedTeamsCount === 30}
+                          value={
+                            assignedTeamsCount === 30
+                              ? "The inaugural auction is complete and all 30 awarded teams are finalized."
+                              : "Finish the inaugural auction to finalize all 30 awarded teams for the league's first season."
+                          }
+                        />
+                      ) : (
+                        <>
+                          <ChecklistStatusItem
+                            label="Keepers Selected & Teams Dropped"
+                            passed={keeperSelectionsComplete}
+                            value={
+                              keeperSelectionsComplete
+                                ? "Keeper selections are saved for every owner and the 12-team offseason pool is ready."
+                                : "All owners still need two saved keepers before the 12-team offseason pool is ready."
+                            }
+                          />
+                          <ChecklistStatusItem
+                            label="Offseason Draft Complete"
+                            passed={offseasonDraftComplete}
+                            value={
+                              offseasonDraftComplete
+                                ? "Every owner has selected a new third team and the offseason draft is complete."
+                                : "The offseason draft still needs to finish before every owner has a new third team."
+                            }
+                          />
+                        </>
+                      )}
                       <ChecklistStatusItem
-                        label="Keepers Selected & Teams Dropped"
-                        passed={keeperSelectionsComplete}
+                        label="Fantasy Results Completed"
+                        passed={standingsSaved}
                         value={
-                          isInauguralAuctionSeason
-                            ? "Handled through the inaugural auction workflow for this season."
-                            : keeperSelectionsComplete
-                            ? "Keeper selections are saved for every owner and the 12-team offseason pool is ready."
-                            : "All owners still need two saved keepers before the 12-team offseason pool is ready."
-                        }
-                      />
-                      <ChecklistStatusItem
-                        label="Offseason Draft Complete"
-                        passed={offseasonDraftComplete}
-                        value={
-                          isInauguralAuctionSeason
-                            ? offseasonDraftComplete
-                              ? "The inaugural auction is complete and all target-season teams are finalized."
-                              : "Finish the inaugural auction to finalize each owner's third team."
-                            : offseasonDraftComplete
-                            ? "Every owner has selected a new third team and the offseason draft is complete."
-                            : "The offseason draft still needs to finish before every owner has a new third team."
+                          standingsSaved
+                            ? "The commissioner has saved final fantasy standings for the active season."
+                            : "Enter and save the active season's final fantasy standings to complete fantasy results."
                         }
                       />
                       <ChecklistStatusItem
