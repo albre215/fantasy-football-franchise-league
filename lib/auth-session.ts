@@ -1,5 +1,4 @@
 import { getServerAuthSession } from "@/auth";
-import { prisma } from "@/lib/prisma";
 
 class RouteAuthError extends Error {
   constructor(
@@ -18,22 +17,11 @@ async function getAuthenticatedSessionUser() {
     throw new RouteAuthError("Authentication is required.", 401);
   }
 
-  const user = await prisma.user.findUnique({
-    where: {
-      id: session.user.id
-    },
-    select: {
-      id: true,
-      email: true,
-      displayName: true
-    }
-  });
-
-  if (!user) {
-    throw new RouteAuthError("Authenticated user not found.", 401);
-  }
-
-  return user;
+  return {
+    id: session.user.id,
+    email: session.user.email ?? "",
+    displayName: session.user.displayName ?? session.user.name ?? ""
+  };
 }
 
 export async function requireAuthenticatedUser() {

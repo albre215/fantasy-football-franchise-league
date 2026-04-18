@@ -9,6 +9,9 @@ import { ProfileAvatar } from "@/components/shared/profile-avatar";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+let cachedAccountImageUrl: string | null | undefined;
+let accountImageUrlRequest: Promise<string | null> | null = null;
+
 async function loadAccountImageUrl() {
   const response = await fetch("/api/account", { cache: "no-store" });
   const payloadText = await response.text();
@@ -30,6 +33,26 @@ async function loadAccountImageUrl() {
   }
 
   return payload?.account?.profileImageUrl ?? null;
+}
+
+async function loadAccountImageUrlOnce() {
+  if (cachedAccountImageUrl !== undefined) {
+    return cachedAccountImageUrl;
+  }
+
+  if (!accountImageUrlRequest) {
+    accountImageUrlRequest = loadAccountImageUrl()
+      .then((imageUrl) => {
+        cachedAccountImageUrl = imageUrl;
+        return imageUrl;
+      })
+      .catch((error) => {
+        accountImageUrlRequest = null;
+        throw error;
+      });
+  }
+
+  return accountImageUrlRequest;
 }
 
 export function AccountMenu({
@@ -100,7 +123,7 @@ export function AccountMenu({
 
     void (async () => {
       try {
-        const nextImageUrl = await loadAccountImageUrl();
+        const nextImageUrl = await loadAccountImageUrlOnce();
 
         if (!isCancelled) {
           setResolvedImageUrl(nextImageUrl);

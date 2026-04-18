@@ -16,8 +16,11 @@ import type {
   ReplaceLeagueMemberInput,
   RemoveLeagueMemberInput
 } from "@/types/league";
+import type { LeaguePhase, SeasonDraftMode, SeasonSetupStatus, SeasonSummary } from "@/types/season";
 
 const MAX_LEAGUE_MEMBERS = 10;
+let hasVerifiedLeagueCodes = false;
+let ensureLeagueCodesPromise: Promise<void> | null = null;
 
 class LeagueServiceError extends Error {
   constructor(
@@ -138,6 +141,36 @@ async function ensureLeagueCodes(tx: Prisma.TransactionClient | typeof prisma) {
 
     nextCodeNumber += 1;
   }
+}
+
+async function ensureLeagueCodesIfNeeded(tx: Prisma.TransactionClient | typeof prisma) {
+  if (hasVerifiedLeagueCodes) {
+    return;
+  }
+
+  if (!ensureLeagueCodesPromise) {
+    ensureLeagueCodesPromise = ensureLeagueCodes(tx)
+      .then(() => {
+        hasVerifiedLeagueCodes = true;
+      })
+      .finally(() => {
+        ensureLeagueCodesPromise = null;
+      });
+  }
+
+  await ensureLeagueCodesPromise;
+}
+
+function deriveLeaguePhaseFromSeasonStatus(status: SeasonSummary["status"]): LeaguePhase {
+  if (status === "ACTIVE") {
+    return "IN_SEASON";
+  }
+
+  if (status === "PLANNING") {
+    return "DRAFT_PHASE";
+  }
+
+  return "POST_SEASON";
 }
 
 async function generateLeagueSlug(name: string) {
@@ -311,6 +344,83 @@ function mapSeason(season: {
   };
 }
 
+function mapActiveSeasonSummary(season: {
+  id: string;
+  leagueId: string;
+  year: number;
+  name: string | null;
+  status: "PLANNING" | "ACTIVE" | "COMPLETED" | "ARCHIVED";
+  leaguePhase?: LeaguePhase | null;
+  draftMode?: SeasonDraftMode | null;
+  isLocked: boolean;
+  startsAt: Date | null;
+  endsAt: Date | null;
+  createdAt: Date;
+}): SeasonSummary {
+  return {
+    id: season.id,
+    leagueId: season.leagueId,
+    year: season.year,
+    name: season.name,
+    status: season.status,
+    leaguePhase: season.leaguePhase ?? deriveLeaguePhaseFromSeasonStatus(season.status),
+    draftMode: season.draftMode ?? "CONTINUING_REPLACEMENT",
+    isLocked: season.isLocked,
+    startsAt: season.startsAt?.toISOString() ?? null,
+    endsAt: season.endsAt?.toISOString() ?? null,
+    createdAt: season.createdAt.toISOString()
+  };
+}
+
+function buildSeasonSetupStatus(
+  leagueId: string,
+  seasonId: string,
+  members: Array<{
+    id: string;
+    userId: string;
+    role: "COMMISSIONER" | "OWNER";
+    user: {
+      displayName: string;
+    };
+    teamOwnerships: Array<{ id: string }>;
+  }>,
+  assignedTeamCount: number
+): SeasonSetupStatus {
+  const memberCount = members.length;
+  const unassignedTeamCount = 32 - assignedTeamCount;
+  const ownerStatuses = members.map((member) => {
+    const assignedTeamCountForMember = member.teamOwnerships.length;
+
+    return {
+      leagueMemberId: member.id,
+      userId: member.userId,
+      displayName: member.user.displayName,
+      role: member.role,
+      assignedTeamCount: assignedTeamCountForMember,
+      isValid: assignedTeamCountForMember === 3
+    };
+  });
+
+  const hasExactlyTenMembers = memberCount === 10;
+  const eachMemberHasThreeTeams = ownerStatuses.every((owner) => owner.assignedTeamCount === 3);
+  const hasThirtyAssignedTeams = assignedTeamCount === 30;
+  const hasTwoUnassignedTeams = unassignedTeamCount === 2;
+
+  return {
+    seasonId,
+    leagueId,
+    memberCount,
+    assignedTeamCount,
+    unassignedTeamCount,
+    hasExactlyTenMembers,
+    eachMemberHasThreeTeams,
+    hasThirtyAssignedTeams,
+    hasTwoUnassignedTeams,
+    isValid: hasExactlyTenMembers && eachMemberHasThreeTeams && hasThirtyAssignedTeams && hasTwoUnassignedTeams,
+    ownerStatuses
+  };
+}
+
 function mapLeagueDashboard(league: {
   id: string;
   leagueCode: string | null;
@@ -352,7 +462,7 @@ function mapLeagueDashboard(league: {
 }
 
 async function getLeagueDashboard(leagueId: string) {
-  await ensureLeagueCodes(prisma);
+  await ensureLeagueCodesIfNeeded(prisma);
 
   const league = await prisma.league.findUnique({
     where: {
@@ -410,7 +520,7 @@ export const leagueService = {
 
     try {
       const league = await prisma.$transaction(async (tx) => {
-        await ensureLeagueCodes(tx);
+        await ensureLeagueCodesIfNeeded(tx);
         const leagueCode = formatLeagueCode(await getNextLeagueCodeNumber(tx));
 
         const createdLeague = await tx.league.create({
@@ -460,7 +570,7 @@ export const leagueService = {
   },
 
   async listLeagues(): Promise<LeagueListItem[]> {
-    await ensureLeagueCodes(prisma);
+    await ensureLeagueCodesIfNeeded(prisma);
 
     const leagues = await prisma.league.findMany({
       orderBy: {
@@ -495,7 +605,7 @@ export const leagueService = {
       throw new LeagueServiceError("A userId is required.", 400);
     }
 
-    await ensureLeagueCodes(prisma);
+    await ensureLeagueCodesIfNeeded(prisma);
 
     const leagues = await prisma.league.findMany({
       where: {
@@ -541,7 +651,7 @@ export const leagueService = {
   },
 
   async joinLeague(input: JoinLeagueInput) {
-    await ensureLeagueCodes(prisma);
+    await ensureLeagueCodesIfNeeded(prisma);
 
     const leagueCodeInput = input.leagueCode.trim();
 
@@ -604,7 +714,7 @@ export const leagueService = {
       return [];
     }
 
-    await ensureLeagueCodes(prisma);
+    await ensureLeagueCodesIfNeeded(prisma);
 
     const codePrefixes = buildLeagueCodeSearchPrefixes(trimmedQuery);
     const uppercaseQuery = trimmedQuery.toUpperCase();
@@ -997,32 +1107,97 @@ export const leagueService = {
       throw new LeagueServiceError("leagueId is required.", 400);
     }
 
-    await ensureLeagueCodes(prisma);
+    await ensureLeagueCodesIfNeeded(prisma);
 
-    const [league, activeSeason, members] = await Promise.all([
-      prisma.league.findUnique({
-        where: {
-          id: normalizedLeagueId
+    const league = await prisma.league.findUnique({
+      where: {
+        id: normalizedLeagueId
+      },
+      select: {
+        id: true,
+        leagueCode: true,
+        name: true,
+        slug: true,
+        description: true,
+        members: {
+          include: {
+            user: true
+          },
+          orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
         },
-        include: {
-          members: {
-            include: {
-              user: true
-            },
-            orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
-          }
+        seasons: {
+          where: {
+            status: "ACTIVE"
+          },
+          select: {
+            id: true,
+            leagueId: true,
+            year: true,
+            name: true,
+            status: true,
+            leaguePhase: true,
+            draftMode: true,
+            isLocked: true,
+            startsAt: true,
+            endsAt: true,
+            createdAt: true
+          },
+          orderBy: {
+            year: "desc"
+          },
+          take: 1
         }
-      }),
-      seasonService.getActiveSeason(normalizedLeagueId),
-      this.getBootstrapMembers(normalizedLeagueId)
-    ]);
+      }
+    });
 
     if (!league) {
       throw new LeagueServiceError("League not found.", 404);
     }
 
+    const activeSeasonRecord = league.seasons[0] ?? null;
+    const activeSeason = activeSeasonRecord ? mapActiveSeasonSummary(activeSeasonRecord) : null;
     const commissionerRecord = league.members.find((member) => member.role === "COMMISSIONER") ?? null;
-    const validationStatus = activeSeason ? await seasonService.getSeasonSetupStatus(activeSeason.id) : null;
+
+    let members: LeagueBootstrapMember[] = league.members.map((member) =>
+      mapBootstrapMember(member, member.role !== "COMMISSIONER")
+    );
+    let validationStatus: SeasonSetupStatus | null = null;
+
+    if (activeSeasonRecord) {
+      const [membersWithAssignments, assignedTeamCount] = await Promise.all([
+        prisma.leagueMember.findMany({
+          where: {
+            leagueId: normalizedLeagueId
+          },
+          include: {
+            user: true,
+            teamOwnerships: {
+              where: {
+                seasonId: activeSeasonRecord.id
+              },
+              select: {
+                id: true
+              }
+            }
+          },
+          orderBy: [{ role: "asc" }, { joinedAt: "asc" }]
+        }),
+        prisma.teamOwnership.count({
+          where: {
+            seasonId: activeSeasonRecord.id
+          }
+        })
+      ]);
+
+      members = membersWithAssignments.map((member) => mapBootstrapMember(member, member.role !== "COMMISSIONER"));
+      validationStatus = buildSeasonSetupStatus(
+        normalizedLeagueId,
+        activeSeasonRecord.id,
+        membersWithAssignments,
+        assignedTeamCount
+      );
+    }
+
     const assignedTeamCount = validationStatus?.assignedTeamCount ?? 0;
     const unassignedTeamCount = validationStatus?.unassignedTeamCount ?? 0;
     const everyMemberHasExactlyThreeTeams = validationStatus?.eachMemberHasThreeTeams ?? false;

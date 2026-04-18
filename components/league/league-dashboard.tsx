@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Check, Lock, LockOpen, XCircle } from "lucide-react";
 import { useSession } from "next-auth/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BrandAccountSlot } from "@/components/brand/brand-account-slot";
 import { BrandMasthead } from "@/components/brand/brand-masthead";
@@ -246,7 +246,7 @@ export function LeagueDashboard({
   const [activeResultsDraftTab, setActiveResultsDraftTab] = useState<ResultsDraftTab>("offseason-draft");
   const [viewMode, setViewMode] = useState<DashboardViewMode>("commissioner");
   const [operationalDataSeasonId, setOperationalDataSeasonId] = useState<string | null>(null);
-  const [hasConsumedInitialData, setHasConsumedInitialData] = useState(
+  const shouldSkipInitialClientRefreshRef = useRef(
     initialIsAuthenticated && (Boolean(leagueId) || initialLeagueOptions.length > 0 || Boolean(initialErrorMessage))
   );
 
@@ -304,9 +304,8 @@ export function LeagueDashboard({
     setSeasons(initialSeasons);
     setErrorMessage(initialErrorMessage);
     setIsLoading(false);
-    setHasConsumedInitialData(
+    shouldSkipInitialClientRefreshRef.current =
       initialIsAuthenticated && (Boolean(leagueId) || initialLeagueOptions.length > 0 || Boolean(initialErrorMessage))
-    );
   }, [
     initialBootstrapState,
     initialErrorMessage,
@@ -505,8 +504,8 @@ export function LeagueDashboard({
         return;
       }
 
-      if (hasConsumedInitialData) {
-        setHasConsumedInitialData(false);
+      if (shouldSkipInitialClientRefreshRef.current) {
+        shouldSkipInitialClientRefreshRef.current = false;
         return;
       }
 
@@ -532,7 +531,7 @@ export function LeagueDashboard({
         setIsLoading(false);
       }
     })();
-  }, [hasConsumedInitialData, initialIsAuthenticated, isAuthenticated, leagueId, sessionStatus]);
+  }, [initialIsAuthenticated, isAuthenticated, leagueId, sessionStatus]);
 
   useEffect(() => {
     if (!bootstrapState?.activeSeason || !tabNeedsOperationalData) {
