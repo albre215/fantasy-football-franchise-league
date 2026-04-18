@@ -7,12 +7,12 @@ type BrandLogoSize = "hero" | "header" | "compact";
 
 const layout: Record<BrandLogoSize, { wrapper: string; shield: string; gm: string; fantasy: string; gap: string; underline: string }> = {
   hero: {
-    wrapper: "max-w-[48rem] gap-5",
-    shield: "h-40 w-40 sm:h-48 sm:w-48",
-    gm: "text-[6rem] sm:text-[7.5rem] leading-none",
-    fantasy: "text-3xl sm:text-4xl tracking-[0.32em]",
-    gap: "gap-1",
-    underline: "h-[3px] w-full bg-amber-400"
+    wrapper: "max-w-[64rem] gap-8",
+    shield: "h-56 w-56 sm:h-72 sm:w-72 lg:h-80 lg:w-80",
+    gm: "text-[8rem] sm:text-[10rem] lg:text-[12rem] leading-none",
+    fantasy: "text-4xl sm:text-5xl lg:text-6xl tracking-[0.32em]",
+    gap: "gap-2",
+    underline: "h-[4px] w-full bg-amber-400"
   },
   header: {
     wrapper: "max-w-[22rem] gap-3",
