@@ -883,7 +883,7 @@ export function LeagueControlPanel({
                         </div>
                         <div className="flex shrink-0 items-center self-stretch sm:self-auto">
                           <Button
-                            disabled={openingLeagueId !== null}
+                            disabled={openingLeagueId === league.id}
                             onClick={() => handleOpenLeague(league.id)}
                             type="button"
                           >
