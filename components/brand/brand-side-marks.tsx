@@ -1,32 +1,46 @@
 import Image from "next/image";
 
+const shields = [
+  { className: "left-[-4rem] top-[6rem] h-64 w-64 rotate-[-12deg] opacity-[0.09]" },
+  { className: "left-[4rem] top-[38rem] h-40 w-40 rotate-[8deg] opacity-[0.07]" },
+  { className: "left-[-2rem] bottom-[6rem] h-56 w-56 rotate-[18deg] opacity-[0.08]" },
+  { className: "right-[-5rem] top-[10rem] h-72 w-72 rotate-[10deg] opacity-[0.09]" },
+  { className: "right-[5rem] top-[44rem] h-44 w-44 rotate-[-14deg] opacity-[0.07]" },
+  { className: "right-[-3rem] bottom-[4rem] h-60 w-60 rotate-[-6deg] opacity-[0.08]" }
+];
+
 export function BrandSideMarks() {
   return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none fixed inset-y-0 left-0 right-0 z-0 hidden overflow-hidden xl:block"
-    >
-      <div className="absolute left-3 top-1/2 -translate-y-1/2 opacity-[0.12] 2xl:left-6 2xl:opacity-[0.15]">
-        <div className="relative h-[36rem] w-[14rem] 2xl:h-[42rem] 2xl:w-[16rem]">
-          <Image
-            alt=""
-            className="h-full w-full object-contain"
-            fill
-            sizes="(min-width: 1536px) 16rem, 14rem"
-            src="/brand/gm-fantasy-vertical.png"
-          />
-        </div>
-      </div>
-      <div className="absolute right-3 top-1/2 -translate-y-1/2 opacity-[0.12] 2xl:right-6 2xl:opacity-[0.15]">
-        <div className="relative h-[36rem] w-[14rem] 2xl:h-[42rem] 2xl:w-[16rem]">
-          <Image
-            alt=""
-            className="h-full w-full object-contain"
-            fill
-            sizes="(min-width: 1536px) 16rem, 14rem"
-            src="/brand/gm-fantasy-vertical.png"
-          />
-        </div>
+    <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage: [
+            "radial-gradient(60rem 40rem at 12% 18%, rgba(62, 146, 77, 0.22), transparent 60%)",
+            "radial-gradient(52rem 36rem at 88% 24%, rgba(34, 108, 62, 0.18), transparent 62%)",
+            "radial-gradient(70rem 48rem at 50% 110%, rgba(16, 74, 42, 0.18), transparent 65%)"
+          ].join(", ")
+        }}
+      />
+      <div
+        className="absolute inset-0 mix-blend-soft-light opacity-[0.5]"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(135deg, rgba(14, 59, 33, 0.05) 0 2px, transparent 2px 12px)"
+        }}
+      />
+      <div className="hidden xl:block">
+        {shields.map((s, i) => (
+          <div key={i} className={`absolute ${s.className}`}>
+            <Image
+              alt=""
+              className="h-full w-full object-contain"
+              fill
+              sizes="288px"
+              src="/brand/gm-fantasy-shield.png"
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
