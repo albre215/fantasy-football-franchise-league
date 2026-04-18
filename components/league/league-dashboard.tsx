@@ -1445,7 +1445,7 @@ export function LeagueDashboard({
                       />
                       {usesInauguralDraftChecklist ? (
                         <ChecklistStatusItem
-                          label="Inaugural Draft Completed"
+                          label="Inaugural Draft Complete"
                           passed={assignedTeamsCount === 30}
                           value={
                             assignedTeamsCount === 30
@@ -1476,7 +1476,7 @@ export function LeagueDashboard({
                         </>
                       )}
                       <ChecklistStatusItem
-                        label="Fantasy Results Completed"
+                        label="Fantasy Results Complete"
                         passed={standingsSaved}
                         value={
                           standingsSaved

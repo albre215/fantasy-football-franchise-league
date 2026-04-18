@@ -16,7 +16,8 @@ import type {
   JoinLeagueResponse,
   JoinLeagueSuggestion,
   JoinLeagueSuggestionsResponse,
-  LeagueListItem
+  LeagueListItem,
+  ListLeaguesResponse
 } from "@/types/league";
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
@@ -60,7 +61,7 @@ export function LeagueControlPanel({
 }: LeagueControlPanelProps) {
   const router = useRouter();
   const { data: session, status } = useSession();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(initialIsAuthenticated && initialLeagues.length === 0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [leagues, setLeagues] = useState<LeagueListItem[]>(initialLeagues);
   const [leagueName, setLeagueName] = useState("");
@@ -176,9 +177,48 @@ export function LeagueControlPanel({
 
   useEffect(() => {
     setLeagues(initialLeagues);
-    setIsLoading(false);
     setErrorMessage(initialErrorMessage);
   }, [initialErrorMessage, initialLeagues]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setIsLoading(false);
+      return;
+    }
+
+    if (initialLeagues.length > 0) {
+      setIsLoading(false);
+      return;
+    }
+
+    let isCancelled = false;
+
+    void (async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetch("/api/league/list", { cache: "no-store" });
+        const data = await parseJsonResponse<ListLeaguesResponse>(response);
+
+        if (!isCancelled) {
+          setLeagues(data.leagues);
+          setErrorMessage(null);
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setLeagues([]);
+          setErrorMessage(error instanceof Error ? error.message : "Unable to load your leagues.");
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [initialLeagues.length, isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated || initialLeagues.length === 0) {

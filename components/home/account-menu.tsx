@@ -9,6 +9,29 @@ import { ProfileAvatar } from "@/components/shared/profile-avatar";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+async function loadAccountImageUrl() {
+  const response = await fetch("/api/account", { cache: "no-store" });
+  const payloadText = await response.text();
+
+  if (!payloadText.trim()) {
+    throw new Error("Empty account response.");
+  }
+
+  let payload: { account?: { profileImageUrl?: string | null }; error?: string } | null = null;
+
+  try {
+    payload = JSON.parse(payloadText) as { account?: { profileImageUrl?: string | null }; error?: string };
+  } catch {
+    throw new Error("Invalid account response.");
+  }
+
+  if (!response.ok) {
+    throw new Error(payload?.error ?? "Unable to load account image.");
+  }
+
+  return payload?.account?.profileImageUrl ?? null;
+}
+
 export function AccountMenu({
   greetingName,
   displayName,
@@ -25,7 +48,12 @@ export function AccountMenu({
   const [isOpen, setIsOpen] = useState(false);
   const [isGreetingVisible, setIsGreetingVisible] = useState(false);
   const [isGreetingMounted, setIsGreetingMounted] = useState(displayGreeting);
+  const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(imageUrl ?? null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setResolvedImageUrl(imageUrl ?? null);
+  }, [imageUrl]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -63,6 +91,32 @@ export function AccountMenu({
     };
   }, [displayGreeting]);
 
+  useEffect(() => {
+    if (resolvedImageUrl) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    void (async () => {
+      try {
+        const nextImageUrl = await loadAccountImageUrl();
+
+        if (!isCancelled) {
+          setResolvedImageUrl(nextImageUrl);
+        }
+      } catch {
+        if (!isCancelled) {
+          setResolvedImageUrl(null);
+        }
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [resolvedImageUrl]);
+
   return (
     <div className="relative flex items-center justify-end text-white" ref={containerRef}>
       {isGreetingMounted ? (
@@ -90,10 +144,11 @@ export function AccountMenu({
         type="button"
         variant="outline"
       >
-        {imageUrl ? (
+        {resolvedImageUrl ? (
           <ProfileAvatar
             className="h-full w-full border-0 bg-transparent text-white"
-            imageUrl={imageUrl}
+            expandOnClick={false}
+            imageUrl={resolvedImageUrl}
             name={displayName}
           />
         ) : (
@@ -107,7 +162,7 @@ export function AccountMenu({
             <ProfileAvatar
               className="h-12 w-12 border-white/15 bg-white/12"
               fallbackClassName="text-sm"
-              imageUrl={imageUrl}
+              imageUrl={resolvedImageUrl}
               name={displayName}
             />
             <div className="space-y-1">

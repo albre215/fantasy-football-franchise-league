@@ -1,11 +1,25 @@
+import dynamic from "next/dynamic";
 import Image from "next/image";
 
 import { getServerAuthSession } from "@/auth";
 import { AccountMenu } from "@/components/home/account-menu";
-import { LeagueControlPanel } from "@/components/home/league-control-panel";
-import { accountService } from "@/server/services/account-service";
-import { leagueService } from "@/server/services/league-service";
-import type { LeagueListItem } from "@/types/league";
+
+const LeagueControlPanel = dynamic(
+  () => import("@/components/home/league-control-panel").then((mod) => mod.LeagueControlPanel),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="mt-6 space-y-6">
+        <section className="rounded-[1.75rem] border border-[#b7cfbe] bg-white/80 p-6 shadow-[0_22px_70px_-40px_rgba(16,40,20,0.34)]">
+          <div className="h-8 w-40 rounded-full bg-slate-200/80" />
+          <div className="mt-5 rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+            Loading league controls...
+          </div>
+        </section>
+      </div>
+    )
+  }
+);
 
 function getGreetingName(displayName: string | null | undefined) {
   const trimmed = displayName?.trim();
@@ -17,38 +31,10 @@ function getGreetingName(displayName: string | null | undefined) {
   return trimmed.split(/\s+/)[0] ?? trimmed;
 }
 
-function isDatabaseUnavailableError(error: unknown) {
-  return (
-    error instanceof Error &&
-    (error.message.includes("Can't reach database server") ||
-      error.message.includes("PrismaClientInitializationError") ||
-      error.message.includes("prisma.user.findUnique()"))
-  );
-}
-
 export default async function HomePage() {
   const session = await getServerAuthSession();
   const isAuthenticated = Boolean(session?.user?.id);
   const greetingName = getGreetingName(session?.user?.displayName);
-  let accountProfile = null;
-  let initialLeagues: LeagueListItem[] = [];
-  let initialErrorMessage: string | null = null;
-
-  if (isAuthenticated && session?.user?.id) {
-    try {
-      [accountProfile, initialLeagues] = await Promise.all([
-        accountService.getAccountProfile(session.user.id),
-        leagueService.listLeaguesForUser(session.user.id)
-      ]);
-    } catch (error) {
-      if (!isDatabaseUnavailableError(error)) {
-        throw error;
-      }
-
-      initialErrorMessage =
-        "The app could not reach the database right now. Check your DATABASE_URL / network connection and refresh once Neon is reachable again.";
-    }
-  }
 
   return (
     <main className="min-h-screen py-10 sm:py-12">
@@ -76,7 +62,7 @@ export default async function HomePage() {
                     displayName={session.user.displayName}
                     email={session.user.email ?? ""}
                     greetingName={greetingName}
-                    imageUrl={accountProfile?.profileImageUrl ?? null}
+                    imageUrl={session.user.profileImageUrl ?? null}
                   />
                 </div>
               ) : null}
@@ -84,9 +70,8 @@ export default async function HomePage() {
           </section>
         </div>
         <LeagueControlPanel
-          initialErrorMessage={initialErrorMessage}
           initialIsAuthenticated={isAuthenticated}
-          initialLeagues={initialLeagues}
+          initialLeagues={[]}
         />
       </div>
     </main>
