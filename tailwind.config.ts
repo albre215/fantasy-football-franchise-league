@@ -48,6 +48,9 @@ const config: Config = {
           foreground: "hsl(var(--card-foreground))"
         }
       },
+      fontFamily: {
+        brand: ["var(--font-brand)", "system-ui", "sans-serif"]
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",

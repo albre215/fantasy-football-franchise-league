@@ -1,7 +1,7 @@
-import Image from "next/image";
 import Link from "next/link";
 
 import { BrandAccountSlot } from "@/components/brand/brand-account-slot";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -39,16 +39,7 @@ export default function LeagueLoading() {
                 </Link>
               </div>
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-4 py-6 sm:px-6 sm:py-8">
-                <div className="relative h-full w-full max-w-none">
-                  <Image
-                    alt="GM Fantasy logo"
-                    className="h-full w-full scale-[1.18] object-contain drop-shadow-[0_18px_38px_rgba(0,0,0,0.28)]"
-                    fill
-                    priority
-                    sizes="100vw"
-                    src="/brand/gm-fantasy-logo.png"
-                  />
-                </div>
+                <BrandLogo size="hero" priority />
               </div>
             </div>
           </section>

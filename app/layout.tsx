@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Oswald } from "next/font/google";
 
 import "@/app/globals.css";
 import { BrandSideMarks } from "@/components/brand/brand-side-marks";
@@ -10,6 +10,12 @@ import { ScrollStabilityProvider } from "@/components/providers/scroll-stability
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans"
+});
+
+const oswald = Oswald({
+  subsets: ["latin"],
+  weight: ["600", "700"],
+  variable: "--font-brand"
 });
 
 export const metadata: Metadata = {
@@ -24,7 +30,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.className} relative overflow-x-hidden`}>
+      <body className={`${inter.className} ${oswald.variable} relative overflow-x-hidden`}>
         <BrandSideMarks />
         <AuthSessionProvider>
           <ScrollStabilityProvider>
