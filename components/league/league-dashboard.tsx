@@ -1720,8 +1720,6 @@ export function LeagueDashboard({
 
             {viewMode === "commissioner" && activeTab === "results-draft" ? (
               <div className="space-y-6">
-                <DraftScheduler activeSeason={activeSeason} />
-
                 {activeSeason?.draftMode !== "INAUGURAL_AUCTION" ? (
                   <div className="flex flex-wrap gap-2">
                     {[
@@ -1789,6 +1787,8 @@ export function LeagueDashboard({
                     visibleSections={["draftReset", "draftOrder"]}
                   />
                 ) : null}
+
+                <DraftScheduler activeSeason={activeSeason} />
               </div>
             ) : null}
 
