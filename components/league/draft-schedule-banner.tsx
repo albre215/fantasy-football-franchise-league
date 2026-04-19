@@ -17,8 +17,8 @@ interface DraftScheduleSummary {
 
 interface DraftScheduleBannerProps {
   seasonId: string | null;
+  leagueId: string;
   isCommissioner: boolean;
-  onEnterLobby: () => void;
 }
 
 const LOBBY_OPEN_MS = 30 * 60 * 1000;
@@ -41,7 +41,17 @@ function formatCountdown(ms: number): string {
   return `${minutes}m ${seconds}s`;
 }
 
-export function DraftScheduleBanner({ seasonId, isCommissioner, onEnterLobby }: DraftScheduleBannerProps) {
+export function DraftScheduleBanner({ seasonId, leagueId, isCommissioner }: DraftScheduleBannerProps) {
+  const handleEnterLobby = useCallback(() => {
+    const url = `/league/draft-lobby?leagueId=${encodeURIComponent(leagueId)}`;
+    const opened = window.open(url, `draft-lobby-${leagueId}`, "width=1400,height=900,noopener=no");
+    if (!opened) {
+      window.location.href = url;
+    } else {
+      opened.focus();
+    }
+  }, [leagueId]);
+
   const [schedule, setSchedule] = useState<DraftScheduleSummary | null>(null);
   const [now, setNow] = useState<number>(() => Date.now());
   const autoStartFiredRef = useRef(false);
@@ -117,7 +127,7 @@ export function DraftScheduleBanner({ seasonId, isCommissioner, onEnterLobby }: 
         </div>
         <Button
           disabled={!lobbyOpen}
-          onClick={onEnterLobby}
+          onClick={handleEnterLobby}
           type="button"
           className="bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-emerald-200 disabled:text-emerald-700"
         >

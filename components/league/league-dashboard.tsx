@@ -1128,11 +1128,8 @@ export function LeagueDashboard({
 
             <DraftScheduleBanner
               seasonId={activeSeason?.id ?? null}
+              leagueId={leagueId}
               isCommissioner={canManageLeague}
-              onEnterLobby={() => {
-                setViewMode("commissioner");
-                setActiveTab("results-draft");
-              }}
             />
 
             {viewMode === "commissioner" ? (
