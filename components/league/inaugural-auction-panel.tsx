@@ -460,6 +460,44 @@ export function InauguralAuctionPanel({
     }
   }
 
+  async function handlePauseAuction() {
+    if (!activeSeason) return;
+    try {
+      setIsSubmitting(true);
+      setPendingActionId("pause-auction");
+      setErrorMessage(null);
+      setSuccessMessage(null);
+      const response = await fetch(`/api/season/${activeSeason.id}/inaugural-auction/pause`, { method: "POST" });
+      const data = await parseJsonResponse<StartInauguralAuctionResponse>(response);
+      setAuctionState(data.auction);
+      setSuccessMessage("Auction paused.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to pause the auction.");
+    } finally {
+      setPendingActionId(null);
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleResumeAuction() {
+    if (!activeSeason) return;
+    try {
+      setIsSubmitting(true);
+      setPendingActionId("resume-auction");
+      setErrorMessage(null);
+      setSuccessMessage(null);
+      const response = await fetch(`/api/season/${activeSeason.id}/inaugural-auction/resume`, { method: "POST" });
+      const data = await parseJsonResponse<StartInauguralAuctionResponse>(response);
+      setAuctionState(data.auction);
+      setSuccessMessage("Auction resumed.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to resume the auction.");
+    } finally {
+      setPendingActionId(null);
+      setIsSubmitting(false);
+    }
+  }
+
   async function handleJoinDraft() {
     if (!activeSeason) return;
     try {
@@ -1343,6 +1381,41 @@ export function InauguralAuctionPanel({
                       <Button className={getSubmittingButtonClass("start-auction")} disabled={isSubmitting} onClick={() => void handleStartAuction()} type="button">
                         Start Inaugural Auction
                       </Button>
+                    ) : null}
+
+                    {auctionState.viewer.canManageAuction &&
+                    (auctionState.auction.status === "ACTIVE" || auctionState.auction.status === "PAUSED") ? (
+                      <div className="flex flex-wrap gap-2">
+                        {auctionState.auction.status === "ACTIVE" ? (
+                          <Button
+                            className={getSubmittingButtonClass("pause-auction")}
+                            disabled={isSubmitting}
+                            onClick={() => void handlePauseAuction()}
+                            type="button"
+                            variant="outline"
+                          >
+                            Pause Auction
+                          </Button>
+                        ) : (
+                          <Button
+                            className={getSubmittingButtonClass("resume-auction")}
+                            disabled={isSubmitting}
+                            onClick={() => void handleResumeAuction()}
+                            type="button"
+                          >
+                            Resume Auction
+                          </Button>
+                        )}
+                      </div>
+                    ) : null}
+
+                    {auctionState.auction.status === "PAUSED" ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        Auction paused by commissioner.
+                        {auctionState.auction.status === "PAUSED" && !auctionState.viewer.canManageAuction
+                          ? " Bidding will resume shortly."
+                          : ""}
+                      </div>
                     ) : null}
 
                     {auctionState.auction.status === "ACTIVE" && auctionState.viewer.leagueMemberId ? (

@@ -1169,6 +1169,86 @@ export const inauguralAuctionService = {
     });
   },
 
+  async pauseAuction(input: StartInauguralAuctionInput) {
+    const seasonId = input.seasonId.trim();
+    const actingUserId = input.actingUserId.trim();
+
+    if (!seasonId || !actingUserId) {
+      throw new InauguralAuctionServiceError("seasonId and actingUserId are required.", 400);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      await seasonService.assertCommissionerAccess(seasonId, actingUserId);
+      const auction = await getAuctionWithContext(tx, seasonId);
+
+      if (!auction) {
+        throw new InauguralAuctionServiceError("Inaugural auction not found.", 404);
+      }
+
+      if (auction.status !== "ACTIVE") {
+        throw new InauguralAuctionServiceError("Only an active auction can be paused.", 409);
+      }
+
+      if (auction.announcementEndsAt) {
+        throw new InauguralAuctionServiceError("Wait for the current award celebration to finish before pausing.", 409);
+      }
+
+      const now = new Date();
+      const remainingMs = auction.clockExpiresAt
+        ? Math.max(0, auction.clockExpiresAt.getTime() - now.getTime())
+        : null;
+
+      await tx.inauguralAuction.update({
+        where: { id: auction.id },
+        data: {
+          status: "PAUSED",
+          clockStartedAt: null,
+          clockExpiresAt: null,
+          pausedRemainingMs: remainingMs
+        }
+      });
+
+      return (await buildAuctionState(tx, seasonId, actingUserId))!;
+    });
+  },
+
+  async resumeAuction(input: StartInauguralAuctionInput) {
+    const seasonId = input.seasonId.trim();
+    const actingUserId = input.actingUserId.trim();
+
+    if (!seasonId || !actingUserId) {
+      throw new InauguralAuctionServiceError("seasonId and actingUserId are required.", 400);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      await seasonService.assertCommissionerAccess(seasonId, actingUserId);
+      const auction = await getAuctionWithContext(tx, seasonId);
+
+      if (!auction) {
+        throw new InauguralAuctionServiceError("Inaugural auction not found.", 404);
+      }
+
+      if (auction.status !== "PAUSED") {
+        throw new InauguralAuctionServiceError("Only a paused auction can be resumed.", 409);
+      }
+
+      const now = new Date();
+      const remainingMs = auction.pausedRemainingMs;
+
+      await tx.inauguralAuction.update({
+        where: { id: auction.id },
+        data: {
+          status: "ACTIVE",
+          clockStartedAt: remainingMs && remainingMs > 0 ? now : null,
+          clockExpiresAt: remainingMs && remainingMs > 0 ? new Date(now.getTime() + remainingMs) : null,
+          pausedRemainingMs: null
+        }
+      });
+
+      return (await buildAuctionState(tx, seasonId, actingUserId))!;
+    });
+  },
+
   async submitBid(input: SubmitInauguralBidInput) {
     const seasonId = input.seasonId.trim();
     const actingUserId = input.actingUserId.trim();

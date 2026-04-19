@@ -299,6 +299,7 @@ model InauguralAuction {
   currentNominationIndex Int                        @default(0)
   clockStartedAt      DateTime?
   clockExpiresAt      DateTime?
+  pausedRemainingMs   Int?
   announcementAwardId String?
   announcementEndsAt  DateTime?
   completedAt         DateTime?
