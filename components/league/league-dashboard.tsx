@@ -1337,7 +1337,6 @@ export function LeagueDashboard({
                 <Card>
                   <CardHeader>
                     <CardTitle>Season Checklist</CardTitle>
-                    <CardDescription>Use this checklist to review the active season's setup at a glance.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-5">
                     <div className="rounded-2xl border border-border bg-secondary/25 p-4">
@@ -1356,20 +1355,6 @@ export function LeagueDashboard({
                     </div>
 
                     <div className="space-y-3">
-                      <ChecklistStatusItem
-                        label="Active season exists"
-                        passed={bootstrapState.lockReadiness.hasActiveSeason}
-                        value={bootstrapState.lockReadiness.hasActiveSeason ? "A current season is selected." : "Select an active season first."}
-                      />
-                      <ChecklistStatusItem
-                        label="League membership"
-                        passed={bootstrapState.lockReadiness.hasExactlyTenMembers}
-                        value={
-                          bootstrapState.lockReadiness.hasExactlyTenMembers
-                            ? "Exactly 10 league members are in place."
-                            : "Exactly 10 league members are required."
-                        }
-                      />
                       {usesInauguralDraftChecklist ? (
                         <ChecklistStatusItem
                           label="Inaugural Draft Complete"
