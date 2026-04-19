@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -120,16 +120,7 @@ export function ResetPasswordForm() {
             <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent,rgba(255,204,92,0.06),transparent)] opacity-80" />
             <div className="relative min-h-[260px] sm:min-h-[360px]">
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-4 py-6 sm:px-6 sm:py-8">
-                <div className="relative h-full w-full max-w-none">
-                  <Image
-                    alt="GM Fantasy logo"
-                    className="h-full w-full scale-[1.08] object-contain drop-shadow-[0_18px_38px_rgba(0,0,0,0.28)]"
-                    fill
-                    priority
-                    sizes="100vw"
-                    src="/brand/gm-fantasy-logo.png"
-                  />
-                </div>
+                <BrandLogo size="hero" priority />
               </div>
             </div>
           </section>
