@@ -43,3 +43,14 @@ Then review or implement the following task:
 - whether the task is UI-only, service-layer, auth/recovery, or data-model related
 - whether provider env vars are configured locally
 - whether `npm run dev` is currently running
+
+## Current Example Branch Context
+- current checked-out branch at the time of this handoff: `feature/inaugural-draft-updates` (baseline, no active in-progress work)
+- all inaugural auction live-room work is merged to `main` (lobby/presence/auto-assign/simulate-remaining, Draft tab post-auction UX, scrollable single-pop final-summary modal, auto-computed Upcoming Dates)
+- most recent merges on `main`:
+  - `feature/inaugural-draft-fixes` (`8da6c22`)
+  - `feature/draft-tab-post-auction` (`535b77a`)
+- open follow-up:
+  - diagnose sporadic `"Unable to load the inaugural auction"` error after a completed test draft; awaiting dev-server log capture
+- verification caveat:
+  - `npm test -- inaugural-auction-service` previously failed locally with Windows `spawn EPERM`

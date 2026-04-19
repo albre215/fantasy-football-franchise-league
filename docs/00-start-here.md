@@ -40,13 +40,23 @@ Use this file first when handing the repo to another AI.
 - account settings, avatars, recovery flows, Resend email delivery, Twilio Verify temporary login, and auth hardening are all implemented
 
 ## Current Next Product Direction
-- follow-up work areas: configurable fees/payouts, owner experience polish, analytics expansion, and inaugural auction polish/live-room refinement
+- follow-up work areas: configurable fees/payouts, owner experience polish, analytics expansion, and keeper/offseason draft automation (inaugural auction live room is now feature-complete and merged to `main`)
 
 ## Current Branch Context
-- `main` contains the inaugural auction implementation, the simplified Seasons management panel, and the updated handoff docs baseline
-- recently created feature branches that may or may not be merged yet:
-  - `feature/error-resolution`
-    - fixes a league dashboard hydration error caused by invalid `ProfileAvatar` nesting
+- `main` contains the full inaugural auction live-room flow (lobby/presence/auto-assign/simulate-remaining), the Draft tab post-auction UX (inline summary, Upcoming Dates card, hidden scheduler and nomination/budget panels once the auction is complete), and the scrollable final-summary modal with X-close and single-pop behavior
+- most recent merges on `main`:
+  - `feature/inaugural-draft-fixes` (`8da6c22`) — hid past-dated scheduled text, made the final-summary modal scrollable with an X close, and fixed the Return-Home button so it just dismisses the modal and stays on the Draft tab
+  - `feature/draft-tab-post-auction` (`535b77a`) — streamlined Draft tab once the inaugural auction is `COMPLETED`: inline summary card, auto-computed Upcoming Dates (keeper deadline + offseason draft from NFL Super Bowl), scheduler moved to bottom and hidden entirely post-complete, Nomination Order and Owner Budgets panels hidden post-complete, final-summary modal auto-pops exactly once per auction via `localStorage` key `inaugural-summary-seen:<auctionId>`
+- current checked-out branch: `feature/inaugural-draft-updates` (baseline, no active in-progress work)
+
+## Current Working Tree Notes
+- untracked workspace items currently present:
+  - `.claude/`
+  - `public/brand/gm-fantasy-shield-raw.png`
+  - `tsconfig.tsbuildinfo`
+
+## Known Unresolved Items
+- a sporadic `"Unable to load the inaugural auction"` error was reported after a completed test draft; no reproducible cause identified yet, still awaiting dev-server logs from the user to diagnose
 
 ## Local Environment Notes
 - Windows Git / Prisma lock friction still happens on this machine

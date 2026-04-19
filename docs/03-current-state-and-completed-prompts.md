@@ -1,6 +1,6 @@
 # Current State and Completed Work
 
-This file summarizes the repo as it exists after the inaugural auction implementation, recent season-creation adjustments, and the latest league dashboard hydration fix.
+This file summarizes the repo as it exists after the inaugural auction implementation, recent season-creation adjustments, the league dashboard hydration fix, and the current in-progress inaugural auction simulation branch work.
 
 ## Major Product Areas Already Implemented
 
@@ -87,6 +87,27 @@ This file summarizes the repo as it exists after the inaugural auction implement
 - the commissioner hero now matches the simpler home/account style
 - overview panel layout has been cleaned up and simplified
 - inaugural auction room is integrated into the shared league workspace
+- commissioner-only `Simulate Remaining Auction Draft` control is live in the auction room (merged to `main`) and enables once attending members are at 3/3 teams
+- `POST /api/season/[seasonId]/inaugural-auction/simulate-remaining` assigns unsold teams to absent owners at $1 using the shared auto-assign rules
+- auction state returns `presentMemberIds` and a rich `finalSummary` payload consumed by the post-auction UI
+
+### Draft tab post-completion UX (merged on `main`)
+- once `auctionState.auction.status === "COMPLETED"`:
+  - the Draft Schedule panel is hidden entirely (keeper and offseason dates are fully automated, so nothing is left to schedule)
+  - the Nomination Order and Owner Budgets panels are hidden
+  - an inline Summary card renders with biggest/lowest spender and per-owner teams
+  - an Upcoming Dates card renders with three rows, all auto-computed from the season's NFL Super Bowl:
+    - Super Bowl = 2nd Sunday of February in `season.year + 1`
+    - Keeper Selection Deadline = Monday after Super Bowl at 11:59 PM (owner must drop 1 team by this time)
+    - Offseason Draft = Tuesday after Super Bowl at 12:00 PM
+- final-summary modal:
+  - is scrollable (`overflow-y-auto` on backdrop, `my-8` on card) with body scroll lock while open
+  - has an X close button top-right and a footer `Close` button (both dismiss without navigating)
+  - auto-pops exactly once per auction, gated by `localStorage` key `inaugural-summary-seen:<auctionId>`
+- scheduler (`components/league/draft-scheduler.tsx`):
+  - hides the past-dated "Currently scheduled" line once the scheduled time has passed
+  - hides the `INAUGURAL` dropdown option once the inaugural auction is complete
+  - returns `null` for the entire card once the inaugural auction is complete (detected via a fetch to `/api/season/${seasonId}/inaugural-auction` checking `payload.auction?.auction?.status === "COMPLETED"`)
 
 ### Season creation behavior
 - creating a season now automatically makes that season active
@@ -130,8 +151,18 @@ This file summarizes the repo as it exists after the inaugural auction implement
 - commissioner overview UI was simplified for clearer handoff/review
 - league dashboard hydration bug caused by `ProfileAvatar` inside a `<p>` was fixed
 
+## Current Verification Snapshot
+- existing inaugural auction service tests cover bid validation, late-bid clock extension, tie resolution, immediate `$98` awards, and finalization into `TeamOwnership`
+- the current `simulate remaining` branch work does not yet have matching service-route/UI test coverage in `tests/services/inaugural-auction-service.test.ts`
+- local `npm test -- inaugural-auction-service` was attempted during this handoff but Vitest failed to start in this environment with a Windows `spawn EPERM` startup error, so this branch work is not verified by test execution here
+
 ## What The Repo Does Not Yet Support
 - configurable entry fees and payout settings end to end
 - owner-facing draft actions
 - broader constrained-session semantics for temporary recovery login
-- true websocket-based live auction updates
+- true websocket-based live auction updates (still 1s polling)
+- keeper-selection workflow UI wired to the auto-computed keeper deadline (deadline is displayed; the drop flow itself still relies on the existing `DROP_PHASE` tooling)
+- automated offseason draft trigger at the auto-computed offseason draft time (time is displayed; execution still requires commissioner action)
+
+## Known Unresolved Items
+- intermittent `"Unable to load the inaugural auction"` error after a completed test draft (2026-04-19) — no reproducible cause found in `assertInauguralAuctionSeason` / `syncAuctionProgress` / `buildAuctionState`; needs dev-server log capture on next repro

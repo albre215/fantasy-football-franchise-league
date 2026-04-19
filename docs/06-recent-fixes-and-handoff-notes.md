@@ -6,6 +6,7 @@ Use this file as the quickest "what just changed?" reference.
 - Active repo: `C:\Users\Ben\GM Fantasy`
 - Treat `GM Fantasy` as the active repo unless explicitly told otherwise
 - Current baseline branch for handoff purposes: `main`
+- Current checked-out branch during this handoff: `feature/inaugural-draft-updates` (clean; recent work merged to `main`)
 
 ## Most Recent Product / UX Changes
 
@@ -14,6 +15,22 @@ Use this file as the quickest "what just changed?" reference.
 - season `draftMode` distinguishes inaugural vs continuing workflow
 - the auction room is embedded in the shared league workspace for commissioners and owners
 - final inaugural ownership still persists only into `TeamOwnership`
+
+### Inaugural auction live-room work (all merged to `main`)
+- commissioner-only `Simulate Remaining Auction Draft` action is live at `POST /api/season/[seasonId]/inaugural-auction/simulate-remaining`
+- button enables once every present owner is at 3/3 teams; auto-assign at $1 routes to the highest-budget absent owner (alpha tiebreak)
+- draft lobby + presence (`Join Draft`) and auto-assign on clock expiry all shipped in PR1–PR4
+
+### Draft tab post-inaugural-auction UX (merged on `main` in `535b77a`, preceded by `8da6c22`)
+- once the inaugural auction is `COMPLETED`:
+  - Draft Schedule panel is hidden entirely (keeper/offseason dates are automated)
+  - Nomination Order and Owner Budgets panels are hidden
+  - inline Summary card (biggest/lowest spender, per-owner teams) renders on the Draft tab
+  - Upcoming Dates card shows Super Bowl, Keeper Selection Deadline, and Offseason Draft times, all auto-computed from `season.year + 1`'s 2nd Sunday of February
+  - final-summary modal is scrollable, has an X close and body scroll lock, and auto-opens exactly once per auction via `localStorage` key `inaugural-summary-seen:<auctionId>`
+  - `Return Home` replaced with `Close` (dismisses without navigation)
+- before completion, the `INAUGURAL` option is shown in the scheduler dropdown; it is removed once the auction completes
+- the scheduler also hides the "Currently scheduled" line when the saved `scheduledAt` is in the past
 
 ### Season creation cleanup
 - newly created seasons now become active automatically
@@ -103,6 +120,10 @@ Use this file as the quickest "what just changed?" reference.
   - `components/league/commissioner-tools-panel.tsx`
   - `components/league/inaugural-auction-panel.tsx`
   - `server/services/inaugural-auction-service.ts`
+- if the task specifically continues the current branch work, inspect:
+  - `app/api/season/[seasonId]/inaugural-auction/simulate-remaining/route.ts`
+  - `tests/services/inaugural-auction-service.test.ts`
+  - `prisma/schema.prisma`
 
 ## Local Environment Notes
 - Windows Git/Prisma locking still happens on this machine
@@ -110,3 +131,9 @@ Use this file as the quickest "what just changed?" reference.
 - do not casually accept destructive Prisma reset prompts against a populated DB
 - real recovery delivery requires valid provider env vars in `.env`
 - if a task is being handed off from the current checkout rather than `main`, mention the active branch explicitly because recent fixes may live on a feature branch before merge
+- local test attempt during this handoff:
+  - `npm test -- inaugural-auction-service`
+  - result: Vitest startup failed in this environment with Windows `spawn EPERM`, so branch-local auction simulation work was not test-verified here
+
+## Known Unresolved Items
+- intermittent `"Unable to load the inaugural auction"` error surfaced after a completed test draft on 2026-04-19; root cause not yet identified (checked `assertInauguralAuctionSeason`, `syncAuctionProgress`, `buildAuctionState` with no obvious cause; `season.draftMode` is never cleared). Needs dev-server log capture on next repro.

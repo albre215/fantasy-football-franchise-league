@@ -47,11 +47,14 @@ Move hardcoded financial assumptions into persisted league or season settings.
 Refine the newly implemented inaugural auction now that the core path exists.
 
 #### Good Next Targets
+- diagnose the sporadic `"Unable to load the inaugural auction"` error reported after a completed test draft
+- add service and route tests for simulate-remaining gating, absent-owner assignment, and completion behavior
 - multi-browser manual testing and concurrency polish
 - better commissioner setup affordances for division ordering
 - clearer fallback messaging for previous-year-record mode when prior NFL data is unavailable
-- optional richer final-summary stats
-- future real-time upgrade beyond polling if the stack warrants it
+- optional richer final-summary stats beyond biggest/lowest spender
+- future real-time upgrade beyond 1s polling if the stack warrants it
+- wire the auto-computed keeper deadline and offseason draft time into actual workflow triggers (currently display-only on the Draft tab post-completion)
 
 ### Owner Experience Follow-Up
 
@@ -89,6 +92,7 @@ Endpoints still worth profiling:
 Good next test targets:
 - season-service paths involving active season / year updates
 - inaugural-auction service and UI polling behavior under multi-user interaction
+- inaugural-auction simulation coverage for presence gating, simulated awards, and final-summary completion
 - season-phase-service transition coverage
 - draft edge cases around reset/finalize/override order
 - NFL auto-import and import concurrency behavior
