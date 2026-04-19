@@ -104,8 +104,38 @@ export function DraftScheduler({ activeSeason }: DraftSchedulerProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [inauguralCompleted, setInauguralCompleted] = useState(false);
 
   const seasonId = activeSeason?.id;
+
+  useEffect(() => {
+    if (!seasonId || activeSeason?.draftMode !== "INAUGURAL_AUCTION") {
+      setInauguralCompleted(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(`/api/season/${seasonId}/inaugural-auction`, { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = (await response.json()) as { auction?: { auction?: { status?: string } } | null };
+        if (!cancelled && payload.auction?.auction?.status === "COMPLETED") {
+          setInauguralCompleted(true);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [seasonId, activeSeason?.draftMode]);
+
+  useEffect(() => {
+    if (inauguralCompleted && draftType === "INAUGURAL") {
+      setDraftType("KEEPER");
+    }
+  }, [inauguralCompleted, draftType]);
 
   const loadSchedule = useCallback(async () => {
     if (!seasonId) return;
@@ -194,14 +224,14 @@ export function DraftScheduler({ activeSeason }: DraftSchedulerProps) {
     return Array.from(set).sort();
   }, [browserTz, schedule]);
 
+  if (inauguralCompleted) {
+    return null;
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Draft Schedule</CardTitle>
-        <CardDescription>
-          Pick the date, time, and timezone when the draft lobby should open. All league members will see
-          the countdown and can join when it starts.
-        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {!seasonId ? (
@@ -217,7 +247,7 @@ export function DraftScheduler({ activeSeason }: DraftSchedulerProps) {
                   onChange={(event) => setDraftType(event.target.value as DraftType)}
                   value={draftType}
                 >
-                  <option value="INAUGURAL">Inaugural auction</option>
+                  {!inauguralCompleted ? <option value="INAUGURAL">Inaugural auction</option> : null}
                   <option value="KEEPER">Keeper selection</option>
                   <option value="OFFSEASON">Offseason draft</option>
                 </select>

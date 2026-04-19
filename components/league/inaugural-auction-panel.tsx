@@ -290,9 +290,20 @@ export function InauguralAuctionPanel({
     }
 
     if (!auctionState.activeAward) {
+      const key = `inaugural-summary-seen:${auctionState.auction.id}`;
+      if (typeof window !== "undefined" && window.localStorage.getItem(key)) {
+        return;
+      }
       setShowFinalSummary(true);
     }
-  }, [auctionState?.finalSummary, auctionState?.activeAward]);
+  }, [auctionState?.finalSummary, auctionState?.activeAward, auctionState?.auction.id]);
+
+  const dismissFinalSummary = () => {
+    setShowFinalSummary(false);
+    if (typeof window !== "undefined" && auctionState?.auction.id) {
+      window.localStorage.setItem(`inaugural-summary-seen:${auctionState.auction.id}`, "1");
+    }
+  };
 
   useEffect(() => {
     if (!showFinalSummary) return;
@@ -1440,6 +1451,7 @@ export function InauguralAuctionPanel({
                   </CardContent>
                 </Card>
 
+                {auctionState.auction.status !== "COMPLETED" ? (
                 <Card>
                   <CardHeader>
                     <CardTitle>Nomination Order</CardTitle>
@@ -1464,6 +1476,7 @@ export function InauguralAuctionPanel({
                     ))}
                   </CardContent>
                 </Card>
+                ) : null}
               </div>
 
               {auctionState.auction.status === "ACTIVE" ? (
@@ -1474,6 +1487,7 @@ export function InauguralAuctionPanel({
                 />
               ) : null}
 
+              {auctionState.auction.status !== "COMPLETED" ? (
               <Card>
                 <CardHeader>
                   <CardTitle>Owner Budgets</CardTitle>
@@ -1504,6 +1518,90 @@ export function InauguralAuctionPanel({
                   ))}
                 </CardContent>
               </Card>
+              ) : null}
+
+              {auctionState.auction.status === "COMPLETED" && auctionState.finalSummary ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Inaugural Auction Draft Complete</CardTitle>
+                    <CardDescription>
+                      Summary of draft results, stats, and notes from the inaugural auction.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-5">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-lg border border-border p-4 text-sm">
+                        <div className="font-medium">Biggest spender</div>
+                        <div className="text-muted-foreground">
+                          {auctionState.finalSummary.biggestSpender
+                            ? `${auctionState.finalSummary.biggestSpender.displayName} (${formatCurrency(auctionState.finalSummary.biggestSpender.amount)})`
+                            : "Not available"}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-border p-4 text-sm">
+                        <div className="font-medium">Lowest spender</div>
+                        <div className="text-muted-foreground">
+                          {auctionState.finalSummary.lowestSpender
+                            ? `${auctionState.finalSummary.lowestSpender.displayName} (${formatCurrency(auctionState.finalSummary.lowestSpender.amount)})`
+                            : "Not available"}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {auctionState.finalSummary.owners.map((owner) => (
+                        <div className="rounded-lg border border-border p-4 text-sm" key={owner.leagueMemberId}>
+                          <div className="font-medium">{owner.displayName}</div>
+                          <div className="text-muted-foreground">
+                            Spent {formatCurrency(owner.budgetSpent)} | Left {formatCurrency(owner.budgetRemaining)}
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {owner.teams.map((team) => (
+                              <span className="rounded-full border border-border px-3 py-1 text-xs" key={`${owner.leagueMemberId}-${team.id}`}>
+                                <NFLTeamLabel size="compact" team={team} />
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
+
+              {auctionState.auction.status === "COMPLETED" && activeSeason ? (() => {
+                const seasonYear = activeSeason.year;
+                const superBowlYear = seasonYear + 1;
+                const feb1 = new Date(superBowlYear, 1, 1);
+                const firstSunday = 1 + ((7 - feb1.getDay()) % 7);
+                const superBowl = new Date(superBowlYear, 1, firstSunday + 7);
+                const keeperDeadline = new Date(superBowlYear, 1, firstSunday + 8, 23, 59);
+                const offseasonDraft = new Date(superBowlYear, 1, firstSunday + 9, 12, 0);
+                const fmtDate = (d: Date) => d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+                const fmtDateTime = (d: Date) => d.toLocaleString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Upcoming Dates</CardTitle>
+                      <CardDescription>Automatically set relative to Super Bowl {superBowlYear}.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="rounded-lg border border-border p-4 text-sm">
+                        <div className="font-medium">Super Bowl {superBowlYear}</div>
+                        <div className="text-muted-foreground">{fmtDate(superBowl)}</div>
+                      </div>
+                      <div className="rounded-lg border border-border p-4 text-sm">
+                        <div className="font-medium">Keeper Selection Deadline</div>
+                        <div className="text-muted-foreground">{fmtDateTime(keeperDeadline)}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">Every owner must drop 1 team by this time.</div>
+                      </div>
+                      <div className="rounded-lg border border-border p-4 text-sm">
+                        <div className="font-medium">Offseason Draft</div>
+                        <div className="text-muted-foreground">{fmtDateTime(offseasonDraft)}</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })() : null}
             </div>
           ) : null}
         </CardContent>
@@ -1547,7 +1645,7 @@ export function InauguralAuctionPanel({
             <button
               aria-label="Close final results"
               className="absolute right-4 top-4 rounded-full border border-border bg-white p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-              onClick={() => setShowFinalSummary(false)}
+              onClick={dismissFinalSummary}
               type="button"
             >
               <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -1594,10 +1692,7 @@ export function InauguralAuctionPanel({
               ))}
             </div>
             <div className="mt-5 flex justify-end">
-              <Button
-                onClick={() => setShowFinalSummary(false)}
-                type="button"
-              >
+              <Button onClick={dismissFinalSummary} type="button">
                 Close
               </Button>
             </div>
