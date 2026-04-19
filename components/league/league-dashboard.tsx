@@ -1153,113 +1153,48 @@ export function LeagueDashboard({
             ) : null}
 
             {viewMode === "commissioner" && activeTab === "overview" ? (
-              <div className="grid gap-6 xl:grid-cols-[0.9fr_1.9fr]">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>League Snapshot</CardTitle>
-                  </CardHeader>
-                    <CardContent className="space-y-3 text-sm text-muted-foreground">
-                      <p>
-                        <span className="font-semibold text-foreground">League:</span> {bootstrapState.league.name}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-foreground">Commissioner:</span>
-                        {bootstrapState.league.commissioner ? (
-                          <>
-                            <ProfileAvatar
-                              className="h-7 w-7 border-border bg-slate-100 text-slate-700"
-                              fallbackClassName="text-[10px]"
-                              imageUrl={bootstrapState.league.commissioner.profileImageUrl}
-                              name={bootstrapState.league.commissioner.displayName}
-                            />
-                            <span>{bootstrapState.league.commissioner.displayName}</span>
-                          </>
-                        ) : (
-                          <span>Not assigned</span>
-                        )}
-                      </div>
-                      <p>
-                        <span className="font-semibold text-foreground">Active season:</span>{" "}
-                        {activeSeason ? activeSeason.name ?? activeSeason.year : "None selected"}
-                      </p>
-                      <p>
-                        <span className="font-semibold text-foreground">Members:</span> {bootstrapState.memberCount}
-                      </p>
-                      <p>
-                        <span className="font-semibold text-foreground">Ledger Entry Fee:</span> $200
-                      </p>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Current State & Next Action</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4 text-sm text-muted-foreground">
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <p>
-                        <span className="font-semibold text-foreground">Assigned teams:</span> {assignedTeamsCount} / 30
-                      </p>
-                      <p>
-                        <span className="font-semibold text-foreground">Final standings saved:</span> {standingsSaved ? "Yes" : "No"}
-                      </p>
-                      <p>
-                        <span className="font-semibold text-foreground">Fantasy payouts published:</span>{" "}
-                        {resultsAvailability?.hasFantasyPayoutsPublished ? "Yes" : "No"}
-                      </p>
-                      <p>
-                        <span className="font-semibold text-foreground">
-                          {isInauguralAuctionSeason ? "Auction room:" : "Draft exists:"}
-                        </span>{" "}
-                        {isInauguralAuctionSeason ? "See Results & Draft tab" : draftExists ? "Yes" : "No"}
-                      </p>
-                      <p>
-                        <span className="font-semibold text-foreground">Draft status:</span> {draftStatus}
-                      </p>
-                      <p>
-                        <span className="font-semibold text-foreground">Target season locked:</span> {isLocked ? "Yes" : "No"}
-                      </p>
-                      <p>
-                        <span className="font-semibold text-foreground">Ownership finalized:</span>{" "}
-                        {ownershipFinalized ? "Yes" : "No"}
-                      </p>
-                      <p>
-                        <span className="font-semibold text-foreground">
-                          {isInauguralAuctionSeason ? "Auction ownership progress:" : "Ledger-based draft order ready:"}
-                        </span>{" "}
-                        {isInauguralAuctionSeason ? `${assignedTeamsCount} / 30 awarded` : recommendedDraftOrderReady ? "Yes" : "No"}
-                      </p>
-                      <p>
-                        <span className="font-semibold text-foreground">Ledger coverage:</span>{" "}
-                        {resultsAvailability?.draftOrderReadiness.ledgerCoverageStatus ?? "NONE"}
-                      </p>
-                      <p>
-                        <span className="font-semibold text-foreground">Owners with ledger entries:</span>{" "}
-                        {resultsAvailability?.draftOrderReadiness.ownersWithLedgerEntries ?? 0} /{" "}
-                        {members.length}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border border-dashed border-border p-4">
-                      <p className="font-medium text-foreground">Primary recommendation</p>
-                      <p className="mt-1">{primaryNextAction}</p>
-                    </div>
-                    {secondaryNextSteps.length > 0 ? (
-                      <div className="space-y-2">
-                        <p className="font-medium text-foreground">Secondary blockers</p>
-                        <ul className="space-y-2">
-                          {secondaryNextSteps.map((step) => (
-                            <li className="rounded-lg border border-border p-3" key={step}>
-                              {step}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle>League Overview</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-x-8 gap-y-3 text-sm text-muted-foreground sm:grid-cols-2">
+                  <p>
+                    <span className="font-semibold text-foreground">League:</span> {bootstrapState.league.name}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-foreground">Commissioner:</span>
+                    {bootstrapState.league.commissioner ? (
+                      <>
+                        <ProfileAvatar
+                          className="h-7 w-7 border-border bg-slate-100 text-slate-700"
+                          fallbackClassName="text-[10px]"
+                          imageUrl={bootstrapState.league.commissioner.profileImageUrl}
+                          name={bootstrapState.league.commissioner.displayName}
+                        />
+                        <span>{bootstrapState.league.commissioner.displayName}</span>
+                      </>
                     ) : (
-                      <p>No blocking issues are currently surfaced. Use the tabs below for the next operational step.</p>
+                      <span>Not assigned</span>
                     )}
-                  </CardContent>
-                </Card>
-              </div>
+                  </div>
+                  <p>
+                    <span className="font-semibold text-foreground">Active season:</span>{" "}
+                    {activeSeason ? activeSeason.name ?? activeSeason.year : "None selected"}
+                  </p>
+                  <p>
+                    <span className="font-semibold text-foreground">Members:</span> {bootstrapState.memberCount}
+                  </p>
+                  <p>
+                    <span className="font-semibold text-foreground">Ledger Entry Fee:</span> $200
+                  </p>
+                  <p>
+                    <span className="font-semibold text-foreground">Ledger Payouts:</span> Standard
+                  </p>
+                  <p>
+                    <span className="font-semibold text-foreground">Fantasy Scoring:</span> Big Play PPR
+                  </p>
+                </CardContent>
+              </Card>
             ) : null}
 
             {viewMode === "commissioner" && activeTab === "seasons" ? (
