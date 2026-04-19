@@ -143,10 +143,14 @@ export function InauguralAuctionPanel({
   const [orderMethod, setOrderMethod] = useState<InauguralAuctionOrderMethod>("ALPHABETICAL");
   const [previousYearSortDirection, setPreviousYearSortDirection] =
     useState<InauguralAuctionPreviousYearSortDirection>("BEST_FIRST");
+  const [alphabeticalSortDirection, setAlphabeticalSortDirection] = useState<"A_TO_Z" | "Z_TO_A">("A_TO_Z");
   const [divisionOrder, setDivisionOrder] = useState<string[]>(DEFAULT_DIVISION_ORDER);
   const [customTeamOrder, setCustomTeamOrder] = useState<string[]>([]);
   const [draggedDivision, setDraggedDivision] = useState<string | null>(null);
   const [divisionInsertIndex, setDivisionInsertIndex] = useState<number | null>(null);
+  const [divisionTeamOrder, setDivisionTeamOrder] = useState<Record<string, string[]>>({});
+  const [draggedDivisionTeam, setDraggedDivisionTeam] = useState<{ division: string; teamId: string } | null>(null);
+  const [divisionTeamInsertIndex, setDivisionTeamInsertIndex] = useState<number | null>(null);
   const [draggedTeamId, setDraggedTeamId] = useState<string | null>(null);
   const [customDropIndex, setCustomDropIndex] = useState<number | null>(null);
   const [bidAmount, setBidAmount] = useState("1");
@@ -182,7 +186,19 @@ export function InauguralAuctionPanel({
     }
 
     if (nextOrderMethod !== "PREVIOUS_YEAR_RECORD" && teams.length > 0) {
-      setPreview(buildPreviewFromTeams(teams, nextOrderMethod, nextDivisionOrder, nextCustomTeamOrder));
+      const basePreview = buildPreviewFromTeams(teams, nextOrderMethod, nextDivisionOrder, nextCustomTeamOrder);
+      if (nextOrderMethod === "DIVISION") {
+        const entries = nextDivisionOrder
+          .flatMap((division) => orderedTeamsByDivision.get(division) ?? [])
+          .map((team, index) => ({
+            orderIndex: index,
+            nflTeam: team,
+            note: `${team.conference} ${team.division}`
+          }));
+        setPreview({ ...basePreview, entries });
+        return;
+      }
+      setPreview(basePreview);
     }
 
     try {
@@ -305,7 +321,8 @@ export function InauguralAuctionPanel({
     }
 
     void refreshPreview(orderMethod, divisionOrder, customTeamOrder, previousYearSortDirection);
-  }, [activeSeason?.id, teams.length, orderMethod, divisionOrder, customTeamOrder, previousYearSortDirection, auctionState?.auction.status]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSeason?.id, teams.length, orderMethod, divisionOrder, customTeamOrder, previousYearSortDirection, divisionTeamOrder, auctionState?.auction.status]);
 
   const viewer = auctionState?.viewer ?? null;
   const canConfigureAuction = !auctionState || auctionState.auction.status === "PLANNING";
@@ -329,6 +346,23 @@ export function InauguralAuctionPanel({
 
     return grouped;
   }, [teams]);
+
+  const orderedTeamsByDivision = useMemo(() => {
+    const grouped = new Map<string, NFLTeamSummary[]>();
+    for (const [division, alphaTeams] of teamsByDivision.entries()) {
+      const customOrder = divisionTeamOrder[division];
+      if (customOrder && customOrder.length === alphaTeams.length) {
+        const byId = new Map(alphaTeams.map((team) => [team.id, team] as const));
+        const ordered = customOrder.map((id) => byId.get(id)).filter((team): team is NFLTeamSummary => Boolean(team));
+        if (ordered.length === alphaTeams.length) {
+          grouped.set(division, ordered);
+          continue;
+        }
+      }
+      grouped.set(division, alphaTeams);
+    }
+    return grouped;
+  }, [teamsByDivision, divisionTeamOrder]);
   const availableCustomTeams = useMemo(
     () => teams.filter((team) => !customTeamOrder.includes(team.id)).sort((left, right) => left.name.localeCompare(right.name)),
     [teams, customTeamOrder]
@@ -357,13 +391,38 @@ export function InauguralAuctionPanel({
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          orderMethod,
-          divisionOrder: orderMethod === "DIVISION" ? divisionOrder : undefined,
-          customTeamOrder: orderMethod === "CUSTOM" ? customTeamOrder : undefined,
-          previousYearSortDirection:
-            orderMethod === "PREVIOUS_YEAR_RECORD" ? previousYearSortDirection : undefined
-        })
+        body: JSON.stringify(
+          (() => {
+            if (orderMethod === "ALPHABETICAL" && alphabeticalSortDirection === "Z_TO_A") {
+              return {
+                orderMethod: "CUSTOM",
+                customTeamOrder: [...teams]
+                  .sort((left, right) => right.name.localeCompare(left.name))
+                  .map((team) => team.id)
+              };
+            }
+            if (orderMethod === "DIVISION") {
+              const hasCustomWithin = divisionOrder.some((division) => {
+                const alpha = (teamsByDivision.get(division) ?? []).map((team) => team.id);
+                const current = divisionTeamOrder[division];
+                return current && current.length === alpha.length && current.some((id, i) => id !== alpha[i]);
+              });
+              if (hasCustomWithin) {
+                const flattened = divisionOrder.flatMap(
+                  (division) => (orderedTeamsByDivision.get(division) ?? []).map((team) => team.id)
+                );
+                return { orderMethod: "CUSTOM", customTeamOrder: flattened };
+              }
+            }
+            return {
+              orderMethod,
+              divisionOrder: orderMethod === "DIVISION" ? divisionOrder : undefined,
+              customTeamOrder: orderMethod === "CUSTOM" ? customTeamOrder : undefined,
+              previousYearSortDirection:
+                orderMethod === "PREVIOUS_YEAR_RECORD" ? previousYearSortDirection : undefined
+            };
+          })()
+        )
       });
       const data = await parseJsonResponse<ConfigureInauguralAuctionResponse>(response);
       setAuctionState(data.auction);
@@ -484,6 +543,41 @@ export function InauguralAuctionPanel({
     return isTopHalf ? index : index + 1;
   }
 
+  function computeDivisionTeamDropIndex(event: React.DragEvent<HTMLDivElement>, index: number) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const isLeftHalf = event.clientX - rect.left < rect.width / 2;
+    return isLeftHalf ? index : index + 1;
+  }
+
+  function handleDivisionTeamDrop(division: string, targetIndex: number) {
+    if (!draggedDivisionTeam || draggedDivisionTeam.division !== division) {
+      setDivisionTeamInsertIndex(null);
+      setDraggedDivisionTeam(null);
+      return;
+    }
+
+    const alphaTeams = teamsByDivision.get(division) ?? [];
+    const currentOrder = divisionTeamOrder[division] ?? alphaTeams.map((team) => team.id);
+    const next = [...currentOrder];
+    const fromIndex = next.indexOf(draggedDivisionTeam.teamId);
+    if (fromIndex < 0) {
+      setDivisionTeamInsertIndex(null);
+      setDraggedDivisionTeam(null);
+      return;
+    }
+    if (targetIndex === fromIndex || targetIndex === fromIndex + 1) {
+      setDivisionTeamInsertIndex(null);
+      setDraggedDivisionTeam(null);
+      return;
+    }
+    const [moved] = next.splice(fromIndex, 1);
+    const insertIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    next.splice(insertIndex, 0, moved);
+    setDivisionTeamOrder((current) => ({ ...current, [division]: next }));
+    setDivisionTeamInsertIndex(null);
+    setDraggedDivisionTeam(null);
+  }
+
   function handleCustomTeamDrop(targetIndex?: number) {
     if (!draggedTeamId) {
       return;
@@ -561,8 +655,8 @@ export function InauguralAuctionPanel({
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {[
                   { value: "ALPHABETICAL", label: "Alphabetical" },
-                  { value: "DIVISION", label: "Division Order" },
                   { value: "PREVIOUS_YEAR_RECORD", label: "Previous-Year Record" },
+                  { value: "DIVISION", label: "Division Order" },
                   { value: "CUSTOM", label: "Custom Order" }
                 ].map((option) => (
                   <Button
@@ -657,16 +751,87 @@ export function InauguralAuctionPanel({
                             <div className="w-8 text-lg font-semibold text-emerald-700">{index + 1}.</div>
                             <div>
                               <p className="font-medium text-foreground">{division}</p>
-                              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm text-muted-foreground">
-                                {(teamsByDivision.get(division) ?? []).map((team) => (
-                                  <NFLTeamLabel
-                                    className="rounded-full border border-border/70 bg-background px-2 py-1"
-                                    key={team.id}
-                                    size="compact"
-                                    team={team}
-                                    textClassName="text-xs"
-                                  />
-                                ))}
+                              <div
+                                className="mt-2 flex flex-wrap gap-x-2 gap-y-2 text-sm text-muted-foreground"
+                                onDragOver={(event) => {
+                                  if (!draggedDivisionTeam || draggedDivisionTeam.division !== division) return;
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  event.dataTransfer.dropEffect = "move";
+                                  const list = orderedTeamsByDivision.get(division) ?? [];
+                                  setDivisionTeamInsertIndex(list.length);
+                                }}
+                                onDrop={(event) => {
+                                  if (!draggedDivisionTeam || draggedDivisionTeam.division !== division) return;
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  const list = orderedTeamsByDivision.get(division) ?? [];
+                                  handleDivisionTeamDrop(division, list.length);
+                                }}
+                              >
+                                {(orderedTeamsByDivision.get(division) ?? []).map((team, teamIndex) => {
+                                  const isTeamSource =
+                                    draggedDivisionTeam?.division === division &&
+                                    draggedDivisionTeam.teamId === team.id;
+                                  const teamFromIndex =
+                                    draggedDivisionTeam?.division === division
+                                      ? (orderedTeamsByDivision.get(division) ?? []).findIndex(
+                                          (entry) => entry.id === draggedDivisionTeam.teamId
+                                        )
+                                      : -1;
+                                  const showTeamIndicatorLeft =
+                                    draggedDivisionTeam?.division === division &&
+                                    divisionTeamInsertIndex === teamIndex &&
+                                    teamIndex !== teamFromIndex &&
+                                    teamIndex !== teamFromIndex + 1;
+
+                                  return (
+                                    <div className="flex items-center gap-0" key={team.id}>
+                                      <div
+                                        aria-hidden
+                                        className={cn(
+                                          "h-7 w-1 rounded-full transition-all",
+                                          showTeamIndicatorLeft ? "bg-emerald-500 mx-1" : "bg-transparent"
+                                        )}
+                                      />
+                                      <div
+                                        className={cn(
+                                          "cursor-grab select-none rounded-full border border-border/70 bg-background px-2 py-1 transition active:cursor-grabbing",
+                                          isTeamSource
+                                            ? "opacity-40 border-emerald-400 bg-emerald-50"
+                                            : "hover:border-emerald-300 hover:bg-emerald-50"
+                                        )}
+                                        draggable
+                                        onDragEnd={(event) => {
+                                          event.stopPropagation();
+                                          setDraggedDivisionTeam(null);
+                                          setDivisionTeamInsertIndex(null);
+                                        }}
+                                        onDragOver={(event) => {
+                                          if (!draggedDivisionTeam || draggedDivisionTeam.division !== division) return;
+                                          event.preventDefault();
+                                          event.stopPropagation();
+                                          event.dataTransfer.dropEffect = "move";
+                                          setDivisionTeamInsertIndex(computeDivisionTeamDropIndex(event, teamIndex));
+                                        }}
+                                        onDrop={(event) => {
+                                          if (!draggedDivisionTeam || draggedDivisionTeam.division !== division) return;
+                                          event.preventDefault();
+                                          event.stopPropagation();
+                                          handleDivisionTeamDrop(division, computeDivisionTeamDropIndex(event, teamIndex));
+                                        }}
+                                        onDragStart={(event) => {
+                                          event.stopPropagation();
+                                          setDraggedDivisionTeam({ division, teamId: team.id });
+                                          setDivisionTeamInsertIndex(teamIndex);
+                                          event.dataTransfer.effectAllowed = "move";
+                                        }}
+                                      >
+                                        <NFLTeamLabel size="compact" team={team} textClassName="text-xs" />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           </div>
@@ -962,6 +1127,17 @@ export function InauguralAuctionPanel({
                             : "Record Order: Worst -> Best"}
                         </Button>
                       ) : null}
+                      {orderMethod === "ALPHABETICAL" ? (
+                        <Button
+                          onClick={() =>
+                            setAlphabeticalSortDirection((current) => (current === "A_TO_Z" ? "Z_TO_A" : "A_TO_Z"))
+                          }
+                          type="button"
+                          variant="outline"
+                        >
+                          {alphabeticalSortDirection === "A_TO_Z" ? "Alphabetical: A -> Z" : "Alphabetical: Z -> A"}
+                        </Button>
+                      ) : null}
                       {isLoadingPreview ? <span className="text-sm text-muted-foreground">Refreshing preview...</span> : null}
                     </div>
                   </div>
@@ -975,7 +1151,10 @@ export function InauguralAuctionPanel({
                   ) : null}
 
                   <div className="grid gap-2">
-                    {previewToRender.entries.map((entry) => (
+                    {(orderMethod === "ALPHABETICAL" && alphabeticalSortDirection === "Z_TO_A"
+                      ? [...previewToRender.entries].reverse().map((entry, index) => ({ ...entry, orderIndex: index }))
+                      : previewToRender.entries
+                    ).map((entry) => (
                       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background px-4 py-3" key={`${entry.orderIndex}-${entry.nflTeam.id}`}>
                         <div className="flex items-center gap-4">
                           <div className="w-8 text-sm font-semibold text-emerald-700">{entry.orderIndex + 1}.</div>
