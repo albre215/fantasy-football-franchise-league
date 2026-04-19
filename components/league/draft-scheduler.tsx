@@ -257,7 +257,7 @@ export function DraftScheduler({ activeSeason }: DraftSchedulerProps) {
               </label>
             </div>
 
-            {schedule ? (
+            {schedule && new Date(schedule.scheduledAt).getTime() > Date.now() ? (
               <p className="text-sm text-muted-foreground">
                 Currently scheduled for{" "}
                 <span className="font-medium text-foreground">
