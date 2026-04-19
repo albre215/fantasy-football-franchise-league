@@ -1123,9 +1123,9 @@ export function LeagueDashboard({
                   { id: "seasons", label: "Seasons" },
                   { id: "members", label: "Members" },
                   { id: "ownership", label: "Ownership" },
-                  { id: "results-draft", label: "Results & Draft" },
+                  { id: "results-draft", label: "Draft" },
                   { id: "fantasy", label: "Fantasy" },
-                  { id: "nfl-performance", label: "NFL Performance" },
+                  { id: "nfl-performance", label: "NFL Results" },
                   { id: "ledger", label: "Ledger" },
                   { id: "history-analytics", label: "History & Analytics" }
                 ].map((tab) => (
@@ -1715,24 +1715,11 @@ export function LeagueDashboard({
 
             {viewMode === "commissioner" && activeTab === "results-draft" ? (
               <div className="space-y-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Results & Draft Workflow</CardTitle>
-                    <CardDescription>
-                      {activeSeason?.draftMode === "INAUGURAL_AUCTION"
-                        ? "Move from final standings into the inaugural auction room for brand-new league ownership."
-                        : "Move through the annual sequence from final standings to draft order to the offseason draft."}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex flex-wrap gap-2">
+                {activeSeason?.draftMode !== "INAUGURAL_AUCTION" ? (
+                  <div className="flex flex-wrap gap-2">
                     {[
-                      {
-                        id: "offseason-draft",
-                        label: activeSeason?.draftMode === "INAUGURAL_AUCTION" ? "Inaugural Auction" : "Offseason Draft"
-                      },
-                      ...(activeSeason?.draftMode === "INAUGURAL_AUCTION"
-                        ? []
-                        : [{ id: "commissioner-overrides", label: "Commissioner Overrides" }])
+                      { id: "offseason-draft", label: "Offseason Draft" },
+                      { id: "commissioner-overrides", label: "Commissioner Overrides" }
                     ].map((tab) => (
                       <Button
                         key={tab.id}
@@ -1743,8 +1730,8 @@ export function LeagueDashboard({
                         {tab.label}
                       </Button>
                     ))}
-                  </CardContent>
-                </Card>
+                  </div>
+                ) : null}
 
                 {activeResultsDraftTab === "offseason-draft" ? (
                   activeSeason?.draftMode === "INAUGURAL_AUCTION" ? (
