@@ -179,6 +179,11 @@ const DraftScheduler = dynamic(
   { ssr: false }
 );
 
+const DraftScheduleBanner = dynamic(
+  () => import("@/components/league/draft-schedule-banner").then((mod) => mod.DraftScheduleBanner),
+  { ssr: false }
+);
+
 const SeasonNflPerformancePanel = dynamic(
   () => import("@/components/league/season-nfl-performance-panel").then((mod) => mod.SeasonNflPerformancePanel),
   {
@@ -1120,6 +1125,15 @@ export function LeagueDashboard({
                 </CardContent>
               </Card>
             ) : null}
+
+            <DraftScheduleBanner
+              seasonId={activeSeason?.id ?? null}
+              isCommissioner={canManageLeague}
+              onEnterLobby={() => {
+                setViewMode("commissioner");
+                setActiveTab("results-draft");
+              }}
+            />
 
             {viewMode === "commissioner" ? (
               <div className="relative z-10 flex flex-wrap gap-2 rounded-2xl border border-border bg-white/90 p-2 shadow-[0_14px_28px_-24px_rgba(6,32,18,0.2),0_0_0_1px_rgba(24,54,33,0.08)] backdrop-blur-sm">
