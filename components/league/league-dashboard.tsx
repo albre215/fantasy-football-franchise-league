@@ -174,6 +174,11 @@ const InauguralAuctionPanel = dynamic(
   }
 );
 
+const DraftScheduler = dynamic(
+  () => import("@/components/league/draft-scheduler").then((mod) => mod.DraftScheduler),
+  { ssr: false }
+);
+
 const SeasonNflPerformancePanel = dynamic(
   () => import("@/components/league/season-nfl-performance-panel").then((mod) => mod.SeasonNflPerformancePanel),
   {
@@ -1715,6 +1720,8 @@ export function LeagueDashboard({
 
             {viewMode === "commissioner" && activeTab === "results-draft" ? (
               <div className="space-y-6">
+                <DraftScheduler activeSeason={activeSeason} />
+
                 {activeSeason?.draftMode !== "INAUGURAL_AUCTION" ? (
                   <div className="flex flex-wrap gap-2">
                     {[

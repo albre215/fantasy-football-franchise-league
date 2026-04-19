@@ -178,6 +178,7 @@ model LeagueMember {
   nflTeamResults   SeasonNflTeamResult[]
   inauguralAuctionBids InauguralAuctionBid[]
   inauguralAuctionAwards InauguralAuctionAward[]
+  inauguralAuctionPresences InauguralAuctionPresence[]
 
   @@unique([leagueId, userId])
   @@index([userId])
@@ -210,9 +211,29 @@ model Season {
   nflImportRuns    SeasonNflImportRun[]
   nflTeamResults   SeasonNflTeamResult[]
   inauguralAuction InauguralAuction?
+  draftSchedule    DraftSchedule?
 
   @@unique([leagueId, year])
   @@index([leagueId, status])
+}
+
+model DraftSchedule {
+  id          String    @id @default(cuid())
+  seasonId    String    @unique
+  draftType   DraftType
+  scheduledAt DateTime
+  timezone    String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  season      Season    @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledAt])
+}
+
+enum DraftType {
+  INAUGURAL
+  KEEPER
+  OFFSEASON
 }
 
 model TeamOwnership {
@@ -288,8 +309,22 @@ model InauguralAuction {
   nominationEntries   InauguralAuctionNomination[]
   bids                InauguralAuctionBid[]
   awards              InauguralAuctionAward[]
+  presences           InauguralAuctionPresence[]
 
   @@index([leagueId, status])
+}
+
+model InauguralAuctionPresence {
+  id             String           @id @default(cuid())
+  auctionId      String
+  leagueMemberId String
+  joinedAt       DateTime         @default(now())
+  lastSeenAt     DateTime         @default(now())
+  auction        InauguralAuction @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  leagueMember   LeagueMember     @relation(fields: [leagueMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([auctionId, leagueMemberId])
+  @@index([leagueMemberId])
 }
 
 enum InauguralAuctionOrderMethod {
@@ -297,6 +332,13 @@ enum InauguralAuctionOrderMethod {
   DIVISION
   PREVIOUS_YEAR_RECORD
   CUSTOM
+}
+
+enum AuctionAwardSource {
+  BID
+  AUTO_ASSIGN
+  SIMULATED
+  FINAL_SELECTION
 }
 
 model InauguralAuctionNomination {
@@ -338,6 +380,7 @@ model InauguralAuctionAward {
   nominationId   String                     @unique
   leagueMemberId String
   amount         Int
+  source         AuctionAwardSource         @default(BID)
   awardedAt      DateTime                   @default(now())
   createdAt      DateTime                   @default(now())
   updatedAt      DateTime                   @updatedAt

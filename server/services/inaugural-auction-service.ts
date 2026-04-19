@@ -739,6 +739,12 @@ async function buildAuctionState(
 
   const owners = buildOwnerSummaries(auction);
   const finalSelection = getFinalSelectionContext(owners, auction);
+  const presenceRows = await tx.inauguralAuctionPresence.findMany({
+    where: { auctionId: auction.id },
+    select: { leagueMemberId: true }
+  });
+  const presentMemberIds = presenceRows.map((row) => row.leagueMemberId);
+  const presentMemberIdSet = new Set(presentMemberIds);
   const viewerMembership = auction.season.league.members.find((member) => member.userId === actingUserId) ?? null;
   const viewerOwner = viewerMembership ? owners.find((owner) => owner.leagueMemberId === viewerMembership.id) ?? null : null;
   const activeNomination =
@@ -917,6 +923,7 @@ async function buildAuctionState(
         }
       : null,
     finalSummary,
+    presentMemberIds,
     viewer: {
       leagueMemberId: viewerMembership?.id ?? null,
       role: viewerMembership?.role ?? null,
@@ -927,7 +934,8 @@ async function buildAuctionState(
         auction.status === "ACTIVE" &&
         !auction.announcementEndsAt &&
         viewerOwner!.teamCount < REQUIRED_TEAMS_PER_OWNER &&
-        viewerOwner!.maxAllowedBid >= 1,
+        viewerOwner!.maxAllowedBid >= 1 &&
+        presentMemberIdSet.has(viewerOwner!.leagueMemberId),
       canSelectFinalTeam: Boolean(finalSelection && viewerMembership?.id === finalSelection.owner.leagueMemberId),
       budgetRemaining: viewerOwner?.budgetRemaining ?? null,
       teamCount: viewerOwner?.teamCount ?? null,
@@ -1145,6 +1153,14 @@ export const inauguralAuctionService = {
 
       if (!viewerMembership) {
         throw new InauguralAuctionServiceError("Only league members for this season can bid in the inaugural auction.", 403);
+      }
+
+      const presence = await tx.inauguralAuctionPresence.findUnique({
+        where: { auctionId_leagueMemberId: { auctionId: auction.id, leagueMemberId: viewerMembership.id } }
+      });
+
+      if (!presence) {
+        throw new InauguralAuctionServiceError("Join the draft lobby before bidding.", 409);
       }
 
       const owners = buildOwnerSummaries(auction);

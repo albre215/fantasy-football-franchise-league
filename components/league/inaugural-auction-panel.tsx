@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ProfileAvatar } from "@/components/shared/profile-avatar";
+import { DraftPresenceList } from "@/components/league/draft-presence-list";
 import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -453,6 +454,51 @@ export function InauguralAuctionPanel({
       setSuccessMessage("Inaugural auction started.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to start the inaugural auction.");
+    } finally {
+      setPendingActionId(null);
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleJoinDraft() {
+    if (!activeSeason) return;
+    try {
+      setIsSubmitting(true);
+      setPendingActionId("join-draft");
+      setErrorMessage(null);
+      const response = await fetch(`/api/season/${activeSeason.id}/inaugural-auction/presence`, {
+        method: "POST"
+      });
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        throw new Error(payload.error ?? "Unable to join the draft.");
+      }
+      await refreshAuctionState();
+      setSuccessMessage("You're in the draft lobby.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to join the draft.");
+    } finally {
+      setPendingActionId(null);
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleLeaveDraft() {
+    if (!activeSeason) return;
+    try {
+      setIsSubmitting(true);
+      setPendingActionId("leave-draft");
+      setErrorMessage(null);
+      const response = await fetch(`/api/season/${activeSeason.id}/inaugural-auction/presence`, {
+        method: "DELETE"
+      });
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        throw new Error(payload.error ?? "Unable to leave the draft.");
+      }
+      await refreshAuctionState();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to leave the draft.");
     } finally {
       setPendingActionId(null);
       setIsSubmitting(false);
@@ -1271,6 +1317,26 @@ export function InauguralAuctionPanel({
                       </Button>
                     ) : null}
 
+                    {auctionState.auction.status === "ACTIVE" && auctionState.viewer.leagueMemberId ? (
+                      auctionState.presentMemberIds.includes(auctionState.viewer.leagueMemberId) ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+                          <span className="text-emerald-900">You are in the draft lobby.</span>
+                          <Button disabled={isSubmitting} onClick={() => void handleLeaveDraft()} type="button" variant="outline">
+                            Leave lobby
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
+                          <span className="text-amber-900">
+                            Join the draft lobby to bid. Absent members may be auto-assigned teams when timers expire.
+                          </span>
+                          <Button className={getSubmittingButtonClass("join-draft")} disabled={isSubmitting} onClick={() => void handleJoinDraft()} type="button">
+                            Join Draft
+                          </Button>
+                        </div>
+                      )
+                    ) : null}
+
                     {auctionState.viewer.canBid && auctionState.currentNomination ? (
                       <div className="space-y-3 rounded-lg border border-border p-4">
                         <p className="text-sm text-muted-foreground">
@@ -1340,6 +1406,14 @@ export function InauguralAuctionPanel({
                   </CardContent>
                 </Card>
               </div>
+
+              {auctionState.auction.status === "ACTIVE" ? (
+                <DraftPresenceList
+                  owners={auctionState.owners}
+                  presentMemberIds={auctionState.presentMemberIds}
+                  viewerMemberId={auctionState.viewer.leagueMemberId}
+                />
+              ) : null}
 
               <Card>
                 <CardHeader>
