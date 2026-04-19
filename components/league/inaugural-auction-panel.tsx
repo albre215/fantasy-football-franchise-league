@@ -1379,12 +1379,26 @@ export function InauguralAuctionPanel({
       {auctionState?.activeAward && visibleAwardId === auctionState.activeAward.id ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
           <div className="w-full max-w-lg rounded-3xl border border-border bg-white p-6 shadow-2xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">Team Awarded</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+              {auctionState.activeAward.source === "AUTO_ASSIGN"
+                ? "Auto-assigned"
+                : auctionState.activeAward.source === "SIMULATED"
+                  ? "Simulated award"
+                  : auctionState.activeAward.source === "FINAL_SELECTION"
+                    ? "Final selection"
+                    : "Team Awarded"}
+            </p>
             <h3 className="mt-3 text-2xl font-semibold text-foreground">{auctionState.activeAward.displayName}</h3>
             <div className="mt-4 text-base">
               <NFLTeamLabel size="detail" team={auctionState.activeAward.nflTeam} />
             </div>
             <p className="mt-3 text-lg font-medium text-foreground">{formatCurrency(auctionState.activeAward.amount)}</p>
+            {auctionState.activeAward.source === "AUTO_ASSIGN" ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                No bids placed before the timer expired. Team awarded to the absent member with the most
+                remaining budget for $1.
+              </p>
+            ) : null}
             <div className="mt-5 flex justify-end">
               <Button onClick={() => setVisibleAwardId(null)} type="button" variant="outline">
                 Close
