@@ -1347,8 +1347,7 @@ export function InauguralAuctionPanel({
 
                     {auctionState.auction.status === "ACTIVE" && auctionState.viewer.leagueMemberId ? (
                       auctionState.presentMemberIds.includes(auctionState.viewer.leagueMemberId) ? (
-                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
-                          <span className="text-emerald-900">You are in the draft lobby.</span>
+                        <div className="flex justify-end">
                           <Button disabled={isSubmitting} onClick={() => void handleLeaveDraft()} type="button" variant="outline">
                             Leave lobby
                           </Button>
@@ -1465,36 +1464,6 @@ export function InauguralAuctionPanel({
                 />
               ) : null}
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Owner Budgets</CardTitle>
-                  <CardDescription>Each owner starts with $100 and must finish with exactly 3 teams.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {auctionState.owners.map((owner) => (
-                    <div className="rounded-lg border border-border px-4 py-3 text-sm" key={owner.leagueMemberId}>
-                      <div className="flex items-center gap-3">
-                        <ProfileAvatar className="h-9 w-9 border-border bg-slate-100 text-slate-700" imageUrl={owner.profileImageUrl} name={owner.displayName} />
-                        <div className="min-w-0 flex-1">
-                          <div className="font-medium">{owner.displayName}</div>
-                          <div className="text-muted-foreground">
-                            {owner.teamCount} / 3 teams | {formatCurrency(owner.budgetRemaining)} left
-                          </div>
-                        </div>
-                      </div>
-                      {owner.awardedTeams.length > 0 ? (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {owner.awardedTeams.map((team) => (
-                            <span className="rounded-full border border-border px-3 py-1 text-xs" key={`${owner.leagueMemberId}-${team.id}`}>
-                              <NFLTeamLabel size="compact" team={team} />
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
             </div>
           ) : null}
         </CardContent>
