@@ -1929,7 +1929,7 @@ export function LeagueDashboard({
                     className={cn(
                       "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
                       viewMode === "commissioner"
-                        ? "bg-primary text-primary-foreground shadow-sm"
+                        ? "bg-slate-800 text-white shadow-sm"
                         : "text-muted-foreground hover:text-foreground"
                     )}
                     onClick={() => setViewMode("commissioner")}
@@ -1941,7 +1941,7 @@ export function LeagueDashboard({
                     className={cn(
                       "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
                       viewMode === "owner"
-                        ? "bg-primary text-primary-foreground shadow-sm"
+                        ? "bg-slate-800 text-white shadow-sm"
                         : "text-muted-foreground hover:text-foreground"
                     )}
                     onClick={() => setViewMode("owner")}
