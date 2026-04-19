@@ -1125,7 +1125,7 @@ export function LeagueDashboard({
                   { id: "ownership", label: "Ownership" },
                   { id: "results-draft", label: "Draft" },
                   { id: "fantasy", label: "Fantasy" },
-                  { id: "nfl-performance", label: "NFL Performance" },
+                  { id: "nfl-performance", label: "NFL Results" },
                   { id: "ledger", label: "Ledger" },
                   { id: "history-analytics", label: "History & Analytics" }
                 ].map((tab) => (
