@@ -295,6 +295,15 @@ export function InauguralAuctionPanel({
   }, [auctionState?.finalSummary, auctionState?.activeAward]);
 
   useEffect(() => {
+    if (!showFinalSummary) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [showFinalSummary]);
+
+  useEffect(() => {
     if (!activeSeason || !auctionState) {
       return;
     }
@@ -1533,8 +1542,18 @@ export function InauguralAuctionPanel({
       ) : null}
 
       {auctionState?.finalSummary && showFinalSummary ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
-          <div className="w-full max-w-3xl rounded-3xl border border-border bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-slate-950/40 p-4">
+          <div className="relative my-8 w-full max-w-3xl rounded-3xl border border-border bg-white p-6 shadow-2xl">
+            <button
+              aria-label="Close final results"
+              className="absolute right-4 top-4 rounded-full border border-border bg-white p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+              onClick={() => setShowFinalSummary(false)}
+              type="button"
+            >
+              <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M6 6l12 12M6 18L18 6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
             <h3 className="text-2xl font-semibold text-foreground">Inaugural Auction Complete</h3>
             <p className="mt-2 text-sm text-muted-foreground">
               Thirty teams were awarded and authoritative season ownership has been written into the league.
@@ -1576,13 +1595,10 @@ export function InauguralAuctionPanel({
             </div>
             <div className="mt-5 flex justify-end">
               <Button
-                onClick={() => {
-                  setShowFinalSummary(false);
-                  router.push("/");
-                }}
+                onClick={() => setShowFinalSummary(false)}
                 type="button"
               >
-                Return Home
+                Close
               </Button>
             </div>
           </div>
