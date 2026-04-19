@@ -459,6 +459,34 @@ export function InauguralAuctionPanel({
     }
   }
 
+  async function handleSimulateRemaining() {
+    if (!activeSeason) {
+      return;
+    }
+
+    if (!window.confirm("Simulate the remaining auction? All unsold teams will be auto-assigned to absent owners for $1 each.")) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setPendingActionId("simulate-remaining");
+      setErrorMessage(null);
+      setSuccessMessage(null);
+      const response = await fetch(`/api/season/${activeSeason.id}/inaugural-auction/simulate-remaining`, {
+        method: "POST"
+      });
+      const data = await parseJsonResponse<InauguralAuctionStateResponse>(response);
+      setAuctionState(data.auction);
+      setSuccessMessage("Remaining auction simulated.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to simulate the remaining auction.");
+    } finally {
+      setPendingActionId(null);
+      setIsSubmitting(false);
+    }
+  }
+
   async function handleSubmitBid(nominationId?: string) {
     if (!activeSeason) {
       return;
@@ -1270,6 +1298,28 @@ export function InauguralAuctionPanel({
                         Start Inaugural Auction
                       </Button>
                     ) : null}
+
+                    {auctionState.auction.status === "ACTIVE" && auctionState.viewer.canManageAuction ? (() => {
+                      const presentOwners = auctionState.owners.filter((owner) => auctionState.presentMemberIds.includes(owner.leagueMemberId));
+                      const allPresentFull = presentOwners.length > 0 && presentOwners.every((owner) => owner.teamCount === 3);
+                      const tooltip = allPresentFull ? undefined : "Enabled when all attending members are at 3/3 teams";
+                      return (
+                        <div className="flex flex-col gap-1">
+                          <Button
+                            className={getSubmittingButtonClass("simulate-remaining")}
+                            disabled={isSubmitting || !allPresentFull}
+                            onClick={() => void handleSimulateRemaining()}
+                            title={tooltip}
+                            type="button"
+                          >
+                            Simulate Remaining Auction Draft
+                          </Button>
+                          {!allPresentFull ? (
+                            <p className="text-xs text-muted-foreground">Enabled when all attending members are at 3/3 teams.</p>
+                          ) : null}
+                        </div>
+                      );
+                    })() : null}
 
                     {auctionState.viewer.canBid && auctionState.currentNomination ? (
                       <div className="space-y-3 rounded-lg border border-border p-4">
