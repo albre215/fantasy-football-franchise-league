@@ -129,6 +129,7 @@ export interface InauguralAuctionState {
     | null;
   activeAward: InauguralAuctionAwardSummary | null;
   finalSummary: InauguralAuctionFinalSummary | null;
+  presentMemberIds: string[];
   viewer: {
     leagueMemberId: string | null;
     role: "COMMISSIONER" | "OWNER" | null;
