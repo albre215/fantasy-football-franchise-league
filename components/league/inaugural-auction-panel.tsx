@@ -460,6 +460,27 @@ export function InauguralAuctionPanel({
     }
   }
 
+  async function handleStartDraftClock() {
+    if (!activeSeason) return;
+    try {
+      setIsSubmitting(true);
+      setPendingActionId("start-clock");
+      setErrorMessage(null);
+      setSuccessMessage(null);
+      const response = await fetch(`/api/season/${activeSeason.id}/inaugural-auction/start-clock`, {
+        method: "POST"
+      });
+      const data = await parseJsonResponse<StartInauguralAuctionResponse>(response);
+      setAuctionState(data.auction);
+      setSuccessMessage("Draft clock started.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to start the draft clock.");
+    } finally {
+      setPendingActionId(null);
+      setIsSubmitting(false);
+    }
+  }
+
   async function handleJoinDraft() {
     if (!activeSeason) return;
     try {
@@ -1342,6 +1363,19 @@ export function InauguralAuctionPanel({
                     {auctionState.auction.status === "PLANNING" && auctionState.viewer.canManageAuction ? (
                       <Button className={getSubmittingButtonClass("start-auction")} disabled={isSubmitting} onClick={() => void handleStartAuction()} type="button">
                         Start Inaugural Auction
+                      </Button>
+                    ) : null}
+
+                    {auctionState.auction.status === "ACTIVE" &&
+                    auctionState.viewer.canManageAuction &&
+                    !auctionState.countdown?.startedAt ? (
+                      <Button
+                        className={getSubmittingButtonClass("start-clock")}
+                        disabled={isSubmitting}
+                        onClick={() => void handleStartDraftClock()}
+                        type="button"
+                      >
+                        Start the Draft
                       </Button>
                     ) : null}
 

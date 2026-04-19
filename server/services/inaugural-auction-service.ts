@@ -1158,10 +1158,48 @@ export const inauguralAuctionService = {
         data: {
           status: "ACTIVE",
           currentNominationIndex: 0,
-          clockStartedAt: now,
-          clockExpiresAt: addSeconds(now, NOMINATION_CLOCK_SECONDS),
+          clockStartedAt: null,
+          clockExpiresAt: null,
           announcementAwardId: null,
           announcementEndsAt: null
+        }
+      });
+
+      return (await buildAuctionState(tx, seasonId, actingUserId))!;
+    });
+  },
+
+  async startDraftClock(input: StartInauguralAuctionInput) {
+    const seasonId = input.seasonId.trim();
+    const actingUserId = input.actingUserId.trim();
+
+    if (!seasonId || !actingUserId) {
+      throw new InauguralAuctionServiceError("seasonId and actingUserId are required.", 400);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      await seasonService.assertCommissionerAccess(seasonId, actingUserId);
+      const auction = await getAuctionWithContext(tx, seasonId);
+
+      if (!auction) {
+        throw new InauguralAuctionServiceError("Configure the inaugural auction before starting the draft clock.", 409);
+      }
+
+      if (auction.status !== "ACTIVE") {
+        throw new InauguralAuctionServiceError("The draft clock can only be started while the auction is active.", 409);
+      }
+
+      if (auction.clockStartedAt || auction.clockExpiresAt) {
+        throw new InauguralAuctionServiceError("The draft clock is already running.", 409);
+      }
+
+      const now = new Date();
+
+      await tx.inauguralAuction.update({
+        where: { id: auction.id },
+        data: {
+          clockStartedAt: now,
+          clockExpiresAt: addSeconds(now, NOMINATION_CLOCK_SECONDS)
         }
       });
 
