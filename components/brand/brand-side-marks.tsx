@@ -1,8 +1,10 @@
 import Image from "next/image";
 
 const shields = [
-  { className: "left-[-3rem] top-[8rem] h-56 w-56 rotate-[-10deg] opacity-[0.08]" },
-  { className: "right-[-4rem] top-[14rem] h-64 w-64 rotate-[10deg] opacity-[0.08]" }
+  { className: "left-[-3rem] top-[5rem] h-52 w-52 rotate-[-10deg] opacity-[0.09]" },
+  { className: "left-[-2rem] bottom-[5rem] h-48 w-48 rotate-[14deg] opacity-[0.08]" },
+  { className: "right-[-5rem] top-[10rem] h-64 w-64 rotate-[10deg] opacity-[0.09]" },
+  { className: "right-[-3rem] bottom-[8rem] h-56 w-56 rotate-[-8deg] opacity-[0.08]" }
 ];
 
 export function BrandSideMarks() {
