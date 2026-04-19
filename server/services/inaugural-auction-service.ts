@@ -624,7 +624,8 @@ async function awardNomination(
   nominationId: string,
   leagueMemberId: string,
   amount: number,
-  now: Date
+  now: Date,
+  source: "BID" | "AUTO_ASSIGN" | "SIMULATED" | "FINAL_SELECTION" = "BID"
 ) {
   const award = await tx.inauguralAuctionAward.create({
     data: {
@@ -632,7 +633,8 @@ async function awardNomination(
       nominationId,
       leagueMemberId,
       amount,
-      awardedAt: now
+      awardedAt: now,
+      source
     },
     select: {
       id: true
@@ -710,6 +712,11 @@ async function syncAuctionProgress(tx: PrismaClientLike, seasonId: string) {
   );
 
   if (!winningBid) {
+    const autoAssigned = await tryAutoAssignTeam(tx, auction, activeNomination.id, now);
+    if (autoAssigned) {
+      return;
+    }
+
     await tx.inauguralAuction.update({
       where: {
         id: auction.id
@@ -724,6 +731,43 @@ async function syncAuctionProgress(tx: PrismaClientLike, seasonId: string) {
   }
 
   await awardNomination(tx, auction, activeNomination.id, winningBid.leagueMemberId, winningBid.amount, now);
+}
+
+const AUTO_ASSIGN_AMOUNT = 1;
+
+async function tryAutoAssignTeam(
+  tx: PrismaClientLike,
+  auction: NonNullable<Awaited<ReturnType<typeof getAuctionWithContext>>>,
+  nominationId: string,
+  now: Date,
+  mode: "AUTO_ASSIGN" | "SIMULATED" = "AUTO_ASSIGN"
+): Promise<boolean> {
+  const presenceRows = await tx.inauguralAuctionPresence.findMany({
+    where: { auctionId: auction.id },
+    select: { leagueMemberId: true }
+  });
+  const presentMemberIds = new Set(presenceRows.map((row) => row.leagueMemberId));
+
+  const owners = buildOwnerSummaries(auction);
+
+  const candidates = owners
+    .filter((owner) => owner.teamCount < REQUIRED_TEAMS_PER_OWNER)
+    .filter((owner) => owner.budgetRemaining >= AUTO_ASSIGN_AMOUNT + (REQUIRED_TEAMS_PER_OWNER - owner.teamCount - 1))
+    .filter((owner) => mode === "SIMULATED" || !presentMemberIds.has(owner.leagueMemberId))
+    .sort((left, right) => {
+      if (right.budgetRemaining !== left.budgetRemaining) {
+        return right.budgetRemaining - left.budgetRemaining;
+      }
+      return left.displayName.localeCompare(right.displayName);
+    });
+
+  if (candidates.length === 0) {
+    return false;
+  }
+
+  const target = candidates[0];
+  await awardNomination(tx, auction, nominationId, target.leagueMemberId, AUTO_ASSIGN_AMOUNT, now, mode);
+  return true;
 }
 
 async function buildAuctionState(
@@ -919,7 +963,8 @@ async function buildAuctionState(
           profileImageUrl: activeAward.leagueMember.user.profileImageUrl ?? null,
           nflTeam: mapDraftTeam(activeAward.nomination.nflTeam),
           amount: activeAward.amount,
-          awardedAt: activeAward.awardedAt.toISOString()
+          awardedAt: activeAward.awardedAt.toISOString(),
+          source: activeAward.source
         }
       : null,
     finalSummary,
@@ -1192,7 +1237,8 @@ export const inauguralAuctionService = {
           selectedNomination.id,
           viewerMembership.id,
           FINAL_TEAM_SELECTION_AWARD_AMOUNT,
-          new Date()
+          new Date(),
+          "FINAL_SELECTION"
         );
 
         return (await buildAuctionState(tx, seasonId, actingUserId))!;

@@ -49,6 +49,8 @@ export interface InauguralAuctionBidSummary {
   createdAt: string;
 }
 
+export type AuctionAwardSource = "BID" | "AUTO_ASSIGN" | "SIMULATED" | "FINAL_SELECTION";
+
 export interface InauguralAuctionAwardSummary {
   id: string;
   nominationId: string;
@@ -58,6 +60,7 @@ export interface InauguralAuctionAwardSummary {
   nflTeam: DraftTeamSummary;
   amount: number;
   awardedAt: string;
+  source: AuctionAwardSource;
 }
 
 export interface InauguralAuctionFinalSummary {
