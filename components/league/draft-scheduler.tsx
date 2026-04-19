@@ -241,6 +241,7 @@ export function DraftScheduler({ activeSeason }: DraftSchedulerProps) {
                 Date
                 <Input
                   type="date"
+                  className="cursor-pointer [&::-webkit-calendar-picker-indicator]:cursor-pointer"
                   disabled={isLoading || isSaving}
                   onChange={(event) => setDate(event.target.value)}
                   value={date}
@@ -250,6 +251,7 @@ export function DraftScheduler({ activeSeason }: DraftSchedulerProps) {
                 Time
                 <Input
                   type="time"
+                  className="cursor-pointer [&::-webkit-calendar-picker-indicator]:cursor-pointer"
                   disabled={isLoading || isSaving}
                   onChange={(event) => setTime(event.target.value)}
                   value={time}
@@ -259,7 +261,14 @@ export function DraftScheduler({ activeSeason }: DraftSchedulerProps) {
 
             {schedule ? (
               <p className="text-sm text-muted-foreground">
-                Currently scheduled for{" "}
+                <span className="font-medium text-foreground">
+                  {schedule.draftType === "INAUGURAL"
+                    ? "Inaugural auction"
+                    : schedule.draftType === "KEEPER"
+                    ? "Keeper selection"
+                    : "Offseason draft"}
+                </span>{" "}
+                scheduled for{" "}
                 <span className="font-medium text-foreground">
                   {new Date(schedule.scheduledAt).toLocaleString(undefined, {
                     timeZone: schedule.timezone,
