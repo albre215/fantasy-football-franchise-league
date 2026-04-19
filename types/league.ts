@@ -112,6 +112,7 @@ export interface LeagueBootstrapMember {
   userId: string;
   displayName: string;
   email: string;
+  phoneNumber: string | null;
   profileImageUrl?: string | null;
   role: "COMMISSIONER" | "OWNER";
   joinedAt: string;

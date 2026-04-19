@@ -259,6 +259,7 @@ function mapBootstrapMember(member: {
   user: {
     displayName: string;
     email: string;
+    phoneNumber?: string | null;
     profileImageUrl?: string | null;
   };
   teamOwnerships?: Array<{ id: string }>;
@@ -268,6 +269,7 @@ function mapBootstrapMember(member: {
     userId: member.userId,
     displayName: member.user.displayName,
     email: member.user.email,
+    phoneNumber: member.user.phoneNumber ?? null,
     profileImageUrl: member.user.profileImageUrl ?? null,
     role: member.role,
     joinedAt: member.joinedAt.toISOString(),

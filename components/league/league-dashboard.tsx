@@ -1475,14 +1475,12 @@ export function LeagueDashboard({
                               />
                               <p className="font-medium text-foreground">{member.displayName}</p>
                             </div>
-                            <p className="text-sm text-muted-foreground">
-                              {member.email} - {member.role}
-                            </p>
+                            <p className="text-sm text-muted-foreground">{member.email}</p>
+                            {member.phoneNumber ? (
+                              <p className="text-sm text-muted-foreground">{member.phoneNumber}</p>
+                            ) : null}
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground">
-                              {member.assignmentCount}/3
-                            </span>
                             <Button
                               className={getSubmittingButtonClass(`open-member-replace:${member.id}`)}
                               disabled={isSubmitting || member.role === "COMMISSIONER" || !canManageLeague}
@@ -1906,10 +1904,6 @@ export function LeagueDashboard({
               <Card className="relative z-10 w-full max-w-lg border border-slate-200 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.38)] ring-1 ring-slate-900/10">
                 <CardHeader>
                   <CardTitle>Change Member</CardTitle>
-                  <CardDescription>
-                    Replace {replacementTargetMember.displayName} while preserving this member slot&apos;s teams, stats,
-                    ledger history, and draft history.
-                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 shadow-sm">
