@@ -912,7 +912,7 @@ export function LeagueControlPanel({
                           setJoinLeagueId(event.target.value);
                           setSelectedJoinSuggestionCode(null);
                         }}
-                        placeholder="League code (for example, GMF-1)"
+                        placeholder="Search by league name or code (for example, GMF-1)"
                         value={joinLeagueId}
                       />
                       <Button
@@ -926,7 +926,7 @@ export function LeagueControlPanel({
                     </div>
                     {isLoadingJoinSuggestions ? (
                       <div className="rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-                        Searching league codes...
+                        Searching leagues...
                       </div>
                     ) : joinSuggestions.length > 0 ? (
                       <div className="overflow-hidden rounded-xl border border-border bg-background">
@@ -942,7 +942,8 @@ export function LeagueControlPanel({
                             type="button"
                           >
                             <div className="min-w-0">
-                              <p className="font-medium text-foreground">{suggestion.leagueCode}</p>
+                              <p className="truncate font-medium text-foreground">{suggestion.name}</p>
+                              <p className="truncate text-xs text-muted-foreground">{suggestion.leagueCode}</p>
                             </div>
                             <div className="shrink-0 text-right text-xs text-muted-foreground">
                               <p>{suggestion.memberCount}/10 members</p>
@@ -953,7 +954,7 @@ export function LeagueControlPanel({
                       </div>
                     ) : joinLeagueId.trim() && selectedJoinSuggestionCode !== joinLeagueId.trim() ? (
                       <div className="rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-                        No matching league codes found.
+                        No matching leagues found.
                       </div>
                     ) : null}
                   </div>

@@ -629,7 +629,8 @@ export const leagueService = {
           },
           {
             name: {
-              contains: trimmedQuery
+              contains: trimmedQuery,
+              mode: "insensitive"
             }
           }
         ]
