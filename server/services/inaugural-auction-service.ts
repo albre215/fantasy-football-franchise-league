@@ -1401,6 +1401,75 @@ export const inauguralAuctionService = {
 
       return (await buildAuctionState(tx, normalizedSeasonId, normalizedActingUserId))!;
     });
+  },
+
+  async simulateStep(seasonId: string, actingUserId: string) {
+    const normalizedSeasonId = seasonId.trim();
+    const normalizedActingUserId = actingUserId.trim();
+
+    if (!normalizedSeasonId || !normalizedActingUserId) {
+      throw new InauguralAuctionServiceError("seasonId and actingUserId are required.", 400);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      await seasonService.assertCommissionerAccess(normalizedSeasonId, normalizedActingUserId);
+      await assertInauguralAuctionSeason(tx, normalizedSeasonId);
+
+      const auction = await getAuctionWithContext(tx, normalizedSeasonId);
+
+      if (!auction) {
+        throw new InauguralAuctionServiceError("Auction not found.", 404);
+      }
+
+      if (auction.status !== "ACTIVE") {
+        return (await buildAuctionState(tx, normalizedSeasonId, normalizedActingUserId))!;
+      }
+
+      if (auction.awards.length >= REQUIRED_AWARDED_TEAMS) {
+        return (await buildAuctionState(tx, normalizedSeasonId, normalizedActingUserId))!;
+      }
+
+      const presenceRows = await tx.inauguralAuctionPresence.findMany({
+        where: { auctionId: auction.id },
+        select: { leagueMemberId: true }
+      });
+      const presentMemberIds = new Set(presenceRows.map((row) => row.leagueMemberId));
+      const owners = buildOwnerSummaries(auction);
+      const presentOwners = owners.filter((owner) => presentMemberIds.has(owner.leagueMemberId));
+
+      if (presentOwners.length > 0 && !presentOwners.every((owner) => owner.teamCount === REQUIRED_TEAMS_PER_OWNER)) {
+        throw new InauguralAuctionServiceError(
+          "All attending members must have 3 teams before simulating the remaining draft.",
+          409
+        );
+      }
+
+      const now = new Date();
+
+      if (auction.announcementEndsAt) {
+        await tx.inauguralAuction.update({
+          where: { id: auction.id },
+          data: {
+            currentNominationIndex: auction.currentNominationIndex + 1,
+            announcementAwardId: null,
+            announcementEndsAt: null,
+            clockStartedAt: null,
+            clockExpiresAt: null
+          }
+        });
+        return (await buildAuctionState(tx, normalizedSeasonId, normalizedActingUserId))!;
+      }
+
+      const activeNomination = auction.nominationEntries.find(
+        (entry) => entry.orderIndex === auction.currentNominationIndex
+      );
+
+      if (activeNomination && !activeNomination.award) {
+        await tryAutoAssignTeam(tx, auction, activeNomination.id, now, "SIMULATED");
+      }
+
+      return (await buildAuctionState(tx, normalizedSeasonId, normalizedActingUserId))!;
+    });
   }
 };
 

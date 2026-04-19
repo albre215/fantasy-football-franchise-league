@@ -519,12 +519,23 @@ export function InauguralAuctionPanel({
       setPendingActionId("simulate-remaining");
       setErrorMessage(null);
       setSuccessMessage(null);
-      const response = await fetch(`/api/season/${activeSeason.id}/inaugural-auction/simulate-remaining`, {
-        method: "POST"
-      });
-      const data = await parseJsonResponse<InauguralAuctionStateResponse>(response);
-      setAuctionState(data.auction);
+
+      const maxSteps = 80;
+      let lastState: InauguralAuctionState | null = null;
+      for (let i = 0; i < maxSteps; i += 1) {
+        const response = await fetch(`/api/season/${activeSeason.id}/inaugural-auction/simulate-step`, {
+          method: "POST"
+        });
+        const data = await parseJsonResponse<InauguralAuctionStateResponse>(response);
+        setAuctionState(data.auction);
+        lastState = data.auction;
+        if (!data.auction || data.auction.auction.status !== "ACTIVE") break;
+        if (data.auction.auction.awardedCount >= 30) break;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
       setSuccessMessage("Remaining auction simulated.");
+      void lastState;
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to simulate the remaining auction.");
     } finally {
