@@ -465,6 +465,10 @@ export function InauguralAuctionPanel({
         return current;
       }
 
+      if (targetIndex === fromIndex || targetIndex === fromIndex + 1) {
+        return current;
+      }
+
       const [moved] = next.splice(fromIndex, 1);
       const insertIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex;
       next.splice(insertIndex, 0, moved);
@@ -474,19 +478,62 @@ export function InauguralAuctionPanel({
     setDraggedDivision(null);
   }
 
+  function computeDivisionDropIndex(event: React.DragEvent<HTMLDivElement>, index: number) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const isTopHalf = event.clientY - rect.top < rect.height / 2;
+    return isTopHalf ? index : index + 1;
+  }
+
   function handleCustomTeamDrop(targetIndex?: number) {
     if (!draggedTeamId) {
       return;
     }
 
     setCustomTeamOrder((current) => {
-      const withoutDragged = current.filter((teamId) => teamId !== draggedTeamId);
-      const insertIndex = typeof targetIndex === "number" ? Math.min(targetIndex, withoutDragged.length) : withoutDragged.length;
-      withoutDragged.splice(insertIndex, 0, draggedTeamId);
-      return withoutDragged;
+      const next = [...current];
+      const fromIndex = next.indexOf(draggedTeamId);
+      const effectiveTarget = typeof targetIndex === "number" ? targetIndex : next.length + (fromIndex >= 0 ? 1 : 0);
+
+      if (fromIndex >= 0) {
+        if (effectiveTarget === fromIndex || effectiveTarget === fromIndex + 1) {
+          return current;
+        }
+        const [moved] = next.splice(fromIndex, 1);
+        const insertIndex = fromIndex < effectiveTarget ? effectiveTarget - 1 : effectiveTarget;
+        next.splice(insertIndex, 0, moved);
+        return next;
+      }
+
+      const clamped = Math.min(effectiveTarget, next.length);
+      next.splice(clamped, 0, draggedTeamId!);
+      return next;
     });
     setCustomDropIndex(null);
     setDraggedTeamId(null);
+  }
+
+  function computeCustomDropIndex(event: React.DragEvent<HTMLDivElement>, index: number) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const isTopHalf = event.clientY - rect.top < rect.height / 2;
+    return isTopHalf ? index : index + 1;
+  }
+
+  function createCustomDragPreview(element: HTMLDivElement) {
+    const clone = element.cloneNode(true) as HTMLDivElement;
+    clone.style.position = "absolute";
+    clone.style.top = "-1000px";
+    clone.style.left = "-1000px";
+    clone.style.width = `${element.offsetWidth}px`;
+    clone.style.pointerEvents = "none";
+    clone.style.opacity = "1";
+    clone.style.boxShadow = "0 18px 40px -24px rgba(7, 28, 18, 0.45)";
+    clone.style.borderColor = "rgb(52 211 153)";
+    clone.style.background = "rgb(240 253 244)";
+    document.body.appendChild(clone);
+    window.setTimeout(() => {
+      clone.remove();
+    }, 0);
+    return clone;
   }
 
   function removeCustomTeam(teamId: string) {
@@ -538,39 +585,65 @@ export function InauguralAuctionPanel({
                     </p>
                   </div>
                   <div className="space-y-2">
-                    {divisionOrder.map((division, index) => (
-                      <div className="space-y-2" key={division}>
+                    {divisionOrder.map((division, index) => {
+                      const fromIndex = draggedDivision ? divisionOrder.indexOf(draggedDivision) : -1;
+                      const isSource = draggedDivision === division;
+                      const showIndicatorAbove =
+                        draggedDivision !== null &&
+                        divisionInsertIndex === index &&
+                        index !== fromIndex &&
+                        index !== fromIndex + 1;
+                      const showIndicatorBelow =
+                        draggedDivision !== null &&
+                        index === divisionOrder.length - 1 &&
+                        divisionInsertIndex === divisionOrder.length &&
+                        divisionOrder.length !== fromIndex &&
+                        divisionOrder.length !== fromIndex + 1;
+
+                      return (
+                      <div className="space-y-0" key={division}>
                         <div
+                          aria-hidden
                           className={cn(
-                            "h-3 rounded-full border-2 border-dashed border-transparent transition",
-                            draggedDivision
-                              ? divisionInsertIndex === index
-                                ? "border-emerald-400 bg-emerald-100"
-                                : "hover:border-emerald-200 hover:bg-emerald-50"
-                              : ""
+                            "rounded-full transition-all",
+                            index === 0 ? "h-3" : "h-1",
+                            showIndicatorAbove ? "my-1 bg-emerald-500" : "my-0 bg-transparent"
                           )}
                           onDragOver={(event) => {
+                            if (!draggedDivision) return;
                             event.preventDefault();
-                            if (draggedDivision) {
-                              setDivisionInsertIndex(index);
-                            }
+                            event.dataTransfer.dropEffect = "move";
+                            setDivisionInsertIndex(index);
                           }}
                           onDrop={(event) => {
+                            if (!draggedDivision) return;
                             event.preventDefault();
                             handleDivisionDrop(index);
                           }}
                         />
                         <div
                           className={cn(
-                            "rounded-2xl border border-border bg-background px-4 py-4 transition",
-                            draggedDivision === division
-                              ? "border-emerald-400 bg-emerald-50 shadow-[0_18px_40px_-24px_rgba(7,28,18,0.45)]"
+                            "rounded-2xl border border-border bg-background px-4 py-4 transition select-none",
+                            "cursor-grab active:cursor-grabbing",
+                            isSource
+                              ? "opacity-40 border-emerald-400 bg-emerald-50 shadow-[0_18px_40px_-24px_rgba(7,28,18,0.45)]"
                               : "hover:border-emerald-200 hover:bg-emerald-50/40"
                           )}
                           draggable
                           onDragEnd={() => {
                             setDraggedDivision(null);
                             setDivisionInsertIndex(null);
+                          }}
+                          onDragOver={(event) => {
+                            if (!draggedDivision) return;
+                            event.preventDefault();
+                            event.dataTransfer.dropEffect = "move";
+                            setDivisionInsertIndex(computeDivisionDropIndex(event, index));
+                          }}
+                          onDrop={(event) => {
+                            if (!draggedDivision) return;
+                            event.preventDefault();
+                            handleDivisionDrop(computeDivisionDropIndex(event, index));
                           }}
                           onDragStart={(event) => {
                             setDraggedDivision(division);
@@ -598,28 +671,29 @@ export function InauguralAuctionPanel({
                             </div>
                           </div>
                         </div>
+                        {index === divisionOrder.length - 1 ? (
+                          <div
+                            aria-hidden
+                            className={cn(
+                              "h-3 rounded-full transition-all",
+                              showIndicatorBelow ? "my-1 bg-emerald-500" : "my-0 bg-transparent"
+                            )}
+                            onDragOver={(event) => {
+                              if (!draggedDivision) return;
+                              event.preventDefault();
+                              event.dataTransfer.dropEffect = "move";
+                              setDivisionInsertIndex(divisionOrder.length);
+                            }}
+                            onDrop={(event) => {
+                              if (!draggedDivision) return;
+                              event.preventDefault();
+                              handleDivisionDrop(divisionOrder.length);
+                            }}
+                          />
+                        ) : null}
                       </div>
-                    ))}
-                    <div
-                      className={cn(
-                        "h-3 rounded-full border-2 border-dashed border-transparent transition",
-                        draggedDivision
-                          ? divisionInsertIndex === divisionOrder.length
-                            ? "border-emerald-400 bg-emerald-100"
-                            : "hover:border-emerald-200 hover:bg-emerald-50"
-                          : ""
-                      )}
-                      onDragOver={(event) => {
-                        event.preventDefault();
-                        if (draggedDivision) {
-                          setDivisionInsertIndex(divisionOrder.length);
-                        }
-                      }}
-                      onDrop={(event) => {
-                        event.preventDefault();
-                        handleDivisionDrop(divisionOrder.length);
-                      }}
-                    />
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}
@@ -632,28 +706,33 @@ export function InauguralAuctionPanel({
                       Drag teams into the Auction Order Preview below and rearrange as needed to determine auction order.
                     </p>
                   </div>
-                  <div
-                    className="space-y-4 rounded-2xl border border-border bg-background/70 p-3"
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      handleCustomTeamDrop();
-                    }}
-                  >
+                  <div className="space-y-4 rounded-2xl border border-border bg-background/70 p-3">
+                    {isLoadingTeams || availableCustomTeams.length > 0 ? (
                     <div>
                       <p className="text-sm font-medium text-foreground">Available Teams</p>
                       <div className="mt-3 flex flex-wrap gap-2 rounded-2xl border border-dashed border-border bg-background/70 p-3">
                         {isLoadingTeams ? (
                           <p className="text-sm text-muted-foreground">Loading NFL teams...</p>
-                        ) : availableCustomTeams.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">All 32 teams are currently in the auction order.</p>
                         ) : (
                           availableCustomTeams.map((team) => (
                             <button
-                              className="rounded-full border border-border bg-white px-3 py-2 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50"
+                              className="cursor-pointer select-none rounded-full border border-border bg-white px-3 py-2 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 active:cursor-grabbing"
                               draggable
                               key={team.id}
-                              onDragStart={() => setDraggedTeamId(team.id)}
+                              onDoubleClick={() => {
+                                setCustomTeamOrder((current) =>
+                                  current.includes(team.id) ? current : [...current, team.id]
+                                );
+                              }}
+                              onDragEnd={() => {
+                                setDraggedTeamId(null);
+                                setCustomDropIndex(null);
+                              }}
+                              onDragStart={(event) => {
+                                setDraggedTeamId(team.id);
+                                event.dataTransfer.effectAllowed = "move";
+                              }}
+                              title="Double-click to add to end of auction order"
                               type="button"
                             >
                               <NFLTeamLabel size="compact" team={team} textClassName="text-xs" />
@@ -662,6 +741,7 @@ export function InauguralAuctionPanel({
                         )}
                       </div>
                     </div>
+                    ) : null}
 
                     <div className="space-y-2">
                       <p className="text-sm font-medium text-foreground">Auction Order Preview</p>
@@ -680,10 +760,10 @@ export function InauguralAuctionPanel({
                             handleCustomTeamDrop(0);
                           }}
                         >
-                          Drop the first team here to create line 1.
+                          Drop teams in order here
                         </div>
                       ) : (
-                        <>
+                        <div className="space-y-2">
                           {customTeamOrder.map((teamId, index) => {
                             const team = teams.find((entry) => entry.id === teamId);
 
@@ -691,76 +771,160 @@ export function InauguralAuctionPanel({
                               return null;
                             }
 
+                            const fromIndex = draggedTeamId ? customTeamOrder.indexOf(draggedTeamId) : -1;
+                            const isSource = draggedTeamId === team.id;
+                            const showIndicatorAbove =
+                              draggedTeamId !== null &&
+                              customDropIndex === index &&
+                              index !== fromIndex &&
+                              index !== fromIndex + 1;
+                            const showIndicatorBelow =
+                              draggedTeamId !== null &&
+                              index === customTeamOrder.length - 1 &&
+                              customDropIndex === customTeamOrder.length &&
+                              customTeamOrder.length !== fromIndex &&
+                              customTeamOrder.length !== fromIndex + 1;
+
                             return (
-                              <div className="space-y-2" key={team.id}>
+                              <div className="space-y-0" data-custom-row key={team.id}>
                                 <div
+                                  aria-hidden
                                   className={cn(
-                                    "h-3 rounded-full border-2 border-dashed border-transparent transition",
-                                    draggedTeamId
-                                      ? customDropIndex === index
-                                        ? "border-emerald-400 bg-emerald-100"
-                                        : "hover:border-emerald-200 hover:bg-emerald-50"
-                                      : ""
+                                    "rounded-full transition-all",
+                                    index === 0 ? "h-3" : "h-1",
+                                    showIndicatorAbove ? "my-1 bg-emerald-500" : "my-0 bg-transparent"
                                   )}
                                   onDragOver={(event) => {
+                                    if (!draggedTeamId) return;
                                     event.preventDefault();
-                                    if (draggedTeamId) {
-                                      setCustomDropIndex(index);
-                                    }
+                                    event.dataTransfer.dropEffect = "move";
+                                    setCustomDropIndex(index);
                                   }}
                                   onDrop={(event) => {
+                                    if (!draggedTeamId) return;
                                     event.preventDefault();
                                     handleCustomTeamDrop(index);
                                   }}
                                 />
                                 <div
                                   className={cn(
-                                    "rounded-2xl border border-border bg-white px-4 py-3 transition",
-                                    draggedTeamId === team.id
-                                      ? "border-emerald-400 bg-emerald-50 shadow-[0_18px_40px_-24px_rgba(7,28,18,0.45)]"
-                                      : "hover:border-emerald-200"
+                                    "rounded-2xl border border-border bg-white px-4 py-3 transition select-none cursor-grab active:cursor-grabbing",
+                                    isSource
+                                      ? "opacity-40 border-emerald-400 bg-emerald-50 shadow-[0_18px_40px_-24px_rgba(7,28,18,0.45)]"
+                                      : "hover:border-emerald-200 hover:bg-emerald-50/40"
                                   )}
                                   draggable
                                   onDragEnd={() => {
                                     setDraggedTeamId(null);
                                     setCustomDropIndex(null);
                                   }}
-                                  onDragStart={() => setDraggedTeamId(team.id)}
+                                  onDragOver={(event) => {
+                                    if (!draggedTeamId) return;
+                                    event.preventDefault();
+                                    event.dataTransfer.dropEffect = "move";
+                                    setCustomDropIndex(computeCustomDropIndex(event, index));
+                                  }}
+                                  onDrop={(event) => {
+                                    if (!draggedTeamId) return;
+                                    event.preventDefault();
+                                    handleCustomTeamDrop(computeCustomDropIndex(event, index));
+                                  }}
+                                  onDragStart={(event) => {
+                                    setDraggedTeamId(team.id);
+                                    setCustomDropIndex(index);
+                                    event.dataTransfer.effectAllowed = "move";
+                                    const previewElement = createCustomDragPreview(event.currentTarget as HTMLDivElement);
+                                    event.dataTransfer.setDragImage(previewElement, 32, 24);
+                                  }}
                                 >
                                   <div className="flex items-center justify-between gap-3">
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-3">
+                                      <div
+                                        aria-label="Drag to reorder"
+                                        className="flex cursor-grab items-center justify-center rounded-md px-1 py-1 text-muted-foreground hover:bg-emerald-50 hover:text-emerald-700 active:cursor-grabbing"
+                                        draggable
+                                        onDragEnd={() => {
+                                          setDraggedTeamId(null);
+                                          setCustomDropIndex(null);
+                                        }}
+                                        onDragStart={(event) => {
+                                          setDraggedTeamId(team.id);
+                                          setCustomDropIndex(index);
+                                          event.dataTransfer.effectAllowed = "move";
+                                          const row = (event.currentTarget as HTMLDivElement).closest(
+                                            "[data-custom-row]"
+                                          ) as HTMLDivElement | null;
+                                          if (row) {
+                                            const previewElement = createCustomDragPreview(row);
+                                            event.dataTransfer.setDragImage(previewElement, 32, 24);
+                                          }
+                                        }}
+                                        role="button"
+                                        title="Drag to reorder"
+                                      >
+                                        <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 16 16">
+                                          <circle cx="5" cy="3" r="1.4" />
+                                          <circle cx="5" cy="8" r="1.4" />
+                                          <circle cx="5" cy="13" r="1.4" />
+                                          <circle cx="11" cy="3" r="1.4" />
+                                          <circle cx="11" cy="8" r="1.4" />
+                                          <circle cx="11" cy="13" r="1.4" />
+                                        </svg>
+                                      </div>
                                       <div className="w-8 text-lg font-semibold text-emerald-700">{index + 1}.</div>
                                       <NFLTeamLabel size="default" team={team} />
                                     </div>
-                                    <Button onClick={() => removeCustomTeam(team.id)} type="button" variant="ghost">
-                                      Remove
-                                    </Button>
+                                    <button
+                                      aria-label="Remove from auction order"
+                                      className="flex h-6 w-6 items-center justify-center rounded-full border border-red-300 bg-red-50 text-red-600 transition hover:border-red-400 hover:bg-red-100"
+                                      onClick={() => removeCustomTeam(team.id)}
+                                      type="button"
+                                    >
+                                      <svg aria-hidden="true" className="h-3 w-3" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" viewBox="0 0 24 24">
+                                        <line x1="5" x2="19" y1="12" y2="12" />
+                                      </svg>
+                                    </button>
                                   </div>
                                 </div>
+                                {index === customTeamOrder.length - 1 ? (
+                                  <div
+                                    aria-hidden
+                                    className={cn(
+                                      "h-8 rounded-xl transition-all",
+                                      showIndicatorBelow ? "mt-1 bg-emerald-500/80" : "mt-0 bg-transparent"
+                                    )}
+                                    onDragOver={(event) => {
+                                      if (!draggedTeamId) return;
+                                      event.preventDefault();
+                                      event.dataTransfer.dropEffect = "move";
+                                      setCustomDropIndex(customTeamOrder.length);
+                                    }}
+                                    onDrop={(event) => {
+                                      if (!draggedTeamId) return;
+                                      event.preventDefault();
+                                      handleCustomTeamDrop(customTeamOrder.length);
+                                    }}
+                                  />
+                                ) : null}
                               </div>
                             );
                           })}
                           <div
-                            className={cn(
-                              "h-3 rounded-full border-2 border-dashed border-transparent transition",
-                              draggedTeamId
-                                ? customDropIndex === customTeamOrder.length
-                                  ? "border-emerald-400 bg-emerald-100"
-                                  : "hover:border-emerald-200 hover:bg-emerald-50"
-                                : ""
-                            )}
+                            aria-hidden
+                            className="h-6"
                             onDragOver={(event) => {
+                              if (!draggedTeamId) return;
                               event.preventDefault();
-                              if (draggedTeamId) {
-                                setCustomDropIndex(customTeamOrder.length);
-                              }
+                              event.dataTransfer.dropEffect = "move";
+                              setCustomDropIndex(customTeamOrder.length);
                             }}
                             onDrop={(event) => {
+                              if (!draggedTeamId) return;
                               event.preventDefault();
                               handleCustomTeamDrop(customTeamOrder.length);
                             }}
                           />
-                        </>
+                        </div>
                       )}
                     </div>
                   </div>
