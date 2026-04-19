@@ -62,10 +62,11 @@ type DashboardTab =
   | "members"
   | "ownership"
   | "results-draft"
+  | "fantasy"
   | "nfl-performance"
   | "ledger"
   | "history-analytics";
-type ResultsDraftTab = "final-standings" | "offseason-draft" | "commissioner-overrides";
+type ResultsDraftTab = "offseason-draft" | "commissioner-overrides";
 type DashboardViewMode = "commissioner" | "owner";
 
 function getRegularSeasonWeekLimit(seasonYear: number) {
@@ -1123,6 +1124,7 @@ export function LeagueDashboard({
                   { id: "members", label: "Members" },
                   { id: "ownership", label: "Ownership" },
                   { id: "results-draft", label: "Results & Draft" },
+                  { id: "fantasy", label: "Fantasy" },
                   { id: "nfl-performance", label: "NFL Performance" },
                   { id: "ledger", label: "Ledger" },
                   { id: "history-analytics", label: "History & Analytics" }
@@ -1724,7 +1726,6 @@ export function LeagueDashboard({
                   </CardHeader>
                   <CardContent className="flex flex-wrap gap-2">
                     {[
-                      { id: "final-standings", label: "Final Standings" },
                       {
                         id: "offseason-draft",
                         label: activeSeason?.draftMode === "INAUGURAL_AUCTION" ? "Inaugural Auction" : "Offseason Draft"
@@ -1744,24 +1745,6 @@ export function LeagueDashboard({
                     ))}
                   </CardContent>
                 </Card>
-
-                {activeResultsDraftTab === "final-standings" ? (
-                  <CommissionerToolsPanel
-                    activeSeason={activeSeason}
-                    accessMessage={commissionerAccessMessage}
-                    canManageLeague={canManageLeague}
-                    draftState={draftState}
-                    hideHeading
-                    members={members}
-                    onError={(message) => setErrorMessage(message || null)}
-                    onRefresh={() => refreshLeagueDashboard(leagueId, { includeOperationalData: true })}
-                    onSuccess={(message) => setSuccessMessage(message || null)}
-                    phaseContext={seasonPhaseContext}
-                    seasonOwnership={seasonOwnership}
-                    seasons={seasons}
-                    visibleSections={["standings"]}
-                  />
-                ) : null}
 
                 {activeResultsDraftTab === "offseason-draft" ? (
                   activeSeason?.draftMode === "INAUGURAL_AUCTION" ? (
@@ -1813,6 +1796,24 @@ export function LeagueDashboard({
                   />
                 ) : null}
               </div>
+            ) : null}
+
+            {viewMode === "commissioner" && activeTab === "fantasy" ? (
+              <CommissionerToolsPanel
+                activeSeason={activeSeason}
+                accessMessage={commissionerAccessMessage}
+                canManageLeague={canManageLeague}
+                draftState={draftState}
+                hideHeading
+                members={members}
+                onError={(message) => setErrorMessage(message || null)}
+                onRefresh={() => refreshLeagueDashboard(leagueId, { includeOperationalData: true })}
+                onSuccess={(message) => setSuccessMessage(message || null)}
+                phaseContext={seasonPhaseContext}
+                seasonOwnership={seasonOwnership}
+                seasons={seasons}
+                visibleSections={["standings"]}
+              />
             ) : null}
 
             {viewMode === "commissioner" && activeTab === "nfl-performance" ? (
