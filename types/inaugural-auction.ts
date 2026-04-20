@@ -101,6 +101,10 @@ export interface InauguralAuctionFinalSummary {
   autoAssignedAwards: Array<{ team: DraftTeamSummary; displayName: string; amount: number }>;
   longestBiddingWar: { team: DraftTeamSummary; bidCount: number } | null;
   averageWinningBid: number;
+  closestAuction: { team: DraftTeamSummary; displayName: string; winningAmount: number; runnerUpAmount: number; margin: number } | null;
+  biggestOverbid: { team: DraftTeamSummary; displayName: string; winningAmount: number; runnerUpAmount: number; margin: number } | null;
+  totalSpent: number;
+  totalRemaining: number;
 }
 
 export interface InauguralAuctionState {

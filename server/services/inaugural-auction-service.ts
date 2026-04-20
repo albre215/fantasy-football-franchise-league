@@ -958,6 +958,31 @@ async function buildAuctionState(
               ? Math.round((totalAwardAmount / auction.awards.length) * 10) / 10
               : 0;
 
+            const marginEntries = auction.awards
+              .map((award) => {
+                const nomination = auction.nominationEntries.find((entry) => entry.id === award.nominationId);
+                if (!nomination) return null;
+                const sortedAmounts = [...nomination.bids].map((bid) => bid.amount).sort((a, b) => b - a);
+                const runnerUpAmount = sortedAmounts[1] ?? 0;
+                return {
+                  team: mapDraftTeam(award.nomination.nflTeam),
+                  displayName: award.leagueMember.user.displayName,
+                  winningAmount: award.amount,
+                  runnerUpAmount,
+                  margin: award.amount - runnerUpAmount
+                };
+              })
+              .filter((entry): entry is NonNullable<typeof entry> => entry !== null && entry.winningAmount > 0);
+            const contestedEntries = marginEntries.filter((entry) => entry.runnerUpAmount > 0);
+            const closestAuction = contestedEntries.length
+              ? contestedEntries.reduce((best, entry) => (entry.margin < best.margin ? entry : best), contestedEntries[0])
+              : null;
+            const biggestOverbid = marginEntries.length
+              ? marginEntries.reduce((best, entry) => (entry.margin > best.margin ? entry : best), marginEntries[0])
+              : null;
+            const totalSpent = owners.reduce((sum, owner) => sum + owner.budgetSpent, 0);
+            const totalRemaining = owners.reduce((sum, owner) => sum + owner.budgetRemaining, 0);
+
             return {
               mostBidsByOwner,
               leastBidsByOwner,
@@ -968,7 +993,11 @@ async function buildAuctionState(
               dollarSales,
               autoAssignedAwards,
               longestBiddingWar,
-              averageWinningBid
+              averageWinningBid,
+              closestAuction,
+              biggestOverbid,
+              totalSpent,
+              totalRemaining
             };
           })()
         }
