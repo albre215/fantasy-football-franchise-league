@@ -5,9 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ProfileAvatar } from "@/components/shared/profile-avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import type {
-  CreateManualAdjustmentResponse,
   LeagueMemberSeasonLedgerResponse,
   SeasonLedgerResponse
 } from "@/types/ledger";
@@ -61,12 +59,8 @@ export function SeasonLedgerPanel({
   const [summary, setSummary] = useState<SeasonLedgerResponse["ledger"] | null>(null);
   const [memberLedger, setMemberLedger] = useState<LeagueMemberSeasonLedgerResponse["ledger"] | null>(null);
   const [selectedMemberId, setSelectedMemberId] = useState("");
-  const [adjustmentMemberId, setAdjustmentMemberId] = useState("");
-  const [adjustmentAmount, setAdjustmentAmount] = useState("");
-  const [adjustmentDescription, setAdjustmentDescription] = useState("");
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
   const [isLoadingMember, setIsLoadingMember] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [memberError, setMemberError] = useState<string | null>(null);
 
@@ -92,7 +86,6 @@ export function SeasonLedgerPanel({
     setSummary(null);
     setMemberLedger(null);
     setSelectedMemberId("");
-    setAdjustmentMemberId("");
     setSummaryError(null);
     setMemberError(null);
 
@@ -114,7 +107,6 @@ export function SeasonLedgerPanel({
           setSummary(data.ledger);
           const defaultMemberId = data.ledger.balances[0]?.leagueMemberId ?? members[0]?.id ?? "";
           setSelectedMemberId(defaultMemberId);
-          setAdjustmentMemberId(defaultMemberId);
           setSummaryError(null);
         }
       } catch (error) {
@@ -176,53 +168,6 @@ export function SeasonLedgerPanel({
       isCancelled = true;
     };
   }, [activeSeason, selectedMemberId]);
-
-  async function handleCreateAdjustment(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!activeSeason) {
-      return;
-    }
-
-    const seasonId = activeSeason.id;
-    onError(null);
-    onSuccess(null);
-    setIsSubmitting(true);
-
-    try {
-      const response = await fetch(`/api/season/${seasonId}/ledger/adjustments`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          leagueMemberId: adjustmentMemberId,
-          amount: Number(adjustmentAmount),
-          description: adjustmentDescription
-        })
-      });
-      const data = await parseJsonResponse<CreateManualAdjustmentResponse>(response);
-
-      setSummary(data.ledger);
-      setAdjustmentAmount("");
-      setAdjustmentDescription("");
-      setSelectedMemberId(adjustmentMemberId);
-      setAdjustmentMemberId((current) => current || data.createdEntry.leagueMemberId);
-      onSuccess(`Recorded ${formatCurrency(data.createdEntry.amount)} for ${data.createdEntry.owner.displayName}.`);
-
-      const detailResponse = await fetch(
-        `/api/season/${seasonId}/ledger/member/${data.createdEntry.leagueMemberId}`,
-        { cache: "no-store" }
-      );
-      const detailData = await parseJsonResponse<LeagueMemberSeasonLedgerResponse>(detailResponse);
-      setMemberLedger(detailData.ledger);
-      setMemberError(null);
-    } catch (error) {
-      onError(error instanceof Error ? error.message : "Unable to create the manual adjustment.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
 
   if (!activeSeason) {
     return (
@@ -437,56 +382,7 @@ export function SeasonLedgerPanel({
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Commissioner Adjustment</CardTitle>
-            <CardDescription>
-              Add a manual positive or negative adjustment. These entries are persisted immediately in the ledger.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {!canManageLedger && accessMessage ? (
-              <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                {accessMessage}
-              </div>
-            ) : (
-              <form className="space-y-4" onSubmit={handleCreateAdjustment}>
-                <select
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  onChange={(event) => setAdjustmentMemberId(event.target.value)}
-                  value={adjustmentMemberId}
-                >
-                  <option value="">Select owner</option>
-                  {ownerOptions.map((owner) => (
-                    <option key={owner.leagueMemberId} value={owner.leagueMemberId}>
-                      {owner.displayName}
-                    </option>
-                  ))}
-                </select>
-                <Input
-                  onChange={(event) => setAdjustmentAmount(event.target.value)}
-                  placeholder="Amount (for example 25.00 or -10.00)"
-                  step="0.01"
-                  type="number"
-                  value={adjustmentAmount}
-                />
-                <Input
-                  onChange={(event) => setAdjustmentDescription(event.target.value)}
-                  placeholder="Reason / description"
-                  value={adjustmentDescription}
-                />
-                <Button
-                  disabled={isSubmitting || !adjustmentMemberId || !adjustmentAmount || !adjustmentDescription}
-                  type="submit"
-                >
-                  Record Adjustment
-                </Button>
-              </form>
-            )}
-          </CardContent>
-        </Card>
-
+      <div>
         <Card>
           <CardHeader>
             <CardTitle>Season Ledger Feed</CardTitle>
