@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BrandAccountSlot } from "@/components/brand/brand-account-slot";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { BrandMasthead } from "@/components/brand/brand-masthead";
+import { CommissionerAdjustmentCard } from "@/components/league/commissioner-adjustment-card";
 import { LeagueOwnerPanel } from "@/components/league/league-owner-panel";
 import { ProfileAvatar } from "@/components/shared/profile-avatar";
 import { NFLTeamLabel } from "@/components/shared/nfl-team-label";
@@ -1127,12 +1128,12 @@ export function LeagueDashboard({
                   { id: "overview", label: "Overview" },
                   { id: "seasons", label: "Seasons" },
                   { id: "members", label: "Members" },
-                  { id: "ownership", label: "Ownership" },
                   { id: "results-draft", label: "Drafting" },
                   { id: "fantasy", label: "Fantasy" },
                   { id: "nfl-performance", label: "NFL Results" },
                   { id: "ledger", label: "Ledger" },
-                  { id: "history-analytics", label: "History & Analytics" }
+                  { id: "history-analytics", label: "History & Analytics" },
+                  { id: "ownership", label: "Commissioner Override" }
                 ].map((tab) => (
                   <Button
                     key={tab.id}
@@ -1715,6 +1716,15 @@ export function LeagueDashboard({
                     </CardContent>
                   </Card>
                 </div>
+
+                <CommissionerAdjustmentCard
+                  accessMessage={commissionerAccessMessage}
+                  activeSeason={activeSeason}
+                  canManageLedger={canManageLeague}
+                  members={members}
+                  onError={(message) => setErrorMessage(message || null)}
+                  onSuccess={(message) => setSuccessMessage(message || null)}
+                />
               </div>
             ) : null}
 
