@@ -91,6 +91,16 @@ export interface InauguralAuctionFinalSummary {
     division: string;
     awardedCount: number;
   }>;
+  mostBidsByOwner: Array<{ leagueMemberId: string; displayName: string; bidCount: number }>;
+  leastBidsByOwner: Array<{ leagueMemberId: string; displayName: string; bidCount: number }>;
+  mostBidsOnTeams: Array<{ team: DraftTeamSummary; bidCount: number }>;
+  leastBidsOnTeams: Array<{ team: DraftTeamSummary; bidCount: number }>;
+  highestWinningBid: { team: DraftTeamSummary; displayName: string; amount: number } | null;
+  lowestWinningBid: { team: DraftTeamSummary; displayName: string; amount: number } | null;
+  dollarSales: Array<{ team: DraftTeamSummary; displayName: string }>;
+  autoAssignedAwards: Array<{ team: DraftTeamSummary; displayName: string; amount: number }>;
+  longestBiddingWar: { team: DraftTeamSummary; bidCount: number } | null;
+  averageWinningBid: number;
 }
 
 export interface InauguralAuctionState {

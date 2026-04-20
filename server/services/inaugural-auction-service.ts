@@ -878,7 +878,99 @@ async function buildAuctionState(
             }, new Map<string, number>())
           )
             .map(([division, awardedCount]) => ({ division, awardedCount }))
-            .sort((left, right) => right.awardedCount - left.awardedCount || left.division.localeCompare(right.division))
+            .sort((left, right) => right.awardedCount - left.awardedCount || left.division.localeCompare(right.division)),
+          ...(() => {
+            const bidCountByMember = new Map<string, number>();
+            const nameByMember = new Map<string, string>();
+            auction.nominationEntries.forEach((entry) => {
+              entry.bids.forEach((bid) => {
+                bidCountByMember.set(bid.leagueMemberId, (bidCountByMember.get(bid.leagueMemberId) ?? 0) + 1);
+                nameByMember.set(bid.leagueMemberId, bid.leagueMember.user.displayName);
+              });
+            });
+            owners.forEach((owner) => {
+              if (!bidCountByMember.has(owner.leagueMemberId)) bidCountByMember.set(owner.leagueMemberId, 0);
+              nameByMember.set(owner.leagueMemberId, owner.displayName);
+            });
+            const memberEntries = Array.from(bidCountByMember.entries()).map(([leagueMemberId, bidCount]) => ({
+              leagueMemberId,
+              displayName: nameByMember.get(leagueMemberId) ?? "",
+              bidCount
+            }));
+            const maxMemberBids = memberEntries.reduce((m, e) => Math.max(m, e.bidCount), 0);
+            const minMemberBids = memberEntries.reduce((m, e) => Math.min(m, e.bidCount), Number.POSITIVE_INFINITY);
+            const mostBidsByOwner = memberEntries
+              .filter((e) => e.bidCount === maxMemberBids)
+              .sort((a, b) => a.displayName.localeCompare(b.displayName));
+            const leastBidsByOwner = memberEntries
+              .filter((e) => e.bidCount === minMemberBids)
+              .sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+            const teamBidCounts = auction.nominationEntries.map((entry) => ({
+              team: mapDraftTeam(entry.nflTeam),
+              bidCount: entry.bids.length
+            }));
+            const maxTeamBids = teamBidCounts.reduce((m, e) => Math.max(m, e.bidCount), 0);
+            const minTeamBids = teamBidCounts.reduce((m, e) => Math.min(m, e.bidCount), Number.POSITIVE_INFINITY);
+            const mostBidsOnTeams = teamBidCounts
+              .filter((e) => e.bidCount === maxTeamBids)
+              .sort((a, b) => a.team.name.localeCompare(b.team.name));
+            const leastBidsOnTeams = teamBidCounts
+              .filter((e) => e.bidCount === minTeamBids)
+              .sort((a, b) => a.team.name.localeCompare(b.team.name));
+
+            const awardsSortedDesc = [...auction.awards].sort((a, b) => b.amount - a.amount);
+            const highestWinningBid = awardsSortedDesc[0]
+              ? {
+                  team: mapDraftTeam(awardsSortedDesc[0].nomination.nflTeam),
+                  displayName: awardsSortedDesc[0].leagueMember.user.displayName,
+                  amount: awardsSortedDesc[0].amount
+                }
+              : null;
+            const awardsSortedAsc = [...auction.awards].sort((a, b) => a.amount - b.amount);
+            const lowestWinningBid = awardsSortedAsc[0]
+              ? {
+                  team: mapDraftTeam(awardsSortedAsc[0].nomination.nflTeam),
+                  displayName: awardsSortedAsc[0].leagueMember.user.displayName,
+                  amount: awardsSortedAsc[0].amount
+                }
+              : null;
+            const dollarSales = auction.awards
+              .filter((a) => a.amount === 1 && a.source === "BID")
+              .map((a) => ({ team: mapDraftTeam(a.nomination.nflTeam), displayName: a.leagueMember.user.displayName }))
+              .sort((a, b) => a.team.name.localeCompare(b.team.name));
+            const autoAssignedAwards = auction.awards
+              .filter((a) => a.source === "AUTO_ASSIGN" || a.source === "SIMULATED")
+              .map((a) => ({
+                team: mapDraftTeam(a.nomination.nflTeam),
+                displayName: a.leagueMember.user.displayName,
+                amount: a.amount
+              }))
+              .sort((a, b) => a.team.name.localeCompare(b.team.name));
+            const longestBiddingWar = teamBidCounts.length
+              ? (() => {
+                  const top = teamBidCounts.reduce((best, e) => (e.bidCount > best.bidCount ? e : best), teamBidCounts[0]);
+                  return top.bidCount > 0 ? { team: top.team, bidCount: top.bidCount } : null;
+                })()
+              : null;
+            const totalAwardAmount = auction.awards.reduce((sum, a) => sum + a.amount, 0);
+            const averageWinningBid = auction.awards.length
+              ? Math.round((totalAwardAmount / auction.awards.length) * 10) / 10
+              : 0;
+
+            return {
+              mostBidsByOwner,
+              leastBidsByOwner,
+              mostBidsOnTeams,
+              leastBidsOnTeams,
+              highestWinningBid,
+              lowestWinningBid,
+              dollarSales,
+              autoAssignedAwards,
+              longestBiddingWar,
+              averageWinningBid
+            };
+          })()
         }
       : null;
 

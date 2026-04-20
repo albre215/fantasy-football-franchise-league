@@ -1128,7 +1128,7 @@ export function LeagueDashboard({
                   { id: "seasons", label: "Seasons" },
                   { id: "members", label: "Members" },
                   { id: "ownership", label: "Ownership" },
-                  { id: "results-draft", label: "Draft" },
+                  { id: "results-draft", label: "Drafting" },
                   { id: "fantasy", label: "Fantasy" },
                   { id: "nfl-performance", label: "NFL Results" },
                   { id: "ledger", label: "Ledger" },

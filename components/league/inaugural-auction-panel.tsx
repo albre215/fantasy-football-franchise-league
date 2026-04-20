@@ -346,7 +346,7 @@ export function InauguralAuctionPanel({
   }, [activeSeason?.id, teams.length, orderMethod, divisionOrder, customTeamOrder, previousYearSortDirection, divisionTeamOrder, auctionState?.auction.status]);
 
   const viewer = auctionState?.viewer ?? null;
-  const canConfigureAuction = !auctionState || auctionState.auction.status === "PLANNING";
+  const canConfigureAuction = Boolean(auctionState) && auctionState?.auction.status === "PLANNING";
   const minimumNextBid = useMemo(() => {
     if (!auctionState?.currentHighBid) {
       return 1;
@@ -1285,18 +1285,14 @@ export function InauguralAuctionPanel({
                         ? "Final Team Selection"
                         : auctionState.currentNomination
                           ? "Team On The Clock"
-                          : auctionState.auction.status === "COMPLETED"
-                            ? "Auction Complete"
-                            : "Auction Setup"}
+                          : "Auction Setup"}
                     </CardTitle>
                     <CardDescription>
                       {auctionState.finalSelection
                         ? "One owner has one team left to claim. Choose from the final three remaining teams at an automatic $1."
                         : auctionState.auction.status === "PLANNING"
                           ? "Review the nomination order, then start the inaugural auction."
-                          : auctionState.auction.status === "COMPLETED"
-                            ? "All 30 awarded teams have been finalized into season ownership."
-                            : "Any eligible owner can bid while the clock is live."}
+                          : "Any eligible owner can bid while the clock is live."}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -1528,45 +1524,126 @@ export function InauguralAuctionPanel({
                 <Card>
                   <CardHeader>
                     <CardTitle>Inaugural Auction Draft Complete</CardTitle>
-                    <CardDescription>
-                      Summary of draft results, stats, and notes from the inaugural auction.
-                    </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-5">
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded-lg border border-border p-4 text-sm">
-                        <div className="font-medium">Biggest spender</div>
-                        <div className="text-muted-foreground">
-                          {auctionState.finalSummary.biggestSpender
-                            ? `${auctionState.finalSummary.biggestSpender.displayName} (${formatCurrency(auctionState.finalSummary.biggestSpender.amount)})`
-                            : "Not available"}
+                  <CardContent>
+                    <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+                      <div className="space-y-3">
+                        <p className="text-sm font-semibold text-foreground">Team results</p>
+                        {auctionState.finalSummary.owners.map((owner) => (
+                          <div className="rounded-lg border border-border p-3 text-sm" key={owner.leagueMemberId}>
+                            <div className="flex items-baseline justify-between gap-2">
+                              <div className="font-medium">{owner.displayName}</div>
+                              <div className="text-xs text-muted-foreground">
+                                Spent {formatCurrency(owner.budgetSpent)} | Left {formatCurrency(owner.budgetRemaining)}
+                              </div>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {owner.teams.map((team) => (
+                                <span className="rounded-full border border-border px-2 py-0.5 text-xs" key={`${owner.leagueMemberId}-${team.id}`}>
+                                  <NFLTeamLabel size="compact" team={team} />
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="space-y-3">
+                        <p className="text-sm font-semibold text-foreground">Draft stats</p>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-lg border border-border p-3 text-sm">
+                            <div className="font-medium">Biggest spender</div>
+                            <div className="text-muted-foreground">
+                              {auctionState.finalSummary.biggestSpender
+                                ? `${auctionState.finalSummary.biggestSpender.displayName} (${formatCurrency(auctionState.finalSummary.biggestSpender.amount)})`
+                                : "Not available"}
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-border p-3 text-sm">
+                            <div className="font-medium">Lowest spender</div>
+                            <div className="text-muted-foreground">
+                              {auctionState.finalSummary.lowestSpender
+                                ? `${auctionState.finalSummary.lowestSpender.displayName} (${formatCurrency(auctionState.finalSummary.lowestSpender.amount)})`
+                                : "Not available"}
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-border p-3 text-sm">
+                            <div className="font-medium">Most bids placed</div>
+                            <div className="text-muted-foreground">
+                              {auctionState.finalSummary.mostBidsByOwner.length
+                                ? `${auctionState.finalSummary.mostBidsByOwner.map((o) => o.displayName).join(", ")} (${auctionState.finalSummary.mostBidsByOwner[0].bidCount})`
+                                : "—"}
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-border p-3 text-sm">
+                            <div className="font-medium">Fewest bids placed</div>
+                            <div className="text-muted-foreground">
+                              {auctionState.finalSummary.leastBidsByOwner.length
+                                ? `${auctionState.finalSummary.leastBidsByOwner.map((o) => o.displayName).join(", ")} (${auctionState.finalSummary.leastBidsByOwner[0].bidCount})`
+                                : "—"}
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-border p-3 text-sm">
+                            <div className="font-medium">Highest winning bid</div>
+                            <div className="text-muted-foreground">
+                              {auctionState.finalSummary.highestWinningBid
+                                ? `${auctionState.finalSummary.highestWinningBid.team.name} — ${auctionState.finalSummary.highestWinningBid.displayName} (${formatCurrency(auctionState.finalSummary.highestWinningBid.amount)})`
+                                : "—"}
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-border p-3 text-sm">
+                            <div className="font-medium">Lowest winning bid</div>
+                            <div className="text-muted-foreground">
+                              {auctionState.finalSummary.lowestWinningBid
+                                ? `${auctionState.finalSummary.lowestWinningBid.team.name} — ${auctionState.finalSummary.lowestWinningBid.displayName} (${formatCurrency(auctionState.finalSummary.lowestWinningBid.amount)})`
+                                : "—"}
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-border p-3 text-sm">
+                            <div className="font-medium">Average winning bid</div>
+                            <div className="text-muted-foreground">{formatCurrency(auctionState.finalSummary.averageWinningBid)}</div>
+                          </div>
+                          <div className="rounded-lg border border-border p-3 text-sm">
+                            <div className="font-medium">Longest bidding war</div>
+                            <div className="text-muted-foreground">
+                              {auctionState.finalSummary.longestBiddingWar
+                                ? `${auctionState.finalSummary.longestBiddingWar.team.name} (${auctionState.finalSummary.longestBiddingWar.bidCount} bids)`
+                                : "—"}
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-border p-3 text-sm sm:col-span-2">
+                            <div className="font-medium">Most-bid NFL team{auctionState.finalSummary.mostBidsOnTeams.length > 1 ? "s" : ""}</div>
+                            <div className="text-muted-foreground">
+                              {auctionState.finalSummary.mostBidsOnTeams.length
+                                ? `${auctionState.finalSummary.mostBidsOnTeams.map((t) => t.team.name).join(", ")} (${auctionState.finalSummary.mostBidsOnTeams[0].bidCount} bids)`
+                                : "—"}
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-border p-3 text-sm sm:col-span-2">
+                            <div className="font-medium">Least-bid NFL team{auctionState.finalSummary.leastBidsOnTeams.length > 1 ? "s" : ""}</div>
+                            <div className="text-muted-foreground">
+                              {auctionState.finalSummary.leastBidsOnTeams.length
+                                ? `${auctionState.finalSummary.leastBidsOnTeams.map((t) => t.team.name).join(", ")} (${auctionState.finalSummary.leastBidsOnTeams[0].bidCount} bids)`
+                                : "—"}
+                            </div>
+                          </div>
+                          {auctionState.finalSummary.dollarSales.length ? (
+                            <div className="rounded-lg border border-border p-3 text-sm sm:col-span-2">
+                              <div className="font-medium">$1 sales ({auctionState.finalSummary.dollarSales.length})</div>
+                              <div className="text-muted-foreground">
+                                {auctionState.finalSummary.dollarSales.map((s) => `${s.team.name} → ${s.displayName}`).join(", ")}
+                              </div>
+                            </div>
+                          ) : null}
+                          {auctionState.finalSummary.autoAssignedAwards.length ? (
+                            <div className="rounded-lg border border-border p-3 text-sm sm:col-span-2">
+                              <div className="font-medium">Auto-assigned ({auctionState.finalSummary.autoAssignedAwards.length})</div>
+                              <div className="text-muted-foreground">
+                                {auctionState.finalSummary.autoAssignedAwards.map((a) => `${a.team.name} → ${a.displayName}`).join(", ")}
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
-                      <div className="rounded-lg border border-border p-4 text-sm">
-                        <div className="font-medium">Lowest spender</div>
-                        <div className="text-muted-foreground">
-                          {auctionState.finalSummary.lowestSpender
-                            ? `${auctionState.finalSummary.lowestSpender.displayName} (${formatCurrency(auctionState.finalSummary.lowestSpender.amount)})`
-                            : "Not available"}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {auctionState.finalSummary.owners.map((owner) => (
-                        <div className="rounded-lg border border-border p-4 text-sm" key={owner.leagueMemberId}>
-                          <div className="font-medium">{owner.displayName}</div>
-                          <div className="text-muted-foreground">
-                            Spent {formatCurrency(owner.budgetSpent)} | Left {formatCurrency(owner.budgetRemaining)}
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {owner.teams.map((team) => (
-                              <span className="rounded-full border border-border px-3 py-1 text-xs" key={`${owner.leagueMemberId}-${team.id}`}>
-                                <NFLTeamLabel size="compact" team={team} />
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
                     </div>
                   </CardContent>
                 </Card>
