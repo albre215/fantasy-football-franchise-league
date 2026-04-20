@@ -735,10 +735,12 @@ export function InauguralAuctionPanel({
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle>{title}</CardTitle>
-          {description ? <CardDescription>{description}</CardDescription> : null}
-        </CardHeader>
+        {auctionState?.auction.status !== "COMPLETED" ? (
+          <CardHeader>
+            <CardTitle>{title}</CardTitle>
+            {description ? <CardDescription>{description}</CardDescription> : null}
+          </CardHeader>
+        ) : null}
         <CardContent className="space-y-5">
           {errorMessage ? <p className="text-sm text-destructive">{errorMessage}</p> : null}
           {successMessage ? <p className="text-sm text-emerald-700">{successMessage}</p> : null}
@@ -1273,8 +1275,9 @@ export function InauguralAuctionPanel({
           ) : null}
 
           {auctionState ? (
-            <div className="grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
+            <div className={cn("grid gap-6", auctionState.auction.status !== "COMPLETED" && "xl:grid-cols-[1.25fr_0.95fr]")}>
               <div className="space-y-6">
+                {auctionState.auction.status !== "COMPLETED" ? (
                 <Card>
                   <CardHeader>
                     <CardTitle>
@@ -1450,6 +1453,7 @@ export function InauguralAuctionPanel({
                     </div>
                   </CardContent>
                 </Card>
+                ) : null}
 
                 {auctionState.auction.status !== "COMPLETED" ? (
                 <Card>
@@ -1584,19 +1588,21 @@ export function InauguralAuctionPanel({
                       <CardTitle>Upcoming Dates</CardTitle>
                       <CardDescription>Automatically set relative to Super Bowl {superBowlYear}.</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="rounded-lg border border-border p-4 text-sm">
-                        <div className="font-medium">Super Bowl {superBowlYear}</div>
-                        <div className="text-muted-foreground">{fmtDate(superBowl)}</div>
-                      </div>
-                      <div className="rounded-lg border border-border p-4 text-sm">
-                        <div className="font-medium">Keeper Selection Deadline</div>
-                        <div className="text-muted-foreground">{fmtDateTime(keeperDeadline)}</div>
-                        <div className="mt-1 text-xs text-muted-foreground">Every owner must drop 1 team by this time.</div>
-                      </div>
-                      <div className="rounded-lg border border-border p-4 text-sm">
-                        <div className="font-medium">Offseason Draft</div>
-                        <div className="text-muted-foreground">{fmtDateTime(offseasonDraft)}</div>
+                    <CardContent>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div className="rounded-lg border border-border p-4 text-sm">
+                          <div className="font-medium">Super Bowl {superBowlYear}</div>
+                          <div className="text-muted-foreground">{fmtDate(superBowl)}</div>
+                        </div>
+                        <div className="rounded-lg border border-border p-4 text-sm">
+                          <div className="font-medium">Keeper Selection Deadline</div>
+                          <div className="text-muted-foreground">{fmtDateTime(keeperDeadline)}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">Every owner must drop 1 team by this time.</div>
+                        </div>
+                        <div className="rounded-lg border border-border p-4 text-sm">
+                          <div className="font-medium">Offseason Draft</div>
+                          <div className="text-muted-foreground">{fmtDateTime(offseasonDraft)}</div>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
